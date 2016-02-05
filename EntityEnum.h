@@ -3,6 +3,10 @@
 #ifndef _ENTITYENUM
 #define _ENTITYENUM
 
+#ifndef NULL
+#define NULL 0
+#endif
+
 // definitions for entity types and groups
 static const int NUM_ENTITY_GROUPS = 10;
 enum EntityGroupType

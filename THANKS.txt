@@ -1,0 +1,11 @@
+Ross Turner for creating this bugbomber clone!
+
+Opengameart for the wall & block art found here:
+http://opengameart.org/content/blocks
+By author Cpt_Flash
+
+Mike Koenig for the following sounds:
+newbombfuse2.wav
+
+Conor for the following sounds:
+Flyby.wav

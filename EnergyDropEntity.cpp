@@ -20,7 +20,8 @@ EnergyDropEntity::EnergyDropEntity(int uniqueID, int teamNumber, int atX, int at
 	m_currentAnimState = EntityRenderer::IDLE;
 	m_currentAnimFrame = 0;
 
-	DSound::getInstance()->playSound(DSound::ENERGY_DROP);
+	// //M2S SOUND DSound::getInstance()->playSound(DSound::ENERGY_DROP); // M2S SOUND
+	GameSound::playSound(GameSound::ENERGY_DROP);
 
 }
 

@@ -7,7 +7,7 @@
 #ifndef _ENTITYMESSAGEQUEUE
 #define _ENTITYMESSAGEQUEUE
 
-#include "DSound.h" // put DSound here so everything that calls the EntityMessageQueue can play sounds
+//#include "DSound.h" // put DSound here so everything that calls the EntityMessageQueue can play sounds
 
 #include <queue>
 #include "EntityMessage.h"

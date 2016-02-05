@@ -4,12 +4,16 @@
 
 #include <assert.h>
 
+#include "SDL/SDL.h"
+#include "SDL/SDL_ttf.h"
+
+
 #include "EntityFactory.h"
 
 class InfoPanel
 {
 public:
-	InfoPanel(int numPlayers, bool * gender, LPDIRECTDRAW7 lpdd);
+	InfoPanel(SDL_Surface* backbuf, int numPlayers, bool * gender);
 	~InfoPanel();
 
 	static const int PANEL_TILE_WIDTH = 7;
@@ -26,14 +30,14 @@ public:
 
 	void setPlayerDead(int player, bool flag);
 
-	void renderSurfaceTo(LPDIRECTDRAWSURFACE7 dest, int x, int y);
+	void renderSurfaceTo(SDL_Surface* dest, int x, int y);
 
 private:
-	LPDIRECTDRAWSURFACE7 m_surface;
-	LPDIRECTDRAWSURFACE7 m_faceSurfaces[4];
+	SDL_Surface* m_surface;
+	SDL_Surface* m_faceSurfaces[4];
 
 	void drawTextGDI(const char * text, int x, int y, 
-				 COLORREF color, LPDIRECTDRAWSURFACE7 dest);
+				 Uint32 color, SDL_Surface* dest);
 
 	void drawBGTiles();
 

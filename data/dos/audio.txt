@@ -1,0 +1,18 @@
+# wav filenames
+
+BOMB_FUSE	audio/bombfuse.wav
+EGG_DROP	audio/beepdrop.wav
+MINE_DROP	audio/beeppure.wav
+BLOCK_DROP	audio/blockdrop.wav
+BOOM		audio/boom.wav
+MUNCHY		audio/munchy.wav
+ENERGY_DROP	audio/energycreate.wav
+ENERGY_PICKUP	audio/energypickup.wav
+EGG_STOLEN	audio/eggstolen.wav
+SPLAT		audio/splat.wav
+ROCKET_SPIN	audio/rocketspin.wav
+ROBOT_CREATE	audio/robot.wav
+ROCKET_FIRED	audio/rocketfire.wav
+THIEF_CREATE	audio/thiefcreate.wav
+EATER_CREATE	audio/eatercreate.wav
+DRONE_CREATE	audio/dronecreate.wav

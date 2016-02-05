@@ -10,7 +10,8 @@ EggThiefEntity::EggThiefEntity(int uniqueID, int teamNumber, int atX, int atY)
 
 	m_health = DataReader::getInstance()->getIntFromFile("EGG_THIEF_INITIAL_HEALTH", "data/entity.txt");
 
-	DSound::getInstance()->playSound(DSound::THIEF_CREATE);
+	// //M2S SOUND DSound::getInstance()->playSound(DSound::THIEF_CREATE); // M2S SOUND
+	GameSound::playSound(GameSound::THIEF_CREATE);
 }
 
 EggThiefEntity::~EggThiefEntity()

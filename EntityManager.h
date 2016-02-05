@@ -15,12 +15,12 @@ using namespace std;
 class EntityManager
 {
 public:
-	EntityManager(LPDIRECTDRAW7 lpdd); 
+	EntityManager();
 	~EntityManager();
 
 	// game loop functions
     void runFrame(); // performs all frame-specific processing, see private functions
-	void renderEntities(LPDIRECTDRAWSURFACE7 destination); // renders frame to supplied surface
+	void renderEntities(SDL_Surface*  destination); // renders frame to supplied surface
 
 	void processMessageQueue(); // processes all messages in EntityMessageQueue (create, move and destroy entities)
 	PlayerCharacterEntity * getPlayerPointer(int team);

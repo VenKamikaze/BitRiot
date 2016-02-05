@@ -3,7 +3,7 @@
 
 static const unsigned int TRANSPARENT_COLOR = (255 << 8) + (255 << 0);
 
-InfoPanel::InfoPanel(int numPlayers, bool * isMale, LPDIRECTDRAW7 lpdd)
+InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, bool * isMale)
 {
 	m_players = numPlayers;
 
@@ -13,16 +13,18 @@ InfoPanel::InfoPanel(int numPlayers, bool * isMale, LPDIRECTDRAW7 lpdd)
 	clearSelections();
 
 	// set up surface	
-	DDSURFACEDESC2 ddsd;
-	memset(&ddsd,0,sizeof(ddsd));
-	ddsd.dwSize = sizeof(ddsd);
-	ddsd.dwFlags = DDSD_WIDTH | DDSD_HEIGHT | DDSD_CAPS;
-	ddsd.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN | DDSCAPS_VIDEOMEMORY;
+//	DDSURFACEDESC2 ddsd;
+//	memset(&ddsd,0,sizeof(ddsd));
+//	ddsd.dwSize = sizeof(ddsd);
+//	ddsd.dwFlags = DDSD_WIDTH | DDSD_HEIGHT | DDSD_CAPS;
+//	ddsd.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN | DDSCAPS_VIDEOMEMORY;
 
-	ddsd.dwWidth = WIDTH;
-	ddsd.dwHeight = HEIGHT;
+//	ddsd.dwWidth = WIDTH;
+//	ddsd.dwHeight = HEIGHT;
 
-	lpdd->CreateSurface(&ddsd, &m_surface, NULL);
+//	lpdd->CreateSurface(&ddsd, &m_surface, NULL);
+
+	m_surface = SDL_CreateRGBSurface(SDL_HWSURFACE, WIDTH, HEIGHT, backbuf->format->BitsPerPixel, backbuf->format->Rmask, backbuf->format->Gmask, backbuf->format->Bmask, 0 );
 
 	// set up face surfaces
 	for (int i = 0; i < 4; i++)
@@ -35,19 +37,20 @@ InfoPanel::InfoPanel(int numPlayers, bool * isMale, LPDIRECTDRAW7 lpdd)
 			ss << "female";
 		ss << "face.bmp";
 
-		m_faceSurfaces[i] = DDLoadBitmap(lpdd, ss.str().c_str(), 0, 0);
+		//m_faceSurfaces[i] = DDLoadBitmap(lpdd, ss.str().c_str(), 0, 0);
+		m_faceSurfaces[i] = SDL_LoadBMP(ss.str().c_str());
 
 
 	}
 
-	DDCOLORKEY key;
-	key.dwColorSpaceLowValue = TRANSPARENT_COLOR;
-	key.dwColorSpaceHighValue = TRANSPARENT_COLOR;
+	//DDCOLORKEY key;
+	//key.dwColorSpaceLowValue = TRANSPARENT_COLOR;
+	//key.dwColorSpaceHighValue = TRANSPARENT_COLOR;
 
 	// change to team colours and apply color key
 	for (int i = 0; i < 4; ++i)
 	{
-		m_faceSurfaces[i]->SetColorKey(DDCKEY_SRCBLT, &key);
+		SDL_SetColorKey( m_faceSurfaces[i], SDL_RLEACCEL | SDL_SRCCOLORKEY, SDL_MapRGB(m_faceSurfaces[i]->format, 0, 255, 255) );
 	}	
 
 }
@@ -55,10 +58,17 @@ InfoPanel::InfoPanel(int numPlayers, bool * isMale, LPDIRECTDRAW7 lpdd)
 InfoPanel::~InfoPanel()
 {
 	if (m_surface)
-		m_surface->Release();
+	{
+		SDL_FreeSurface(m_surface);
+		m_surface = NULL;
+	}
 	for (int i = 0; i < 4; i++)
 		if (m_faceSurfaces[i])
-			m_faceSurfaces[i]->Release();
+		{
+			SDL_FreeSurface(m_faceSurfaces[i]);
+			m_faceSurfaces[i] = NULL;
+		}
+		//	m_faceSurfaces[i]->Release();
 }
 
 void InfoPanel::setPlayerPointers(int num, 
@@ -92,23 +102,26 @@ void InfoPanel::setSelection(EntityType type, int team)
 	} 
 }
 
-void InfoPanel::renderSurfaceTo(LPDIRECTDRAWSURFACE7 dest, int x, int y)
+void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
 {
 	assert(playerPointer[0] != NULL);
 	// clear surface
-	DDBLTFX ddbltfx;
-	memset(&ddbltfx,0,sizeof(ddbltfx));
-	ddbltfx.dwSize = sizeof(ddbltfx);
-	ddbltfx.dwFillColor = 0; // color for filling in panel
-	m_surface->Blt(NULL, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &ddbltfx);
+	//DDBLTFX ddbltfx;
+	//memset(&ddbltfx,0,sizeof(ddbltfx));
+	//ddbltfx.dwSize = sizeof(ddbltfx);
+	//ddbltfx.dwFillColor = 0; // color for filling in panel
+	//m_surface->Blt(NULL, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &ddbltfx);
 
 	// render stuff to surface
-	COLORREF white = 0x00FFFFFF;
+	//COLORREF white = 0x00FFFFFF;
+
+	static Uint32 white = SDL_MapRGB(dest->format, 255, 255, 255);
 
 	drawBGTiles();
 
 	
-	RECT sourceRect, destRect;
+	//RECT sourceRect, destRect;
+	SDL_Rect sourceRect, destRect;
 	int xOffset, yOffset;
 	
 	for (int i = 0; i < m_players; i++)
@@ -120,22 +133,25 @@ void InfoPanel::renderSurfaceTo(LPDIRECTDRAWSURFACE7 dest, int x, int y)
 		yOffset = ((i * 3) + 1) * Map::TILE_HEIGHT;
 
 		// draw face
-		DDSURFACEDESC2 ddsd;
-		memset(&ddsd,0,sizeof(ddsd));
-		ddsd.dwSize = sizeof(ddsd);
-		m_faceSurfaces[i]->GetSurfaceDesc(&ddsd);
+		//DDSURFACEDESC2 ddsd;
+		//memset(&ddsd,0,sizeof(ddsd));
+		//ddsd.dwSize = sizeof(ddsd);
+		//m_faceSurfaces[i]->GetSurfaceDesc(&ddsd);
 
-		sourceRect.top = 0;
-		sourceRect.left = 0;
-		sourceRect.right = ddsd.dwWidth;
-		sourceRect.bottom = ddsd.dwHeight;
+		sourceRect.y = 0;
+		sourceRect.x = 0;
+		sourceRect.w = m_faceSurfaces[i]->w;
+		sourceRect.h = m_faceSurfaces[i]->h;
 
-		destRect.top = yOffset;
-		destRect.bottom = yOffset + (2 * Map::TILE_HEIGHT);
-		destRect.left = xOffset;
-		destRect.right = xOffset + (2 * Map::TILE_WIDTH);
+		destRect.y = yOffset;
+		destRect.h = yOffset + (2 * Map::TILE_HEIGHT);
+		destRect.x = xOffset;
+		destRect.w = xOffset + (2 * Map::TILE_WIDTH);
 
-		m_surface->Blt(&destRect, m_faceSurfaces[i], &sourceRect, DDBLT_WAIT | DDBLT_KEYSRC, 0);
+		//SDL_BlitSurface(m_surface, &sourceRect, m_faceSurfaces[i], &destRect);
+		SDL_BlitSurface(m_faceSurfaces[i], &sourceRect, m_surface, &destRect);
+
+		//m_surface->Blt(&destRect, m_faceSurfaces[i], &sourceRect, DDBLT_WAIT | DDBLT_KEYSRC, 0);
 
 			
 		xOffset += (2 * Map::TILE_WIDTH);
@@ -148,44 +164,56 @@ void InfoPanel::renderSurfaceTo(LPDIRECTDRAWSURFACE7 dest, int x, int y)
 		// draw health bar
 		unsigned char intensity = (unsigned char)(((float)health/100.0f)*255);
 		if (health > 100)
+		{
 			intensity = 255;
-		ddbltfx.dwFillColor = ((255 - intensity) << 16) + (intensity << 8);
+		}
 
-		destRect.top = yOffset + (int)(1.25f * (float)Map::TILE_HEIGHT);
-		destRect.bottom = yOffset + (int)(1.75f * (float)Map::TILE_HEIGHT);
-		destRect.left = xOffset + (int)(0.25f * (float)Map::TILE_WIDTH);
-		destRect.right = destRect.left + health;
+		//ddbltfx.dwFillColor = ((255 - intensity) << 16) + (intensity << 8);
+
+		Uint32 fillColour = SDL_MapRGB(m_surface->format, (255-intensity), intensity ,0);
+
+		destRect.y = yOffset + Map::TILE_HEIGHT; // + (int)(1.25f * (float)Map::TILE_HEIGHT);
+		/*destRect.h = yOffset + (int)(1.75f * (float)Map::TILE_HEIGHT);*/
+		destRect.h = Map::TILE_HEIGHT;
+		destRect.x = xOffset + (int)(0.25f * (float)Map::TILE_WIDTH);
+		destRect.w = health;
+
 		if (health > 100)
-			destRect.right = destRect.left + 100;
+			destRect.w = destRect.x + 100;
 
-		m_surface->Blt(&destRect, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &ddbltfx);
+		SDL_FillRect(m_surface, &destRect, fillColour);
+		//m_surface->Blt(&destRect, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &ddbltfx);
+
 
 		if (health > 100)
 		{
 			int extraHealth = health - 100;
 			intensity = (unsigned char)(((float)extraHealth/100.0f)*255);
-			ddbltfx.dwFillColor = ((255 - intensity) << 8) + (intensity << 0);
+			//ddbltfx.dwFillColor = ((255 - intensity) << 8) + (intensity << 0);
+			fillColour = SDL_MapRGB(m_surface->format, 0, (255-intensity), intensity);
 
-			destRect.right = destRect.left + extraHealth;
+			destRect.w = destRect.x + extraHealth;
 
-			m_surface->Blt(&destRect, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &ddbltfx);
+			SDL_FillRect(m_surface, &destRect, fillColour);
+			//m_surface->Blt(&destRect, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &ddbltfx);
 		}
 
 	}
 
 	/// render surface to destination
 
-	sourceRect.left = 0;
-	sourceRect.right = WIDTH;
-	sourceRect.top = 0;
-	sourceRect.bottom = HEIGHT;
+	sourceRect.x = 0;
+	sourceRect.w = WIDTH;
+	sourceRect.y = 0;
+	sourceRect.h = HEIGHT;
 
-	destRect.left = x;
-	destRect.right = x + WIDTH;
-	destRect.top = y;
-	destRect.bottom = y + HEIGHT;
+	destRect.x = x;
+	destRect.w = x + WIDTH;
+	destRect.y = y;
+	destRect.h = y + HEIGHT;
 
-	dest->Blt(&destRect, m_surface, &sourceRect, DDBLT_WAIT, 0);
+	SDL_BlitSurface(m_surface, &sourceRect, dest, &destRect);
+	//dest->Blt(&destRect, m_surface, &sourceRect, DDBLT_WAIT, 0);
 	
 }
 
@@ -195,8 +223,9 @@ void InfoPanel::setPlayerDead(int player, bool flag)
 }
 
 void InfoPanel::drawTextGDI(const char * text, int x, int y,
-				 COLORREF color, LPDIRECTDRAWSURFACE7 dest)
+				 Uint32 color, SDL_Surface* dest)
 {
+	/*
 	HDC xdc;
 
 	if (FAILED(dest->GetDC(&xdc)))
@@ -212,6 +241,35 @@ void InfoPanel::drawTextGDI(const char * text, int x, int y,
 
 	// release device context (or it'd be locked)
 	dest->ReleaseDC(xdc);
+*/
+	static TTF_Font* font = TTF_OpenFont( "bitmaps/FreeMono.ttf", 10 );
+	if(!font)
+	{
+		SDL_Colour colour;
+		colour.b = (color << 0);
+		colour.g = (color << 8);
+		colour.r = (color << 16);
+				//Render the text
+		SDL_Surface* message = TTF_RenderText_Solid( font, text, colour);
+
+		//If there was an error in rendering the text
+		if( message == NULL )
+		{
+			cout << "Text render failure! Got null message";
+		}
+
+		SDL_Rect destRect;
+		destRect.x = x;
+		destRect.y = y;
+		destRect.w = message->w;
+		destRect.h = message->h;
+
+		SDL_BlitSurface(message, NULL, dest, &destRect);
+		SDL_FreeSurface(message);
+
+		message = NULL;
+	}
+
 }
 
 void InfoPanel::drawBGTiles()

@@ -1,11 +1,11 @@
 #include "GameEngine.h"
 
-GameEngine::GameEngine(LPDIRECTDRAW7 p_dd, LPDIRECTDRAWSURFACE7 back)
+GameEngine::GameEngine(SDL_Surface* back)
 {
 	m_pEntityManager = NULL;
 	m_pSpawningPool = NULL;
 
-	lpdd = p_dd;
+	//lpdd = p_dd;
 	lpddsback = back;
 
 	m_state = GAME_INIT;
@@ -38,8 +38,8 @@ void GameEngine::runEngine()
 		bool botAI[4] = { true, true, true, false };
 		// after setting initialisation parameters
 
-		m_pEntityManager = new EntityManager(lpdd);
-		m_pPanel = new InfoPanel(numPlayers, &gender[1], lpdd);
+		m_pEntityManager = new EntityManager();
+		m_pPanel = new InfoPanel(lpddsback, numPlayers, &gender[1]);
 		m_pInputHandler = new InputHandler();
 		m_pSpawningPool = new SpawningPool(numPlayers * 100);
 
@@ -51,7 +51,7 @@ void GameEngine::runEngine()
 		m_pPanel->setPlayerPointers(numPlayers, m_pPlayers[1],
 			m_pPlayers[2], m_pPlayers[3], m_pPlayers[4]);
 		seedBlocksOnMap(blockPercentage);
-		DSound::getInstance()->setMuted(false);
+		////M2S SOUND DSound::getInstance()->setMuted(false); // M2S SOUND
 		m_state = GAME_RUNNING;
 		runEngine();
 	}
@@ -119,7 +119,7 @@ void GameEngine::seedBlocksOnMap(int blockPercentage)
 
 			// now ok to place blocks in non-wall tiles
 			// check for static map wall piece
-			if (staticMap->staticTileAt(x, y) == Map::StaticTile::WALL)
+			if (staticMap->staticTileAt(x, y) == Map::WALL)
 				badSpot = true;
 			
 			int team = 0;
@@ -201,7 +201,7 @@ void GameEngine::initHumanPlayers(int numPlayers, bool * maleGender, bool * botA
 
 		// set animation image for male or female
 		EntityRenderer * er = EntityRendererFactory::getInstance()->getEntityRenderer(PLAYER_CHARACTER);
-		er->replaceTeamSurfaceWithImage(lpdd, ss.str().c_str(), i);
+		er->replaceTeamSurfaceWithImage(ss.str().c_str(), i);
 	}
 
 }

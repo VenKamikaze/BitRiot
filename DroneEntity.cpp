@@ -14,7 +14,8 @@ DroneEntity::DroneEntity(int uniqueID, int team, int atX, int atY)
 	m_velocityModifier = DataReader::getInstance()->getIntFromFile("DRONE_VELOCITY_MODIFIER", "data/entity.txt");
 	m_velocity = ((float)m_health + 2)/m_velocityModifier;
 
-	DSound::getInstance()->playSound(DSound::DRONE_CREATE);
+	////M2S SOUND DSound::getInstance()->playSound(DSound::DRONE_CREATE); // M2S SOUND
+	GameSound::playSound(GameSound::DRONE_CREATE);
 }
 
 DroneEntity::~DroneEntity() {}

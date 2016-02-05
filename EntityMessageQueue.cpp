@@ -2,6 +2,11 @@
 
 #include "EntityMessageQueue.h"
 
+#ifndef NULL
+#define NULL 0
+#endif
+
+
 EntityMessageQueue * EntityMessageQueue::getInstance()
 {
 	static EntityMessageQueue instance;

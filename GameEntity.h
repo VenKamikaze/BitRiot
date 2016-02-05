@@ -9,6 +9,7 @@
 #include "EntityRendererFactory.h"
 #include "EntityMessageQueue.h"
 #include <assert.h>
+#include "GameSound.h"
 
 class GameEntity
 {
@@ -63,7 +64,7 @@ public:
 	
 	EntityRenderer * getEntityRenderer(); // gets animation surface pointer from factory
 	virtual void incAnimFrame();
-	bool render(LPDIRECTDRAWSURFACE7 dest); // renders entity to destination surface
+	bool render(SDL_Surface* dest); // renders entity to destination surface
 	
 protected:
 													

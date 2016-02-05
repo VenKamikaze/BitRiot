@@ -1,6 +1,6 @@
 # wav filenames
 
-BOMB_FUSE	audio/bombfuse.wav
+BOMB_FUSE	audio/newbombfuse1.wav
 EGG_DROP	audio/beepdrop.wav
 MINE_DROP	audio/beeppure.wav
 BLOCK_DROP	audio/blockdrop.wav

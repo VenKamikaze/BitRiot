@@ -11,12 +11,14 @@
 #include "InfoPanel.h"
 #include "InputHandler.h"
 #include "SpawningPool.h"
-#include "DDraw.h"
+#include "Map.h"
+//#include "DDraw.h"
+#include "SDL/SDL.h"
 
 class GameEngine
 {
 public:
-	GameEngine(LPDIRECTDRAW7 lpdd, LPDIRECTDRAWSURFACE7 lpddsback);
+	GameEngine(SDL_Surface* lpddsback);
 	~GameEngine();
 
 	void runEngine();
@@ -26,8 +28,8 @@ private:
 	enum GAME_STATE { GAME_INIT, GAME_RUNNING, GAME_OVER };
 	GAME_STATE m_state;
 
-	LPDIRECTDRAW7 lpdd;
-	LPDIRECTDRAWSURFACE7 lpddsback;
+	//LPDIRECTDRAW7 lpdd;
+	SDL_Surface*  lpddsback;
 
 	EntityManager * m_pEntityManager;
 	InfoPanel * m_pPanel;

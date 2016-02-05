@@ -50,7 +50,9 @@ EggEntity::EggEntity(int uniqueID, int teamNumber, EntityType eggType,
 	m_currentAnimFrame = 0;
 
 	// play creation sound
-	DSound::getInstance()->playSound(DSound::EGG_DROP);
+	// //M2S SOUND DSound::getInstance()->playSound(DSound::EGG_DROP); // M2S SOUND
+	//MickBaseSound::getInstance()->playSound("audio/beepdrop.wav");
+	GameSound::playSound(GameSound::EGG_DROP);
 }
 
 EggEntity::~EggEntity()
@@ -85,7 +87,8 @@ void EggEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTy
 			// oh no an egg thief!
 			// forced to change teams
 			m_team = teamCollidedWith;
-			DSound::getInstance()->playSound(DSound::EGG_STOLEN);
+			////M2S SOUND DSound::getInstance()->playSound(DSound::EGG_STOLEN); // M2S SOUND
+			GameSound::playSound(GameSound::EGG_STOLEN);
 			break;
 		} // end switch by group
 	} // end if

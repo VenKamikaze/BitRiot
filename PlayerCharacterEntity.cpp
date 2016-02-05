@@ -118,7 +118,8 @@ void PlayerCharacterEntity::onCollision(EntityType typeCollidedWith,
 		// touched an energy drop
 		// regain some health
 		incHealth(DataReader::getInstance()->getIntFromFile("ENERGY_DROP_BONUS", "data/player.txt"));
-		DSound::getInstance()->playSound(DSound::ENERGY_PICKUP);
+		//M2S SOUND DSound::getInstance()->playSound(DSound::ENERGY_PICKUP);
+		GameSound::playSound(GameSound::ENERGY_PICKUP);
 	}
 
 	if (typeCollidedWith == ENPLUS_POWERUP)
@@ -126,7 +127,8 @@ void PlayerCharacterEntity::onCollision(EntityType typeCollidedWith,
 		// touched energy POWERUP
 		// regain more health
 		incHealth(DataReader::getInstance()->getIntFromFile("ENERGY_POWERUP_BONUS", "data/player.txt"));
-		DSound::getInstance()->playSound(DSound::ENERGY_PICKUP);
+		//M2S SOUND DSound::getInstance()->playSound(DSound::ENERGY_PICKUP);
+		GameSound::playSound(GameSound::ENERGY_PICKUP);
 	}
 
 	if (typeCollidedWith == IQPLUS_POWERUP)
@@ -134,7 +136,8 @@ void PlayerCharacterEntity::onCollision(EntityType typeCollidedWith,
 		// touched IQ POWERUP
 		// increase IQ counter
 		incIQ(DataReader::getInstance()->getIntFromFile("IQ_POWERUP_BONUS", "data/player.txt"));
-		DSound::getInstance()->playSound(DSound::ENERGY_PICKUP);
+		//M2S SOUND DSound::getInstance()->playSound(DSound::ENERGY_PICKUP);
+		GameSound::playSound(GameSound::ENERGY_PICKUP);
 	}
 
 	if (m_health < 0)
@@ -212,7 +215,8 @@ void PlayerCharacterEntity::incHealth(int amount)
 void PlayerCharacterEntity::die()
 {
 	EntityMessageQueue::getInstance()->postDestroyMessage(m_ID);
-	DSound::getInstance()->playSound(DSound::SPLAT);
+	//M2S SOUND DSound::getInstance()->playSound(DSound::SPLAT);
+	GameSound::playSound(GameSound::SPLAT);
 }
 
 void PlayerCharacterEntity::determineGoals()

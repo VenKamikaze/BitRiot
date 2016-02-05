@@ -8,7 +8,10 @@
 #include "DynamicMap.h"
 #include "PlayerCharacterEntity.h"
 #include "InfoPanel.h"
-#include "DInput.h"
+#include "SDL/SDL.h"
+#include "MickSDLInput.h"
+#include "InputException.h"
+//#include "DInput.h"
 
 
 class InputHandler
@@ -37,7 +40,7 @@ private:
 	InfoPanel * p_infoPanel;
 	bool m_playerDead[4];
 
-	unsigned char m_keyMap[4][NUM_ACTION_BUTTONS]; // keymap of 6 action buttons for the 4 max players
+	KEY m_keyMap[4][NUM_ACTION_BUTTONS]; // keymap of 6 action buttons for the 4 max players
 };
 
 

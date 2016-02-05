@@ -285,7 +285,7 @@ EntityRenderer * GameEntity::getEntityRenderer()
 	return erf->getEntityRenderer(m_type);
 }
 
-bool GameEntity::render(LPDIRECTDRAWSURFACE7 dest)
+bool GameEntity::render(SDL_Surface* dest)
 {	
 	EntityRenderer * er = getEntityRenderer();
 
@@ -324,5 +324,7 @@ void GameEntity::explode()
 		emq->postCreateMessage(EXPLOSION, 0, m_tileX, m_tileY + 1, NULL);
 
 	emq->postDestroyMessage(m_ID);
-	DSound::getInstance()->playSound(DSound::BOOM);
+	////M2S SOUND DSound::getInstance()->playSound(DSound::BOOM); // M2S SOUND
+	//MickBaseSound::getInstance()->playSound("audio/boom.wav");
+	GameSound::playSound(GameSound::BOOM);
 }

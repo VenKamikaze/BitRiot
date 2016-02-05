@@ -1,7 +1,7 @@
 // implementation of ERFactory
 #include "EntityRendererFactory.h"
 
-void EntityRendererFactory::initSurfaces(LPDIRECTDRAW7 lpdd, HWND windowHandle)
+void EntityRendererFactory::initSurfaces(SDL_Surface* sdl_primary)
 {	
 	// set file names
 	std::string filenames[NUM_ENTITY_TYPES];
@@ -43,21 +43,23 @@ void EntityRendererFactory::initSurfaces(LPDIRECTDRAW7 lpdd, HWND windowHandle)
 		if (filenames[i] != empty)
 		{
 			// valid entry, check it exists
-			if (!PathFileExists(filenames[i].c_str()))
+			if (!MickUtil::CheckFileExists(filenames[i].c_str()))
 			{
 				// file doesn't exist
 				std::stringstream error;
 				error << "File: " << filenames[i].c_str() << " is not found.";
 
-				MessageBox(windowHandle, 
-					error.str().c_str(), 
-					NULL, MB_ICONEXCLAMATION);
-				SendMessage(windowHandle,WM_CLOSE,0,0);
+				cerr << error;
+
+//				MessageBox(windowHandle,
+//					error.str().c_str(),
+//					NULL, MB_ICONEXCLAMATION);
+//				SendMessage(windowHandle,WM_CLOSE,0,0);
 				return;
 			}
 
 			// initialise renderer
-			m_pList[i] = new EntityRenderer(lpdd, filenames[i].c_str());
+			m_pList[i] = new EntityRenderer(sdl_primary, filenames[i].c_str());
 		}
 	}
 

@@ -25,7 +25,8 @@ BlockEntity::BlockEntity(int uniqueID, int teamNumber, int atX, int atY)
 	m_currentAnimFrame = 0;
 
 	// play creation sound
-	DSound::getInstance()->playSound(DSound::BLOCK_DROP);
+	////M2S SOUND DSound::getInstance()->playSound(DSound::BLOCK_DROP); M2S SOUND
+	GameSound::playSound(GameSound::BLOCK_DROP);
 }
 
 BlockEntity::~BlockEntity()
@@ -47,7 +48,8 @@ void BlockEntity::onCollision(EntityType typeCollidedWith, EntityGroupType group
 		// wall eater destroys any blocks in contact
 		// munch effect!		
 		EntityMessageQueue::getInstance()->postDestroyMessage(m_ID);
-		DSound::getInstance()->playSound(DSound::MUNCHY);
+		////M2S SOUND DSound::getInstance()->playSound(DSound::MUNCHY); // M2S SOUND
+		GameSound::playSound(GameSound::MUNCHY);
 		EntityMessageQueue::getInstance()->postCreateMessage(MUNCH_EFFECT, m_team, m_tileX, m_tileY, 0);
 		return;
 	}

@@ -49,7 +49,8 @@ RocketFiredEntity::RocketFiredEntity(int uniqueID, int teamNumber, int atX, int 
 	m_toX = (int)fToX; // although a cast from an int to a float back to an int isn't ideal,
 	m_toY = (int)fToY; // it saves us from introducing rarely used parameters in EntityFactory
 
-	DSound::getInstance()->playSound(DSound::ROCKET_FIRED);
+	//M2S SOUND DSound::getInstance()->playSound(DSound::ROCKET_FIRED);
+	GameSound::playSound(GameSound::ROCKET_FIRED);
 }
 
 RocketFiredEntity::~RocketFiredEntity() 

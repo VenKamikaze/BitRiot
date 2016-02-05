@@ -6,7 +6,7 @@ DataReader::DataReader()
 	m_pStrFilemap = new map<string , map<string, string> >;
 
 	m_errorString = "";
-	m_windowHandle = NULL;
+	//m_windowHandle = NULL;
 }
 
 DataReader::~DataReader()
@@ -21,14 +21,16 @@ DataReader * DataReader::getInstance()
 	return &instance;
 }
 
-void DataReader::setWindowHandle(HWND mainWindowHandle)
+/*void DataReader::setWindowHandle(HWND mainWindowHandle)
 {
 	m_windowHandle = mainWindowHandle;    
-}
+}*/
 
 bool DataReader::displayAnyErrors()
 {
-	if (m_windowHandle != NULL)
+	printf("Error in DataReader: %s", m_errorString.c_str());
+	return true;
+	/*if (m_windowHandle != NULL)
 	{
 		if (m_errorString.length() == 0)
 			return false;
@@ -42,7 +44,7 @@ bool DataReader::displayAnyErrors()
 		}
 	} else {
 		return false;
-	}
+	}*/
 }
 
 void DataReader::clearCache()

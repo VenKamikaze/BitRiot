@@ -7,8 +7,8 @@
 #include "EntityEnum.h"
 #include <string>
 #include <sstream>
-#include <shlwapi.h>
-
+#include "SDL/SDL.h"
+#include "MickUtil.h"
 
 
 class EntityRendererFactory
@@ -16,7 +16,7 @@ class EntityRendererFactory
 public:
 	static EntityRendererFactory * getInstance();
 
-	void initSurfaces(LPDIRECTDRAW7 lpdd, HWND windowHandle);
+	void initSurfaces(SDL_Surface* sdl_primary);
 
 	EntityRenderer * getEntityRenderer(EntityType t);
 

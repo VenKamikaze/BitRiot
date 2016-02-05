@@ -26,7 +26,7 @@ But maybe after BitRiot is mostly finished
 #include <string>
 #include <sstream>
 #include <map>
-#include <windows.h>
+
 #include <iostream>
 #include <fstream>
 
@@ -44,7 +44,7 @@ public:
 	void clearCache(); // clears out the current DataReader object
 
 	// for displaying error messages
-	void setWindowHandle(HWND windowHandle);
+	//void setWindowHandle(HWND windowHandle);
 	bool displayAnyErrors();
 
 private:
@@ -60,7 +60,7 @@ private:
 	inline bool isDigit(char c);
 	bool isNumericString(string s);
 
-	HWND m_windowHandle;
+	//HWND m_windowHandle;
 	string m_errorString;
 };
 

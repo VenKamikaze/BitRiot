@@ -1,7 +1,7 @@
 
 #include "EntityManager.h"
 
-EntityManager::EntityManager(LPDIRECTDRAW7 lpdd)
+EntityManager::EntityManager()
 {
 	// set dynamicMap vector sizes to map width and height
 	m_pDynamicMap = new DynamicMap(Map::MAP_WIDTH, Map::MAP_HEIGHT);	
@@ -28,7 +28,7 @@ void EntityManager::runFrame()
 	
 }
 
-void EntityManager::renderEntities(LPDIRECTDRAWSURFACE7 destination)
+void EntityManager::renderEntities(SDL_Surface*  destination)
 {
 	// renders frame to supplied surface
 

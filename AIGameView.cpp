@@ -1,5 +1,9 @@
 #include "AIGameView.h"
 
+#ifndef NULL
+#define NULL 0
+#endif
+
 AIGameView * AIGameView::getInstance()
 {
 	static AIGameView instance;
