@@ -1,0 +1,246 @@
+
+#include "InfoPanel.h"
+
+static const unsigned int TRANSPARENT_COLOR = (255 << 8) + (255 << 0);
+
+InfoPanel::InfoPanel(int numPlayers, bool * isMale, LPDIRECTDRAW7 lpdd)
+{
+	m_players = numPlayers;
+
+	for (int i = 0; i < 4; i++)
+		playerPointer[i] = NULL;
+
+	clearSelections();
+
+	// set up surface	
+	DDSURFACEDESC2 ddsd;
+	memset(&ddsd,0,sizeof(ddsd));
+	ddsd.dwSize = sizeof(ddsd);
+	ddsd.dwFlags = DDSD_WIDTH | DDSD_HEIGHT | DDSD_CAPS;
+	ddsd.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN | DDSCAPS_VIDEOMEMORY;
+
+	ddsd.dwWidth = WIDTH;
+	ddsd.dwHeight = HEIGHT;
+
+	lpdd->CreateSurface(&ddsd, &m_surface, NULL);
+
+	// set up face surfaces
+	for (int i = 0; i < 4; i++)
+	{
+		stringstream ss;
+		ss << "bitmaps/player" << (i + 1);
+		if (isMale[i])
+			ss << "male";
+		else
+			ss << "female";
+		ss << "face.bmp";
+
+		m_faceSurfaces[i] = DDLoadBitmap(lpdd, ss.str().c_str(), 0, 0);
+
+
+	}
+
+	DDCOLORKEY key;
+	key.dwColorSpaceLowValue = TRANSPARENT_COLOR;
+	key.dwColorSpaceHighValue = TRANSPARENT_COLOR;
+
+	// change to team colours and apply color key
+	for (int i = 0; i < 4; ++i)
+	{
+		m_faceSurfaces[i]->SetColorKey(DDCKEY_SRCBLT, &key);
+	}	
+
+}
+
+InfoPanel::~InfoPanel()
+{
+	if (m_surface)
+		m_surface->Release();
+	for (int i = 0; i < 4; i++)
+		if (m_faceSurfaces[i])
+			m_faceSurfaces[i]->Release();
+}
+
+void InfoPanel::setPlayerPointers(int num, 
+		PlayerCharacterEntity * player1,
+		PlayerCharacterEntity * player2,
+		PlayerCharacterEntity * player3,
+		PlayerCharacterEntity * player4)
+{
+	m_players = num;
+	playerPointer[0] = player1;
+	playerPointer[1] = player2;
+	playerPointer[2] = player3;
+	playerPointer[3] = player4;
+}
+
+void InfoPanel::clearSelections()
+{
+	for (int t = 0; t < 4; t++)
+	{
+		playerSelection[t] = PLAYER_CHARACTER; // player character used as null selection
+	}
+}
+
+void InfoPanel::setSelection(EntityType type, int team)
+{
+	team--;
+	if (0 <= team && team < 4)
+	{
+		// ok to set array
+		playerSelection[team ] = type;
+	} 
+}
+
+void InfoPanel::renderSurfaceTo(LPDIRECTDRAWSURFACE7 dest, int x, int y)
+{
+	assert(playerPointer[0] != NULL);
+	// clear surface
+	DDBLTFX ddbltfx;
+	memset(&ddbltfx,0,sizeof(ddbltfx));
+	ddbltfx.dwSize = sizeof(ddbltfx);
+	ddbltfx.dwFillColor = 0; // color for filling in panel
+	m_surface->Blt(NULL, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &ddbltfx);
+
+	// render stuff to surface
+	COLORREF white = 0x00FFFFFF;
+
+	drawBGTiles();
+
+	
+	RECT sourceRect, destRect;
+	int xOffset, yOffset;
+	
+	for (int i = 0; i < m_players; i++)
+	{
+		int health = 0;
+		if (m_playerDead[i] != true && playerPointer[i] != NULL)
+			health = playerPointer[i]->getHealth();
+		xOffset = 0;
+		yOffset = ((i * 3) + 1) * Map::TILE_HEIGHT;
+
+		// draw face
+		DDSURFACEDESC2 ddsd;
+		memset(&ddsd,0,sizeof(ddsd));
+		ddsd.dwSize = sizeof(ddsd);
+		m_faceSurfaces[i]->GetSurfaceDesc(&ddsd);
+
+		sourceRect.top = 0;
+		sourceRect.left = 0;
+		sourceRect.right = ddsd.dwWidth;
+		sourceRect.bottom = ddsd.dwHeight;
+
+		destRect.top = yOffset;
+		destRect.bottom = yOffset + (2 * Map::TILE_HEIGHT);
+		destRect.left = xOffset;
+		destRect.right = xOffset + (2 * Map::TILE_WIDTH);
+
+		m_surface->Blt(&destRect, m_faceSurfaces[i], &sourceRect, DDBLT_WAIT | DDBLT_KEYSRC, 0);
+
+			
+		xOffset += (2 * Map::TILE_WIDTH);
+		if (playerSelection[i] != PLAYER_CHARACTER)
+		{
+			EntityRenderer * er = EntityRendererFactory::getInstance()->getEntityRenderer(playerSelection[i]);	
+			er->render(m_surface, xOffset, yOffset, 0, 0, i + 1);
+		}
+
+		// draw health bar
+		unsigned char intensity = (unsigned char)(((float)health/100.0f)*255);
+		if (health > 100)
+			intensity = 255;
+		ddbltfx.dwFillColor = ((255 - intensity) << 16) + (intensity << 8);
+
+		destRect.top = yOffset + (int)(1.25f * (float)Map::TILE_HEIGHT);
+		destRect.bottom = yOffset + (int)(1.75f * (float)Map::TILE_HEIGHT);
+		destRect.left = xOffset + (int)(0.25f * (float)Map::TILE_WIDTH);
+		destRect.right = destRect.left + health;
+		if (health > 100)
+			destRect.right = destRect.left + 100;
+
+		m_surface->Blt(&destRect, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &ddbltfx);
+
+		if (health > 100)
+		{
+			int extraHealth = health - 100;
+			intensity = (unsigned char)(((float)extraHealth/100.0f)*255);
+			ddbltfx.dwFillColor = ((255 - intensity) << 8) + (intensity << 0);
+
+			destRect.right = destRect.left + extraHealth;
+
+			m_surface->Blt(&destRect, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &ddbltfx);
+		}
+
+	}
+
+	/// render surface to destination
+
+	sourceRect.left = 0;
+	sourceRect.right = WIDTH;
+	sourceRect.top = 0;
+	sourceRect.bottom = HEIGHT;
+
+	destRect.left = x;
+	destRect.right = x + WIDTH;
+	destRect.top = y;
+	destRect.bottom = y + HEIGHT;
+
+	dest->Blt(&destRect, m_surface, &sourceRect, DDBLT_WAIT, 0);
+	
+}
+
+void InfoPanel::setPlayerDead(int player, bool flag)
+{
+	m_playerDead[player] = flag;
+}
+
+void InfoPanel::drawTextGDI(const char * text, int x, int y,
+				 COLORREF color, LPDIRECTDRAWSURFACE7 dest)
+{
+	HDC xdc;
+
+	if (FAILED(dest->GetDC(&xdc)))
+		return;
+
+	SetTextColor(xdc, color);
+
+	// set background mode to transparent
+	SetBkMode(xdc, TRANSPARENT);
+
+	// draw text out
+	TextOut(xdc, x, y, text, (int)strlen(text));
+
+	// release device context (or it'd be locked)
+	dest->ReleaseDC(xdc);
+}
+
+void InfoPanel::drawBGTiles()
+{
+	for (int y = 0; y < Map::MAP_HEIGHT; y++)
+	{
+		for (int x = 0; x < InfoPanel::PANEL_TILE_WIDTH; x++)
+		{
+			Map::StaticTile tile;
+			if ((y%3) == 0)
+				tile = Map::WALL;
+			else 
+			{
+				if (x == InfoPanel::PANEL_TILE_WIDTH - 1)
+					tile = Map::WALL;
+				else
+					tile = Map::EMPTY;
+			}
+
+			int atX, atY;
+			atX = x * Map::TILE_WIDTH;
+			atY = y * Map::TILE_HEIGHT;
+			Map::getInstance()->renderTileTo(m_surface, atX, atY, tile);
+
+
+		}
+
+
+	}
+
+
+}

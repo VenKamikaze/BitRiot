@@ -1,0 +1,50 @@
+Here are the not so perfect controls for Bit Riot:
+
+Player 1:
+Up : 	w
+Down:	s
+Left:	a
+Right:	d
+Use weapon: left control
+Lay egg: left shift
+
+Player 2:
+Up : 	i
+Down:	j
+Left:	k
+Right:	l
+Use weapon: left bracket [
+Lay egg: right bracket ]
+
+Player 3:
+Up : 	numpad 8
+Down:	numpad 5
+Left:	numpad 4
+Right:	numpad 6
+Use weapon: numpad +
+Lay egg: numpad -
+
+Player 4:
+Up : 	up key
+Down:	down key
+Left:	left key
+Right:	right key
+Use weapon: right control
+Lay egg: right shift
+
+Weapons:
+weapon button + up: bomb
+weapon button + left: mine
+weapon button + right: homing rocket
+weapon button + down: block
+
+egg button + left: egg stealing thing
+egg button + up: pacman type block muncher
+egg button + right: drone thing that just makes a nuisance of itself
+egg button + down: robot that fires homing rockets (nice)
+egg button + no direction: energy thing that gives you back more energy than it costs
+
+
+
+I plan to make it so you can set up your own control scheme and also have joypad/joystick input so everyone doesn't have to crowd round the computer.
+

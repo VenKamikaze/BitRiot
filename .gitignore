@@ -1,0 +1,33 @@
+.settings/
+Bit Riot.exe
+Bit Riot.ncb
+Bit Riot.sln
+Bit Riot.suo
+Bit Riot.vcproj
+BitRiot-dbg-dblbuf.o
+BitRiot-dbg..o
+BitRiot-dbg.exe
+BitRiot-dbg.o
+BitRiot-new.o
+BitRiot-newsound.o
+BitRiot.build.log
+BitRiot.o
+DInput.cpp.old
+DInput.h.old
+DSound.cpp.old
+DSound.h.old
+Debug/
+Release/
+StdAfx.cpp.old
+StdAfx.h.old
+Thumbs.db
+WindowsDebug/
+autoscan.log
+configure.scan
+ddutil.cpp.old
+ddutil.h.old
+debug.tar.bz2
+dsutil.cpp.old
+dsutil.h.old
+main.cpp.old
+main.cpp.triplebuf
