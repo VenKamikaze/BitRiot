@@ -28,3 +28,10 @@ Things that I'd like to do, but likely won't ever find time for (in order of per
 If you'd ever like to work on this code, please fork it and file pull requests - I'd be glad to accept them.
 
 Please note: If you'd found the original BitRiot release anywhere, you might notice the artwork in this one was different. This was only done out of safety (more like paranoia!) incase there were any concerns over the artwork included in the original release.
+
+# Build
+
+To build the game, first make sure you have the necessary dependencies installed on your system. The obvious ones that I can recall are SDL 1.2.x, SDL_mixer and SDL_ttf.
+
+In the BitRiot directory, run 'make'
+It should compile a 'BitRiot-dbg' file that you can run.
