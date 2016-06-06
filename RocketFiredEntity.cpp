@@ -1,4 +1,5 @@
 #include "RocketFiredEntity.h"
+#include <cmath>
 
 RocketFiredEntity::RocketFiredEntity(int uniqueID, int teamNumber, int atX, int atY, 
 									 unsigned int flags, float fToX, float fToY)
