@@ -49,7 +49,7 @@ void EntityRendererFactory::initSurfaces(SDL_Surface* sdl_primary)
 				std::stringstream error;
 				error << "File: " << filenames[i].c_str() << " is not found.";
 
-				cerr << error;
+				cerr << error.str();
 
 //				MessageBox(windowHandle,
 //					error.str().c_str(),

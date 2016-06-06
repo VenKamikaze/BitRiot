@@ -52,7 +52,7 @@ namespace std
 					// file doesn't exist
 					std::stringstream error;
 					error << "File: " << filenames[i].c_str() << " is not found.";
-					cerr << error;
+					cerr << error.str();
 
 					return;
 				}
