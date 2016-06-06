@@ -1,6 +1,8 @@
 # BitRiot
 Clone / re-implementation of the Amiga BugBomber game
 
+![Screenshot](https://raw.github.com/VenKamikaze/BitRiot/master/doco/screenshots/BitRiot-1.png)
+
 This game is a re-implementation of 'BugBomber' - a great Amiga game that is similar to Bomberman but with a twist of being able to spawn your own helper robots. I found the code for BitRiot when I was searching to see if anyone recreated bomberman. It was built by one guy as a university project and posted to a forum.
 
 It was original built against the win32 API, and I figured I'd like to learn the difficulties in porting a game from win32 to something Linux native. I wasn't quite ready to jump into OpenGL / 3D APIs, so I took the approach of porting to SDL 1.2.x with normal software blitting.
