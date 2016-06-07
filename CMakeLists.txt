@@ -23,6 +23,14 @@ if(NOT SDL_FOUND)
 	message(SEND_ERROR "Failed to find SDL.")
 endif()
 
+if(NOT SDL_MIXER_FOUND)
+	message(SEND_ERROR "Failed to find SDL_mixer.")
+endif()
+
+if(NOT SDL_TTF_FOUND)
+	message(SEND_ERROR "Failed to find SDL_ttf.")
+endif()
+
 
 #file(GLOB SOURCES src/*.cpp)
 
