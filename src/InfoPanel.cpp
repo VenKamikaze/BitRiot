@@ -115,7 +115,8 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
 	// render stuff to surface
 	//COLORREF white = 0x00FFFFFF;
 
-	static Uint32 white = SDL_MapRGB(dest->format, 255, 255, 255);
+	//unused
+	//static Uint32 white = SDL_MapRGB(dest->format, 255, 255, 255);
 
 	drawBGTiles();
 

@@ -15,7 +15,7 @@
 
 
 struct MickSoundFile {
-	Mix_Chunk *sound;
+	Mix_Chunk *sound = 0; //TODO: switch to nullptr (c++11)?
 };
 
 //class MickSDLSound: public std::MickBaseSound

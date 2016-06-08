@@ -1261,7 +1261,7 @@ void PlayerCharacterEntity::checkEnvironment()
 	// modified from RocketSpinEntity::update() code
 	bool dirFinished[4] = { false, false, false, false };
 	int distance = 0; 
-	int targetX, targetY;
+	int targetX = 0, targetY = 0;
 
 	while ((!dirFinished[0]) || (!dirFinished[1])
 			|| (!dirFinished[2]) || (!dirFinished[3]))
@@ -1273,7 +1273,7 @@ void PlayerCharacterEntity::checkEnvironment()
 		{
 			if (dirFinished[d])
 				continue;
-
+			
 			DIRECTION dir;
 			int xMultiplier, yMultiplier;
 			// set these variables
@@ -1292,7 +1292,8 @@ void PlayerCharacterEntity::checkEnvironment()
 				dir = RIGHT; xMultiplier = 1; yMultiplier = 0;
 				break;
 			}
-
+			//unused. avoid compiler warning
+			(void)dir;
 			// get x and y co-ords to test
 			int xTile, yTile;
             xTile = m_tileX + (distance * xMultiplier);

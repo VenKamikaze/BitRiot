@@ -427,7 +427,8 @@ int consoleInit()
 	//initDSound->setMuted(true);
 
 	// set window handle to data reader
-	DataReader * reader = DataReader::getInstance();
+	//unused
+	//DataReader * reader = DataReader::getInstance();
 	//reader->setWindowHandle(main_window_handle);
 
 	// seed random number generator

@@ -71,6 +71,8 @@ void EggEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTy
 		case EXPLOSION_GROUP:
 			explode();
 			break;
+		default:
+			break;
 		}
 	}
 	else
@@ -89,6 +91,8 @@ void EggEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTy
 			m_team = teamCollidedWith;
 			////M2S SOUND DSound::getInstance()->playSound(DSound::EGG_STOLEN); // M2S SOUND
 			GameSound::playSound(GameSound::EGG_STOLEN);
+			break;
+		default:
 			break;
 		} // end switch by group
 	} // end if
