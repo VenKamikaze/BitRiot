@@ -36,22 +36,24 @@ Please note: If you'd found the original BitRiot release anywhere, you might not
 To build the game, first make sure you have the necessary dependencies installed on your system. You will need:
 SDL 1.2.x, SDL_mixer and SDL_ttf.
 
-#Clone the repository:
+## CMake
+
+```
 git clone https://github.com/VenKamikaze/BitRiot.git
-
-#Change into the target/ directory inside BitRiot
 cd BitRiot/target
-
-#Generate a Makefile with CMake
 cmake ../
-
-#Build it
 make
-
-#Run the game - you should now have a 'BitRiot' executable in your current directory:
 ./BitRiot
+```
+Steps shown above:
 
-Old/alternate method without CMake (not recommended, may be removed in a later commit):
+1. Clone the repository:
+2. Change into the target directory inside your cloned BitRiot repository
+3. Generate a Makefile with CMake
+4. Build it
+5. Run the game - you should now have a 'BitRiot' executable in your current directory:
+
+## Old/alternate method without CMake (not recommended, may be removed in a later commit):
 
 In the BitRiot directory, run 'make'
 It should compile a 'BitRiot-dbg.o' file that you can run.
