@@ -105,23 +105,9 @@ void InfoPanel::setSelection(EntityType type, int team)
 void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
 {
 	assert(playerPointer[0] != NULL);
-	// clear surface
-	//DDBLTFX ddbltfx;
-	//memset(&ddbltfx,0,sizeof(ddbltfx));
-	//ddbltfx.dwSize = sizeof(ddbltfx);
-	//ddbltfx.dwFillColor = 0; // color for filling in panel
-	//m_surface->Blt(NULL, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &ddbltfx);
-
-	// render stuff to surface
-	//COLORREF white = 0x00FFFFFF;
-
-	//unused
-	//static Uint32 white = SDL_MapRGB(dest->format, 255, 255, 255);
 
 	drawBGTiles();
 
-	
-	//RECT sourceRect, destRect;
 	SDL_Rect sourceRect, destRect;
 	int xOffset, yOffset;
 	
@@ -134,11 +120,6 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
 		yOffset = ((i * 3) + 1) * Map::TILE_HEIGHT;
 
 		// draw face
-		//DDSURFACEDESC2 ddsd;
-		//memset(&ddsd,0,sizeof(ddsd));
-		//ddsd.dwSize = sizeof(ddsd);
-		//m_faceSurfaces[i]->GetSurfaceDesc(&ddsd);
-
 		sourceRect.y = 0;
 		sourceRect.x = 0;
 		sourceRect.w = m_faceSurfaces[i]->w;
@@ -153,7 +134,6 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
 		SDL_BlitSurface(m_faceSurfaces[i], &sourceRect, m_surface, &destRect);
 
 		//m_surface->Blt(&destRect, m_faceSurfaces[i], &sourceRect, DDBLT_WAIT | DDBLT_KEYSRC, 0);
-
 			
 		xOffset += (2 * Map::TILE_WIDTH);
 		if (playerSelection[i] != PLAYER_CHARACTER)

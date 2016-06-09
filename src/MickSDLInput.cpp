@@ -132,10 +132,6 @@ void MickSDLInput::updateEventQueue()
 		}
 		else if (event.type == SDL_QUIT)
 		{
-			//unused
-			//MickEvent myevent;
-			//myevent.type = KEY_QUIT_EVENT;
-			//newEvents.push(myevent);
 			quitEvent = true;
 		}
 	}
