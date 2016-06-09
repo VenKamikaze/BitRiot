@@ -9,7 +9,7 @@
 #define MICKSDLINPUT_H_
 
 #include "MickBaseInput.h"
-#include "SDL/SDL.h"
+#include <SDL2/SDL.h>
 #include <map>
 #include <set>
 
@@ -35,7 +35,7 @@ class MickSDLInput : MickBaseInput
 
 	protected:
 		void setupKeymap();
-		void setupReverseKeymap(std::map<KEY, SDLKey>* forwardMap);
+		void setupReverseKeymap(std::map<KEY, SDL_Keycode>* forwardMap);
 
 	private:
 		SDL_Event event;

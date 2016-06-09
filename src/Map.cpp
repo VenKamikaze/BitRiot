@@ -10,7 +10,7 @@ Map * Map::getInstance()
 	return &instance;
 }
 
-void Map::init()
+void Map::init(SDL_Surface* sdl_primary)
 {
 	// initialise basic static map as all empty tiles
 	for (int x = 0; x < MAP_WIDTH; ++x)
@@ -41,14 +41,14 @@ void Map::init()
 
 	SDL_Surface* tempSurface[] = { std::MickSDLAssets::Load_BMP("bitmaps/wall.bmp"), std::MickSDLAssets::Load_BMP("bitmaps/empty.bmp"), std::MickSDLAssets::Load_BMP("bitmaps/empty.bmp") };
 
-	m_staticSurface[WALL] = SDL_DisplayFormat(tempSurface[0]); //SDL_LoadBMP("bitmaps/wall.bmp");
-	m_staticSurface[EMPTY] = SDL_DisplayFormat(tempSurface[1]);  //SDL_LoadBMP("bitmaps/empty.bmp");
-	m_staticSurface[BLOCK] =  SDL_DisplayFormat(tempSurface[2]); //SDL_LoadBMP("bitmaps/empty.bmp");
+	m_staticSurface[WALL] = SDL_ConvertSurface(tempSurface[0], sdl_primary->format, 0); //SDL_LoadBMP("bitmaps/wall.bmp");
+	m_staticSurface[EMPTY] = SDL_ConvertSurface(tempSurface[1], sdl_primary->format, 0);  //SDL_LoadBMP("bitmaps/empty.bmp");
+	m_staticSurface[BLOCK] =  SDL_ConvertSurface(tempSurface[2], sdl_primary->format, 0); //SDL_LoadBMP("bitmaps/empty.bmp");
 	//m_staticSurface[BLOCK] = DDLoadBitmap(surface, "bitmaps/empty.bmp", 0, 0);
 
-	SDL_FreeSurface(SDL_DisplayFormat(tempSurface[0]));
-	SDL_FreeSurface(SDL_DisplayFormat(tempSurface[1]));
-	SDL_FreeSurface(SDL_DisplayFormat(tempSurface[2]));
+	SDL_FreeSurface(tempSurface[0]);
+	SDL_FreeSurface(tempSurface[1]);
+	SDL_FreeSurface(tempSurface[2]);
 
 	tempSurface[0] = NULL;
 	tempSurface[1] = NULL;

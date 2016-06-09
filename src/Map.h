@@ -6,7 +6,7 @@
 // Yet another singleton class (I'm trying not to abuse it, really!)
 //#include <ddraw.h>
 //#include "ddutil.h"
-#include "SDL/SDL.h"
+#include <SDL2/SDL.h>
 #include "MickSDLAssets.h"
 
 enum DIRECTION { UP, DOWN, LEFT, RIGHT };
@@ -16,7 +16,7 @@ class Map
 public:
 	static Map * getInstance();
 	//void init(LPDIRECTDRAW7 lpdd); // need to init surfaces before map can be rendered
-	void init(); // need to init surfaces before map can be rendered
+	void init(SDL_Surface* SDL_primary); // need to init surfaces before map can be rendered
 	~Map();
 
 	const static int MAP_WIDTH = 17; // usually 17

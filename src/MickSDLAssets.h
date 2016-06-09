@@ -9,7 +9,7 @@
 #define MICKSDLASSETS_H_
 
 #include "MickAssets.h"
-#include "SDL/SDL.h"
+#include <SDL2/SDL.h>
 
 
 namespace std {

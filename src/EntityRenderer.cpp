@@ -86,7 +86,7 @@ EntityRenderer::EntityRenderer(SDL_Surface* sdl_primary, const char * filename)
 
 	if(tempSurface)
 	{
-		m_animSurface[0] = SDL_DisplayFormat( tempSurface );
+		m_animSurface[0] = SDL_ConvertSurface(tempSurface, sdl_primary->format, 0);
 
 		SDL_FreeSurface(tempSurface);
 		tempSurface = NULL;
@@ -119,7 +119,7 @@ EntityRenderer::EntityRenderer(SDL_Surface* sdl_primary, const char * filename)
 		// create surface
 	    //lpdd->CreateSurface(&ddsd, &(m_animSurface[i]), NULL);
 
-		SDL_Surface* tempSurface = SDL_CreateRGBSurface(SDL_SWSURFACE, m_animSurface[0]->w, m_animSurface[0]->h, m_animSurface[0]->format->BitsPerPixel, m_animSurface[0]->format->Rmask, m_animSurface[0]->format->Gmask, m_animSurface[0]->format->Bmask, 0 );
+		SDL_Surface* tempSurface = SDL_CreateRGBSurface(0, m_animSurface[0]->w, m_animSurface[0]->h, m_animSurface[0]->format->BitsPerPixel, m_animSurface[0]->format->Rmask, m_animSurface[0]->format->Gmask, m_animSurface[0]->format->Bmask, 0);
 		// copy to this surface
 		//m_animSurface[i]->Blt(&destRect, m_animSurface[0], &sourceRect, DDBLT_WAIT, NULL);
 		SDL_BlitSurface(m_animSurface[0], &sourceRect, tempSurface, &destRect);
@@ -136,9 +136,9 @@ EntityRenderer::EntityRenderer(SDL_Surface* sdl_primary, const char * filename)
 	{
 		changeToTeamColour(m_animSurface[i], i);
 
-		SDL_SetColorKey( m_animSurface[i], SDL_RLEACCEL | SDL_SRCCOLORKEY, SDL_MapRGB(m_animSurface[i]->format, 0, 255, 255) );
+		SDL_SetColorKey( m_animSurface[i], SDL_TRUE, SDL_MapRGB(m_animSurface[i]->format, 0, 255, 255) );
 		//m_animSurface[i]->SetColorKey(DDCKEY_SRCBLT, &key);
-	}	
+	}
 
 }
 
@@ -271,7 +271,7 @@ void EntityRenderer::changeToTeamColour(SDL_Surface* surface, int team)
 
 }
 
-bool EntityRenderer::replaceTeamSurfaceWithImage(const char * filename, int team)
+bool EntityRenderer::replaceTeamSurfaceWithImage(SDL_Surface* sdl_primary, const char * filename, int team)
 {
 	// load anim surface from file using ddutil.h
 	//LPDIRECTDRAWSURFACE7 tempSurface = DDLoadBitmap(lpdd, filename, 0, 0);
@@ -279,7 +279,7 @@ bool EntityRenderer::replaceTeamSurfaceWithImage(const char * filename, int team
 
 	if (tempSurface)
 	{
-		SDL_Surface* optSurface = SDL_DisplayFormat( tempSurface );
+		SDL_Surface* optSurface = SDL_ConvertSurface(tempSurface, sdl_primary->format, 0);
 		// release current surface
 		if (m_animSurface[team])
 		{
@@ -289,12 +289,12 @@ bool EntityRenderer::replaceTeamSurfaceWithImage(const char * filename, int team
 		// set surface from temp
 		m_animSurface[team] = optSurface;
 
-		// set number of frames		
+		// set number of frames
 		//DDSURFACEDESC2 ddsd;
 		//memset(&ddsd,0,sizeof(ddsd));
 		//ddsd.dwSize = sizeof(ddsd);
 		//m_animSurface[team]->GetSurfaceDesc(&ddsd);
-		
+
 		//printf("Not sure about this - CHECK M2S surface width of BMP: %d", m_animSurface[team]->w);
 		m_numFrames[team] = m_animSurface[team]->w / Map::TILE_WIDTH;
 
@@ -303,7 +303,7 @@ bool EntityRenderer::replaceTeamSurfaceWithImage(const char * filename, int team
 		//key.dwColorSpaceHighValue = TRANSPARENT_COLOR;
 		//m_animSurface[team]->SetColorKey(DDCKEY_SRCBLT, &key);
 
-		SDL_SetColorKey(m_animSurface[team], SDL_SRCCOLORKEY, SDL_MapRGB(m_animSurface[team]->format, 0, 255, 255));
+		SDL_SetColorKey(m_animSurface[team], SDL_TRUE, SDL_MapRGB(m_animSurface[team]->format, 0, 255, 255));
 
 		if(tempSurface)
 		{

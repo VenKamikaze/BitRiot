@@ -7,7 +7,7 @@
 #include "EntityEnum.h"
 #include <string>
 #include <sstream>
-#include "SDL/SDL.h"
+#include <SDL2/SDL.h>
 #include "MickUtil.h"
 
 

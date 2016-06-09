@@ -14,21 +14,23 @@ if(CMAKE_BUILD_TYPE MATCHES "Release")
 	SET (CMAKE_SHARED_LINKER_FLAGS ${CMAKE_SHARED_LINKER_FLAGS_INIT} -s) 
 endif()
 
-find_package(SDL REQUIRED)
-find_package(SDL_mixer REQUIRED)
-find_package(SDL_ttf REQUIRED)
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${BitRiot_SOURCE_DIR}/cmake")
+
+find_package(SDL2 REQUIRED)
+find_package(SDL2_Mixer REQUIRED)
+find_package(SDL2_ttf REQUIRED)
 
 
-if(NOT SDL_FOUND)
-	message(SEND_ERROR "Failed to find SDL.")
+if(NOT SDL2_FOUND)
+	message(SEND_ERROR "Failed to find SDL2.")
 endif()
 
-if(NOT SDL_MIXER_FOUND)
-	message(SEND_ERROR "Failed to find SDL_mixer.")
+if(NOT SDL2_MIXER_FOUND)
+	message(SEND_ERROR "Failed to find SDL2_mixer.")
 endif()
 
-if(NOT SDL_TTF_FOUND)
-	message(SEND_ERROR "Failed to find SDL_ttf.")
+if(NOT SDL2_TTF_FOUND)
+	message(SEND_ERROR "Failed to find SDL2_ttf.")
 endif()
 
 
@@ -82,12 +84,12 @@ set(SOURCES ./src/AIGameView.cpp
 ./src/main.cpp)
 
 
-include_directories(${SDL_INCLUDE_DIR} ${SDL_TTF_INCLUDE_DIRS} ${SDL_MIXER_INCLUDE_DIRS} ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/src )
+include_directories(${SDL2_INCLUDE_DIR} ${SDL_MIXER_INCLUDE_DIR} ${SDL2_TTF_INCLUDE_DIR} ${PROJECT_SOURCE_DIR} 
+${PROJECT_SOURCE_DIR}/src )
 add_executable(BitRiot ${SOURCES})
 
 
-
-target_link_libraries(BitRiot ${SDL_LIBRARY} ${SDL_MIXER_LIBRARIES} ${SDL_TTF_LIBRARIES})
+target_link_libraries(BitRiot ${SDL2_LIBRARY} ${SDL2_MIXER_LIBRARY} ${SDL2_TTF_LIBRARY})
 
 add_custom_command(
     TARGET ${PROJECT_NAME} POST_BUILD

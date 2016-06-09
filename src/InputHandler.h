@@ -8,7 +8,7 @@
 #include "DynamicMap.h"
 #include "PlayerCharacterEntity.h"
 #include "InfoPanel.h"
-#include "SDL/SDL.h"
+#include <SDL2/SDL.h>
 #include "MickSDLInput.h"
 #include "InputException.h"
 //#include "DInput.h"

@@ -8,7 +8,7 @@
 #ifndef SDLHELPER_H_
 #define SDLHELPER_H_
 
-#include "SDL/SDL.h"
+#include <SDL2/SDL.h>
 
 namespace std {
 

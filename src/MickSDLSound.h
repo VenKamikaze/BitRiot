@@ -9,7 +9,7 @@
 #define MICKSDLSOUND_H_
 
 #include "MickBaseSound.h"
-#include "SDL/SDL_mixer.h"
+#include <SDL2/SDL_mixer.h>
 #include <set>
 #include <map>
 

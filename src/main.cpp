@@ -40,14 +40,12 @@
 #include <memory.h>
 #include <string.h>
 #include <stdarg.h>
-#include <stdio.h> 
+#include <stdio.h>
 #include <math.h>
 //#include <io.h>
 #include <fcntl.h>
 
-#include "SDL/SDL.h"
-#include "SDL/SDL_config.h"
-#include "SDL/SDL_video.h"
+#include <SDL2/SDL.h>
 
 #include "MickSDLSound.h"
 
@@ -105,6 +103,9 @@ int consoleMain();
 //HWND main_window_handle           = NULL; // save the window handle
 //HINSTANCE main_instance           = NULL; // save the instance
 
+SDL_Window* sdl_window = NULL;
+SDL_Renderer* sdl_renderer = NULL;
+SDL_Texture* sdl_primary_texture = NULL;
 SDL_Surface* sdl_primary = NULL;
 
 SDL_Rect backRect, windowRect, clientArea; // RECTs for blitting pseudo-backbuffer to primary
@@ -306,10 +307,43 @@ int consoleInit()
     	return 1;
     }
 
-
-    if (!(sdl_primary = SDL_SetVideoMode(WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_BPP, SDL_DOUBLEBUF|SDL_HWSURFACE)))
+    sdl_window = SDL_CreateWindow(WINDOW_TITLE, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+                                  WINDOW_WIDTH, WINDOW_HEIGHT, SDL_WINDOW_SHOWN);
+    if (sdl_window == NULL)
     {
-    	cerr << "Failed to create sdl_primary!";
+        cerr << "Failed to create sdl_window!";
+        return 1;
+    }
+
+    sdl_renderer = SDL_CreateRenderer(sdl_window, -1, 0);
+    if (sdl_renderer == NULL)
+    {
+        cerr << "Failed to create sdl_renderer!";
+        return 1;
+    }
+
+    Uint32 pixel_format = SDL_GetWindowPixelFormat(sdl_window);
+
+    sdl_primary_texture = SDL_CreateTexture(sdl_renderer, pixel_format, SDL_TEXTUREACCESS_STREAMING,
+                                            WINDOW_WIDTH, WINDOW_HEIGHT);
+    if (sdl_primary_texture == NULL)
+    {
+        cerr << "Failed to create sdl_primary_texture!";
+        return 1;
+    }
+
+    int depth = 0;
+    Uint32 rmask = 0;
+    Uint32 gmask = 0;
+    Uint32 bmask = 0;
+    Uint32 amask = 0;
+    SDL_PixelFormatEnumToMasks(pixel_format, &depth, &rmask, &gmask, &bmask, &amask);
+
+    sdl_primary = SDL_CreateRGBSurface(0, WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_BPP,
+                                       rmask, gmask, bmask, amask);
+    if (sdl_primary == NULL)
+    {
+        cerr << "Failed to create sdl_primary!";
         return 1;
     }
 
@@ -351,7 +385,7 @@ int consoleInit()
 	// all other initialization code goes here...
 
 	Map * staticMap = Map::getInstance();
-	staticMap->init();
+	staticMap->init(sdl_primary);
 
 	EntityRendererFactory * erf = EntityRendererFactory::getInstance();
 	erf->initSurfaces(sdl_primary);
@@ -378,7 +412,7 @@ int consoleMain()
 	}
 
 	return 0;
- 
+
 } // end Game_Main
 
 
@@ -391,9 +425,6 @@ int main(int argc, char* argv[])
     try
     {
     	quitkey = consoleInit();
-
-        //Set the window caption
-        SDL_WM_SetCaption( WINDOW_TITLE, NULL );
     }
     catch(exception &e)
     {
@@ -440,7 +471,10 @@ int main(int argc, char* argv[])
 
 			if(sdl_primary != NULL)
 			{
-				SDL_Flip(sdl_primary);
+				SDL_UpdateTexture(sdl_primary_texture, NULL, sdl_primary->pixels, sdl_primary->pitch);
+				SDL_RenderClear(sdl_renderer);
+				SDL_RenderCopy(sdl_renderer, sdl_primary_texture, NULL, NULL);
+				SDL_RenderPresent(sdl_renderer);
 			}
 			else
 			{
@@ -481,6 +515,19 @@ int main(int argc, char* argv[])
 			{
 				SDL_FreeSurface(sdl_primary);
 				sdl_primary = NULL;
+			}
+
+			if(sdl_renderer != NULL)
+			{
+				SDL_DestroyRenderer(sdl_renderer); // also frees sdl_primary_texture
+				sdl_primary_texture = NULL;
+				sdl_renderer = NULL;
+			}
+
+			if(sdl_window != NULL)
+			{
+				SDL_DestroyWindow(sdl_window);
+				sdl_window = NULL;
 			}
 
 			SDL_Quit();

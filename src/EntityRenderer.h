@@ -34,7 +34,7 @@ public:
 
 	bool render(SDL_Surface* dest, int x, int y, int state, int animFrame, int team);
 	int getNumFrames(int team) { return m_numFrames[team]; }
-	bool replaceTeamSurfaceWithImage(const char * filename, int team);
+	bool replaceTeamSurfaceWithImage(SDL_Surface* sdl_primary, const char * filename, int team);
 
 private:
 	void setupColours(SDL_Surface* sdl_primary);

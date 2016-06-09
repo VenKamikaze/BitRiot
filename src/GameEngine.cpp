@@ -201,7 +201,7 @@ void GameEngine::initHumanPlayers(int numPlayers, bool * maleGender, bool * botA
 
 		// set animation image for male or female
 		EntityRenderer * er = EntityRendererFactory::getInstance()->getEntityRenderer(PLAYER_CHARACTER);
-		er->replaceTeamSurfaceWithImage(ss.str().c_str(), i);
+		er->replaceTeamSurfaceWithImage(lpddsback, ss.str().c_str(), i);
 	}
 
 }

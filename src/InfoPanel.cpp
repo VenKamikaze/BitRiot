@@ -12,7 +12,7 @@ InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, bool * isMale)
 
 	clearSelections();
 
-	// set up surface	
+	// set up surface
 //	DDSURFACEDESC2 ddsd;
 //	memset(&ddsd,0,sizeof(ddsd));
 //	ddsd.dwSize = sizeof(ddsd);
@@ -24,7 +24,7 @@ InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, bool * isMale)
 
 //	lpdd->CreateSurface(&ddsd, &m_surface, NULL);
 
-	m_surface = SDL_CreateRGBSurface(SDL_HWSURFACE, WIDTH, HEIGHT, backbuf->format->BitsPerPixel, backbuf->format->Rmask, backbuf->format->Gmask, backbuf->format->Bmask, 0 );
+	m_surface = SDL_CreateRGBSurface(0, WIDTH, HEIGHT, backbuf->format->BitsPerPixel, backbuf->format->Rmask, backbuf->format->Gmask, backbuf->format->Bmask, 0);
 
 	// set up face surfaces
 	for (int i = 0; i < 4; i++)
@@ -50,8 +50,8 @@ InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, bool * isMale)
 	// change to team colours and apply color key
 	for (int i = 0; i < 4; ++i)
 	{
-		SDL_SetColorKey( m_faceSurfaces[i], SDL_RLEACCEL | SDL_SRCCOLORKEY, SDL_MapRGB(m_faceSurfaces[i]->format, 0, 255, 255) );
-	}	
+		SDL_SetColorKey( m_faceSurfaces[i], SDL_TRUE, SDL_MapRGB(m_faceSurfaces[i]->format, 0, 255, 255) );
+	}
 
 }
 
