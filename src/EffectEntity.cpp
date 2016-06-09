@@ -22,6 +22,8 @@ EffectEntity::EffectEntity(int uniqueID, EntityType effectType, int atX, int atY
 		m_health = DataReader::getInstance()->getIntFromFile("DAMAGE_EFFECT_HEALTH", "data/entity.txt");;
 		m_currentAnimFrame = rand()%5; // pick random frame
 		break;
+	default:
+		break;
 	}
 
 	m_animCounter = m_origAnimCounter;

@@ -84,7 +84,7 @@ void RocketFiredEntity::update()
 	{
 		// get next tile
 		Map * map = Map::getInstance();
-		Map::StaticTile nextTile;
+		Map::StaticTile nextTile = Map::EMPTY;
 		switch (m_dir)
 		{
 		case UP:

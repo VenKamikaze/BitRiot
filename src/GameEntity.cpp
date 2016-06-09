@@ -20,7 +20,10 @@ GameEntity::GameEntity()
 void GameEntity::moveInDirection(DIRECTION d)
 {
 	Map * staticMap = Map::getInstance();
-	EntityRenderer * er = getEntityRenderer();
+	
+	//unsused
+	//EntityRenderer * er = getEntityRenderer();
+
 
 	float thisMoveVelocity = m_velocity;
 
@@ -310,18 +313,18 @@ void GameEntity::incAnimFrame()
 void GameEntity::explode()
 {
 	EntityMessageQueue * emq = EntityMessageQueue::getInstance();
-	emq->postCreateMessage(EXPLOSION, 0, m_tileX, m_tileY, NULL);
+	emq->postCreateMessage(EXPLOSION, 0, m_tileX, m_tileY, 0);
 
 	// create explosions at x +- 1 and y +- 1
 	Map * staticMap = Map::getInstance();
 	if (staticMap->staticTileAt(m_tileX - 1, m_tileY) != Map::WALL)
-		emq->postCreateMessage(EXPLOSION, 0, m_tileX - 1, m_tileY, NULL);
+		emq->postCreateMessage(EXPLOSION, 0, m_tileX - 1, m_tileY, 0);
 	if (staticMap->staticTileAt(m_tileX + 1, m_tileY) != Map::WALL)
-		emq->postCreateMessage(EXPLOSION, 0, m_tileX + 1, m_tileY, NULL);
+		emq->postCreateMessage(EXPLOSION, 0, m_tileX + 1, m_tileY, 0);
 	if (staticMap->staticTileAt(m_tileX, m_tileY - 1) != Map::WALL)
-		emq->postCreateMessage(EXPLOSION, 0, m_tileX, m_tileY - 1, NULL);
+		emq->postCreateMessage(EXPLOSION, 0, m_tileX, m_tileY - 1, 0);
 	if (staticMap->staticTileAt(m_tileX, m_tileY + 1) != Map::WALL)
-		emq->postCreateMessage(EXPLOSION, 0, m_tileX, m_tileY + 1, NULL);
+		emq->postCreateMessage(EXPLOSION, 0, m_tileX, m_tileY + 1, 0);
 
 	emq->postDestroyMessage(m_ID);
 	////M2S SOUND DSound::getInstance()->playSound(DSound::BOOM); // M2S SOUND

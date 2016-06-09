@@ -72,7 +72,7 @@
 
 // defines for windows interface
 #define WINDOW_CLASS_NAME "Bit Riot"  // class name
-#define WINDOW_TITLE      "Bit Riot Final Beta Version - SDL Port NO2"
+#define WINDOW_TITLE      "Bit Riot Beta - SDL1 Port"
 const int WINDOW_WIDTH = (Map::MAP_WIDTH * Map::TILE_WIDTH) + InfoPanel::WIDTH;   // size of window
 const int WINDOW_HEIGHT = Map::MAP_HEIGHT * Map::TILE_HEIGHT;
 
@@ -102,32 +102,12 @@ int consoleMain();
 
 // GLOBALS ////////////////////////////////////////////////
 
-// M2S: replace HWND with ??
-
 //HWND main_window_handle           = NULL; // save the window handle
 //HINSTANCE main_instance           = NULL; // save the instance
 
-
-// Direct Draw globals
-//LPDIRECTDRAW7 lpdd = NULL; // Direct Draw 7 pointer
-
-// M2S: replace LPDIRECTDRAWSURFACE7 with SDL_Surface ??
-
 SDL_Surface* sdl_primary = NULL;
 
-//LPDIRECTDRAWSURFACE7 lpddsprimary = NULL; // pointer to primary surface
-//LPDIRECTDRAWSURFACE7 lpddsback = NULL; // pointer to backbuffer surface
-
-// M2S: manual blit clear ??
-
-//DDBLTFX ddbltfxClear; // blit fx for clearing back buffer
-
-// M2S: RECT with SDL_Rect ??
-
 SDL_Rect backRect, windowRect, clientArea; // RECTs for blitting pseudo-backbuffer to primary
-//RECT backRect, windowRect, clientArea; // RECTs for blitting pseudo-backbuffer to primary
-//LPDIRECTDRAWCLIPPER lpddclipper = NULL;
-//DDSURFACEDESC2 ddsd; // DD surface description for primary surface
 
 // game object globals
 GameEngine * engine = NULL;
@@ -350,37 +330,6 @@ int consoleInit()
     }
 
 
-    // this function is where you do all the initialization
-	// for your game
-
-	//ddsd.dwFlags = DDSD_CAPS; // enable valid field(s)
-
-//	ddsd.ddsCaps.dwCaps = DDSCAPS_PRIMARYSURFACE;
-
-	// check pixel format is ok
-/*	DDPIXELFORMAT pixelFormat;
-	memset(&pixelFormat,0,sizeof(pixelFormat));
-	pixelFormat.dwSize = sizeof(pixelFormat);	
-
-	lpddsprimary->GetPixelFormat(&pixelFormat);
-
-	if (pixelFormat.dwRGBBitCount != WINDOW_BPP) 
-	{
-		MessageBox(main_window_handle, 
-			"This application requires 32 bit colour depth, please change your desktop settings.", 
-			NULL, MB_ICONEXCLAMATION);
-		SendMessage(main_window_handle,WM_CLOSE,0,0);
-		return(0);
-	}
-*/
-	// add clipper to primary surface
-/*
-	lpdd->CreateClipper(NULL, &lpddclipper, NULL);
-	lpddclipper->SetHWnd(NULL, main_window_handle);
-	lpddsprimary->SetClipper(lpddclipper);
-	lpddclipper->Release(); // due to 2 count problem
-
-	*/
 	// update blitting RECT
 	clientArea.x = 0;
 	clientArea.y = 0;
@@ -388,22 +337,6 @@ int consoleInit()
 	clientArea.h = WINDOW_HEIGHT - 1;
 
 	SDL_SetClipRect(sdl_primary, &clientArea);
-	/*
-
-	// due to windowed mode, backbuffer is a normal offscreen surface
-	ddsd.dwFlags = DDSD_WIDTH | DDSD_HEIGHT | DDSD_CAPS; // enable valid field(s)
-	ddsd.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN | DDSCAPS_VIDEOMEMORY;
-	ddsd.dwWidth = WINDOW_WIDTH;
-	ddsd.dwHeight = WINDOW_HEIGHT;
-	if (FAILED(lpdd->CreateSurface(&ddsd, &lpddsback, NULL)))
-	{
-		// failed to create backbuffer surface
-		MessageBox(main_window_handle, 
-			"Failed to set backbuffer surface, check that your screen display meets the system requirements.", 
-			NULL, MB_ICONEXCLAMATION);
-		SendMessage(main_window_handle,WM_CLOSE,0,0);
-		return(0);
-	}
 	// set colour keying here */
 	//DDCOLORKEY colorKey;
 	//colorKey.dwColorSpaceLowValue = COLORKEY_LOW;
@@ -412,93 +345,31 @@ int consoleInit()
 
 	//SDL_SetColorKey(sdl_back, SDL_SRCCOLORKEY, SDL_MapRGB(sdl_back->format, COLORKEY_R, COLORKEY_G, COLORKEY_B));
 
-	// init blit fx for clearing buffer
-	//memset(&ddbltfxClear,0,sizeof(ddbltfxClear));
-	//ddbltfxClear.dwSize = sizeof(ddbltfxClear);
-	//ddbltfxClear.dwFillColor = (255 << 16) + (100 << 8); // color for filling in back buffer // YELLOW??
-
-	// initialize directinput
-	//DInput::initDInput(main_instance, main_window_handle);
-
-	// initialize directsound and directmusic
-	//DSound_Init();
-	//DSound * initDSound = //M2S SOUND DSound::getInstance();
-	//initDSound->initialise(main_window_handle);
-	//initDSound->setMuted(true);
-
-	// set window handle to data reader
-	DataReader * reader = DataReader::getInstance();
-	//reader->setWindowHandle(main_window_handle);
-
 	// seed random number generator
 	srand(SDL_GetTicks());
 
 	// all other initialization code goes here...
 
 	Map * staticMap = Map::getInstance();
-	staticMap->init();  // M2S does sdl_primary belong here? was: lpdd
+	staticMap->init();
 
 	EntityRendererFactory * erf = EntityRendererFactory::getInstance();
-	erf->initSurfaces(sdl_primary);   // M2S does sdl_primary belong here? was: lpdd
+	erf->initSurfaces(sdl_primary);
 
-	engine = new GameEngine(sdl_primary);   // M2S does sdl_primary belong here?
+	engine = new GameEngine(sdl_primary);
 
 	return 0;
 
 } // end Game_Init
 
-///////////////////////////////////////////////////////////
-/*
-int consoleShutdown()
-{
-	// this function is where you shutdown your game and
-	// release all resources that you allocated
-
-	// shut everything down
-
-
-	DInput::shutdownDInput();
-
-	if (lpddclipper)
-		lpddclipper->Release();
-	if (lpddsback)
-		lpddsback->Release();
-	if (lpddsprimary)
-		lpddsprimary->Release();
-	if (lpdd)
-		lpdd->Release();
-
-
-	return 0;
-} // end Game_Shutdown
-
-//////////////////////////////////////////////////////////
-*/
 int consoleMain()
 {
 	SDL_FillRect(sdl_primary, NULL, SDL_MapRGB(sdl_primary->format, 200, 200, 100)); // as per ddbltfxClear
 
-	// start the timing clock
-	//Uint32 startTime = GetTickCount();
 	Uint32 startTime = SDL_GetTicks();
-
-	// clear the drawing surface 
-	//lpddsback->Blt(NULL, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &ddbltfxClear);
-	//SDL_FillRect(sdl_back, NULL, SDL_MapRGB(sdl_back->format, 255, 255, 100)); // as per ddbltfxClear
-
-	//sdl_back->BlitSurface(NULL, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &ddbltfxClear);
-
-	//SDL_BlitSurface(m_iconSurface, &m_iconRect, surface, &m_screenRect);
 
 	engine->runEngine();
 
-	// blit from back buffer to primary
-	//lpddsprimary->Blt(&clientArea, lpddsback, &backRect, DDBLT_WAIT, NULL);
-	//SDL_BlitSurface(m_iconSurface, &m_iconRect, surface, &m_screenRect);
-
-	//SDL_BlitSurface(sdl_back, &backRect, sdl_primary, &clientArea);
-
-	//while ((GetTickCount() - startTime) < 33)
 	while ((SDL_GetTicks() - startTime) < 33)
 	{
 		//wait a bit to sync to 30fps

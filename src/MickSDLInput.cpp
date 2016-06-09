@@ -132,9 +132,6 @@ void MickSDLInput::updateEventQueue()
 		}
 		else if (event.type == SDL_QUIT)
 		{
-			MickEvent myevent;
-			myevent.type = KEY_QUIT_EVENT;
-			//newEvents.push(myevent);
 			quitEvent = true;
 		}
 	}
@@ -291,7 +288,7 @@ void MickSDLInput::setupReverseKeymap(map<KEY, SDLKey>* forwardMap)
 	for ( rTransIt=translateMap->rbegin() ; rTransIt != translateMap->rend(); rTransIt++ )
 	{
 		reverseTranslateMap->insert(std::pair<SDLKey, KEY>(rTransIt->second, rTransIt->first));
-		printf("reversemap size: %d\n",reverseTranslateMap->size());
+		printf("reversemap size: %lu\n",reverseTranslateMap->size());
 	}
 }
 
