@@ -38,11 +38,12 @@ private:
 	int m_typeToCreate; // entity type to create
 	int m_teamToCreate; // team to assign created entity to
 	// CREATE_ENTITY & MOVE_ENTITY data
-	int m_fromX, m_fromY; // move_from coordinates
 	int m_toX, m_toY; // create_at or move_to coordinates
+	int m_fromX, m_fromY; // move_from coordinates
+	
 
-	float m_offsetX, m_offsetY;
 	unsigned int m_entityMessageFlags; // bit flipped flags for extended behaviour
+	float m_offsetX, m_offsetY;
 
 };
 

@@ -210,11 +210,11 @@ void EntityRenderer::changeToTeamColour(SDL_Surface* surface, int team)
 	//Uint32* buffer = (Uint32* )surface->pixels;
 
 	// loop through all of image
-	for (Uint32 x = 0; x < surface->w; ++x)
+	for (int32_t x = 0; x < surface->w; ++x)
 	{
-		for (Uint32 y = 0; y < surface->h; ++y)
+		for (int32_t y = 0; y < surface->h; ++y)
 		{
-			Uint32 pixel = SDLHelper::GetPixel(surface, x, y);
+			int32_t pixel = SDLHelper::GetPixel(surface, x, y);
 			//Uint32 pixel = buffer[x + y*(ddsd.lPitch >> 2)];
 
 			if (pixel == TEAM_ORIGINAL_HIGHLIGHT_COLOR)

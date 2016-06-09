@@ -155,7 +155,7 @@ void GameEngine::initHumanPlayers(int numPlayers, bool * maleGender, bool * botA
 
 	for (int i = 1; i <= numPlayers; i++)
 	{
-		int atX, atY;
+		int atX = 0, atY = 0;
 		// set x and y co-ords
 		switch (i)
 		{

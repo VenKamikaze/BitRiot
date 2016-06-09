@@ -116,7 +116,7 @@ void RocketSpinEntity::die()
 
 void RocketSpinEntity::fireAt(const DIRECTION d, const int destX, const int destY)
 {
-	int flags;
+	int flags = 0;
 	switch (d)
 	{
 	case UP:
@@ -130,6 +130,8 @@ void RocketSpinEntity::fireAt(const DIRECTION d, const int destX, const int dest
 		break;
 	case RIGHT:
 		flags = RIGHT_FLAG;
+		break;
+	default:
 		break;
 	}
 	EntityMessageQueue * emq = EntityMessageQueue::getInstance();
