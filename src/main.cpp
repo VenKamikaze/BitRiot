@@ -70,7 +70,7 @@
 
 // defines for windows interface
 #define WINDOW_CLASS_NAME "Bit Riot"  // class name
-#define WINDOW_TITLE      "Bit Riot Beta - SDL1 Port"
+#define WINDOW_TITLE      "Bit Riot Beta - SDL2 Port"
 const int WINDOW_WIDTH = (Map::MAP_WIDTH * Map::TILE_WIDTH) + InfoPanel::WIDTH;   // size of window
 const int WINDOW_HEIGHT = Map::MAP_HEIGHT * Map::TILE_HEIGHT;
 
