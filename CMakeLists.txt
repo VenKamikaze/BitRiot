@@ -17,7 +17,7 @@ endif()
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${BitRiot_SOURCE_DIR}/cmake")
 
 find_package(SDL2 REQUIRED)
-find_package(SDL2_Mixer REQUIRED)
+find_package(SDL2_mixer REQUIRED)
 find_package(SDL2_ttf REQUIRED)
 
 
