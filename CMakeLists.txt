@@ -11,7 +11,7 @@ set(CMAKE_CSS_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
 
 
 if(CMAKE_BUILD_TYPE MATCHES "Release")
-	SET (CMAKE_SHARED_LINKER_FLAGS ${CMAKE_SHARED_LINKER_FLAGS_INIT} -s) 
+	SET (CMAKE_SHARED_LINKER_FLAGS ${CMAKE_SHARED_LINKER_FLAGS_INIT} -s)
 endif()
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${BitRiot_SOURCE_DIR}/cmake")
@@ -37,54 +37,54 @@ endif()
 #file(GLOB SOURCES src/*.cpp)
 
 ## manual entries for now
-set(SOURCES ./src/AIGameView.cpp 
-./src/BlockEntity.cpp 
-./src/BombEntity.cpp 
+set(SOURCES ./src/AIGameView.cpp
+./src/BlockEntity.cpp
+./src/BombEntity.cpp
 ./src/DataReader.cpp
-./src/DroneEntity.cpp 
-./src/DynamicMap.cpp 
-./src/EffectEntity.cpp 
-./src/EggEntity.cpp 
-./src/EggThiefEntity.cpp 
-./src/EnPlusEntity.cpp 
-./src/EnergyDropEntity.cpp 
-./src/EntityFactory.cpp 
-./src/EntityManager.cpp 
-./src/EntityMessage.cpp 
-./src/EntityMessageQueue.cpp 
-./src/EntityRenderer.cpp 
-./src/EntityRendererFactory.cpp 
-./src/ExplosionEntity.cpp 
-./src/GameEngine.cpp 
-./src/GameEntity.cpp 
-./src/GameSound.cpp 
-./src/IQPowerupEntity.cpp 
-./src/InfoPanel.cpp 
-./src/InputException.cpp 
-./src/InputHandler.cpp 
-./src/Map.cpp 
-./src/MickAssets.cpp 
-./src/MickBaseInput.cpp 
-./src/MickBaseSound.cpp 
-./src/MickSDLAssets.cpp 
-./src/MickSDLInput.cpp 
-./src/MickSDLSound.cpp 
-./src/MickUtil.cpp 
-./src/MineEntity.cpp 
-./src/PlayerCharacterEntity.cpp 
-./src/RobotEntity.cpp 
-./src/RocketFiredEntity.cpp 
-./src/RocketSpinEntity.cpp 
-./src/RuntimeException.cpp 
-./src/SDLHelper.cpp 
-./src/SimpleBrain.cpp 
-./src/SimpleMovingEntity.cpp 
-./src/SpawningPool.cpp 
-./src/WallEaterEntity.cpp 
+./src/DroneEntity.cpp
+./src/DynamicMap.cpp
+./src/EffectEntity.cpp
+./src/EggEntity.cpp
+./src/EggThiefEntity.cpp
+./src/EnPlusEntity.cpp
+./src/EnergyDropEntity.cpp
+./src/EntityFactory.cpp
+./src/EntityManager.cpp
+./src/EntityMessage.cpp
+./src/EntityMessageQueue.cpp
+./src/EntityRenderer.cpp
+./src/EntityRendererFactory.cpp
+./src/ExplosionEntity.cpp
+./src/GameEngine.cpp
+./src/GameEntity.cpp
+./src/GameSound.cpp
+./src/IQPowerupEntity.cpp
+./src/InfoPanel.cpp
+./src/InputException.cpp
+./src/InputHandler.cpp
+./src/Map.cpp
+./src/MickAssets.cpp
+./src/MickBaseInput.cpp
+./src/MickBaseSound.cpp
+./src/MickSDLAssets.cpp
+./src/MickSDLInput.cpp
+./src/MickSDLSound.cpp
+./src/MickUtil.cpp
+./src/MineEntity.cpp
+./src/PlayerCharacterEntity.cpp
+./src/RobotEntity.cpp
+./src/RocketFiredEntity.cpp
+./src/RocketSpinEntity.cpp
+./src/RuntimeException.cpp
+./src/SDLHelper.cpp
+./src/SimpleBrain.cpp
+./src/SimpleMovingEntity.cpp
+./src/SpawningPool.cpp
+./src/WallEaterEntity.cpp
 ./src/main.cpp)
 
 
-include_directories(${SDL2_INCLUDE_DIR} ${SDL_MIXER_INCLUDE_DIR} ${SDL2_TTF_INCLUDE_DIR} ${PROJECT_SOURCE_DIR} 
+include_directories(${SDL2_INCLUDE_DIR} ${SDL2_MIXER_INCLUDE_DIR} ${SDL2_TTF_INCLUDE_DIR} ${PROJECT_SOURCE_DIR}
 ${PROJECT_SOURCE_DIR}/src )
 add_executable(BitRiot ${SOURCES})
 
@@ -97,4 +97,3 @@ add_custom_command(
     COMMAND ln -sf ${PROJECT_SOURCE_DIR}/bitmaps ${PROJECT_BINARY_DIR}/
     COMMAND ln -sf ${PROJECT_SOURCE_DIR}/audio ${PROJECT_BINARY_DIR}/
 )
-
