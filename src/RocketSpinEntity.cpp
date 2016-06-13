@@ -21,7 +21,7 @@ RocketSpinEntity::RocketSpinEntity(int uniqueID, int teamNumber, int atX, int at
 	m_currentAnimFrame = 0;
 
 	m_lifespan = DataReader::getInstance()->getIntFromFile("ROCKET_LIFESPAN", "data/entity.txt");
-	//M2S SOUND DSound::getInstance()->playSound(DSound::ROCKET_SPIN);
+
 	GameSound::playSound(GameSound::ROCKET_SPIN);
 }
 
@@ -36,7 +36,7 @@ void RocketSpinEntity::onCollision(EntityType typeCollidedWith, EntityGroupType 
 	{
 		die();
 		return;
-	}	
+	}
 }
 
 void RocketSpinEntity::update()

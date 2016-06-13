@@ -30,7 +30,7 @@ RobotEntity::RobotEntity(int uniqueID, int team, int atX, int atY, unsigned int 
 	int range = m_maxActionCount - m_minActionCount;
 
 	m_actionCounter = m_minActionCount + (rand()%range);
-	//M2S SOUND DSound::getInstance()->playSound(DSound::ROBOT_CREATE);
+
 	GameSound::playSound(GameSound::ROBOT_CREATE);
 
 }

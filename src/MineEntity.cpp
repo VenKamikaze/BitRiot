@@ -25,7 +25,6 @@ MineEntity::MineEntity(int uniqueID, int teamNumber, int atX, int atY)
 	m_animDelay = m_fuse/10;
 
 	// play creation sound
-	////M2S SOUND DSound::getInstance()->playSound(DSound::MINE_DROP); // M2S SOUND
 	GameSound::playSound(GameSound::MINE_DROP);
 }
 

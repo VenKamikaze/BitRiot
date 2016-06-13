@@ -8,10 +8,10 @@ GameEntity::GameEntity()
 	m_staticFlag = false;
 	m_solidFlag = false;
 	m_walkThroughBlocks = false;
- 
+
 	m_tileX = m_tileY = 0;
 	m_offsetX = m_offsetY = 0;
-			
+
 	m_currentAnimState = EntityRenderer::IDLE;
 	m_currentAnimFrame = 0;
 
@@ -20,7 +20,7 @@ GameEntity::GameEntity()
 void GameEntity::moveInDirection(DIRECTION d)
 {
 	Map * staticMap = Map::getInstance();
-	
+
 	//unsused
 	//EntityRenderer * er = getEntityRenderer();
 
@@ -327,7 +327,6 @@ void GameEntity::explode()
 		emq->postCreateMessage(EXPLOSION, 0, m_tileX, m_tileY + 1, 0);
 
 	emq->postDestroyMessage(m_ID);
-	////M2S SOUND DSound::getInstance()->playSound(DSound::BOOM); // M2S SOUND
 	//MickBaseSound::getInstance()->playSound("audio/boom.wav");
 	GameSound::playSound(GameSound::BOOM);
 }

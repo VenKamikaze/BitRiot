@@ -1,7 +1,7 @@
 #include "RocketFiredEntity.h"
 #include <cmath>
 
-RocketFiredEntity::RocketFiredEntity(int uniqueID, int teamNumber, int atX, int atY, 
+RocketFiredEntity::RocketFiredEntity(int uniqueID, int teamNumber, int atX, int atY,
 									 unsigned int flags, float fToX, float fToY)
 {
 	// constructor
@@ -30,7 +30,7 @@ RocketFiredEntity::RocketFiredEntity(int uniqueID, int teamNumber, int atX, int 
 	{
 		m_dir = UP;
 		m_currentAnimState = EntityRenderer::MOVE_UP;
-	} 
+	}
 	else if (flags & GameEntity::DOWN_FLAG)
 	{
 		m_dir = DOWN;
@@ -50,11 +50,10 @@ RocketFiredEntity::RocketFiredEntity(int uniqueID, int teamNumber, int atX, int 
 	m_toX = (int)fToX; // although a cast from an int to a float back to an int isn't ideal,
 	m_toY = (int)fToY; // it saves us from introducing rarely used parameters in EntityFactory
 
-	//M2S SOUND DSound::getInstance()->playSound(DSound::ROCKET_FIRED);
 	GameSound::playSound(GameSound::ROCKET_FIRED);
 }
 
-RocketFiredEntity::~RocketFiredEntity() 
+RocketFiredEntity::~RocketFiredEntity()
 {}
 
 void RocketFiredEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTypeCollidedWith, int teamCollidedWith)
@@ -67,7 +66,7 @@ void RocketFiredEntity::onCollision(EntityType typeCollidedWith, EntityGroupType
 		|| (typeCollidedWith == EXPLOSION))
 	{
 		explode();
-	}	
+	}
 }
 
 void RocketFiredEntity::update()

@@ -7,8 +7,6 @@
 #ifndef _ENTITYMESSAGEQUEUE
 #define _ENTITYMESSAGEQUEUE
 
-//#include "DSound.h" // put DSound here so everything that calls the EntityMessageQueue can play sounds
-
 #include <queue>
 #include "EntityMessage.h"
 
@@ -19,7 +17,7 @@ public:
 	~EntityMessageQueue();
 
 	void postDestroyMessage(int sender);
-	void postCreateMessage(int typeParam, int teamParam, int atX, int atY, 
+	void postCreateMessage(int typeParam, int teamParam, int atX, int atY,
 		unsigned int flags, float offsetX = 0.0f, float offsetY = 0.0f);
 	void postMoveMessage(int sender, int fromX, int fromY, int toX, int toY);
 

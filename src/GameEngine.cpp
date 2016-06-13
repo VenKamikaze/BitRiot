@@ -51,7 +51,6 @@ void GameEngine::runEngine()
 		m_pPanel->setPlayerPointers(numPlayers, m_pPlayers[1],
 			m_pPlayers[2], m_pPlayers[3], m_pPlayers[4]);
 		seedBlocksOnMap(blockPercentage);
-		////M2S SOUND DSound::getInstance()->setMuted(false); // M2S SOUND
 		m_state = GAME_RUNNING;
 		runEngine();
 	}
@@ -65,7 +64,7 @@ void GameEngine::runEngine()
 			m_pInputHandler->setPlayerDead(i, m_pEntityManager->getPlayerDead(i + 1));
 			m_pPanel->setPlayerDead(i, m_pEntityManager->getPlayerDead(i + 1));
 		}
-		m_pInputHandler->processKeyboardInput(); 
+		m_pInputHandler->processKeyboardInput();
 
 		// game logic here...
 

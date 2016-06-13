@@ -31,9 +31,9 @@ PlayerCharacterEntity::PlayerCharacterEntity(int uniqueID, int teamNumber, int a
 	if ((flags & AI_CONTROLLED_BOT_FLAG) > 0)
 	{
 		m_controlledByAI = true;
-		
+
 		// pause to give human players a little time at beginning of game
-		AIInstruction * ins = new AIInstruction(AIInstruction::WAIT, 23 + (rand()%42), getType(), 0, 0); 
+		AIInstruction * ins = new AIInstruction(AIInstruction::WAIT, 23 + (rand()%42), getType(), 0, 0);
 		m_insList.push_front(ins);
 
 		// set initial goals
@@ -109,7 +109,7 @@ void PlayerCharacterEntity::onCollision(EntityType typeCollidedWith,
 		|| (typeCollidedWith == EXPLOSION))
 	{
 		m_health--;
-		EntityMessageQueue::getInstance()->postCreateMessage(DAMAGE_EFFECT, 
+		EntityMessageQueue::getInstance()->postCreateMessage(DAMAGE_EFFECT,
 			m_team, m_tileX, m_tileY, 0, m_offsetX, m_offsetY);
 	}
 
@@ -118,7 +118,6 @@ void PlayerCharacterEntity::onCollision(EntityType typeCollidedWith,
 		// touched an energy drop
 		// regain some health
 		incHealth(DataReader::getInstance()->getIntFromFile("ENERGY_DROP_BONUS", "data/player.txt"));
-		//M2S SOUND DSound::getInstance()->playSound(DSound::ENERGY_PICKUP);
 		GameSound::playSound(GameSound::ENERGY_PICKUP);
 	}
 
@@ -127,7 +126,6 @@ void PlayerCharacterEntity::onCollision(EntityType typeCollidedWith,
 		// touched energy POWERUP
 		// regain more health
 		incHealth(DataReader::getInstance()->getIntFromFile("ENERGY_POWERUP_BONUS", "data/player.txt"));
-		//M2S SOUND DSound::getInstance()->playSound(DSound::ENERGY_PICKUP);
 		GameSound::playSound(GameSound::ENERGY_PICKUP);
 	}
 
@@ -136,7 +134,6 @@ void PlayerCharacterEntity::onCollision(EntityType typeCollidedWith,
 		// touched IQ POWERUP
 		// increase IQ counter
 		incIQ(DataReader::getInstance()->getIntFromFile("IQ_POWERUP_BONUS", "data/player.txt"));
-		//M2S SOUND DSound::getInstance()->playSound(DSound::ENERGY_PICKUP);
 		GameSound::playSound(GameSound::ENERGY_PICKUP);
 	}
 
@@ -198,7 +195,7 @@ bool PlayerCharacterEntity::createEntity(EntityType type)
 	if (m_health <= 0)
 	{
 		m_health = 0;
-		die();		
+		die();
 	}
 	return true;
 
@@ -215,7 +212,6 @@ void PlayerCharacterEntity::incHealth(int amount)
 void PlayerCharacterEntity::die()
 {
 	EntityMessageQueue::getInstance()->postDestroyMessage(m_ID);
-	//M2S SOUND DSound::getInstance()->playSound(DSound::SPLAT);
 	GameSound::playSound(GameSound::SPLAT);
 }
 

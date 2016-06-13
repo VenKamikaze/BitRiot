@@ -1,7 +1,6 @@
-
 #include "EggEntity.h"
 
-EggEntity::EggEntity(int uniqueID, int teamNumber, EntityType eggType, 
+EggEntity::EggEntity(int uniqueID, int teamNumber, EntityType eggType,
 					 EntityType hatchType, int atX, int atY, unsigned int flags)
 {
 	// constructor
@@ -50,7 +49,6 @@ EggEntity::EggEntity(int uniqueID, int teamNumber, EntityType eggType,
 	m_currentAnimFrame = 0;
 
 	// play creation sound
-	// //M2S SOUND DSound::getInstance()->playSound(DSound::EGG_DROP); // M2S SOUND
 	//MickBaseSound::getInstance()->playSound("audio/beepdrop.wav");
 	GameSound::playSound(GameSound::EGG_DROP);
 }
@@ -78,7 +76,7 @@ void EggEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTy
 	else
 	{
 		// collided with an entity from another team
-	        
+
 		// switch by group first
 		switch (typeCollidedWith)
 		{
@@ -89,7 +87,6 @@ void EggEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTy
 			// oh no an egg thief!
 			// forced to change teams
 			m_team = teamCollidedWith;
-			////M2S SOUND DSound::getInstance()->playSound(DSound::EGG_STOLEN); // M2S SOUND
 			GameSound::playSound(GameSound::EGG_STOLEN);
 			break;
 		default:

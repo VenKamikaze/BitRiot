@@ -21,7 +21,6 @@ EnPlusEntity::EnPlusEntity(int uniqueID, int teamNumber, int atX, int atY)
 	m_currentAnimState = EntityRenderer::IDLE;
 	m_currentAnimFrame = 0;
 
-	// //M2S SOUND DSound::getInstance()->playSound(DSound::ENERGY_DROP); // M2S SOUND
 	GameSound::playSound(GameSound::ENERGY_DROP);
 
 	m_initialDecayCount = DataReader::getInstance()->getIntFromFile("POWERUP_DECAY_COUNTER", "data/entity.txt");
