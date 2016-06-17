@@ -19,6 +19,7 @@ namespace std {
 		public:
 			//static SDL_Surface* Load_BMP(string pathfile);
 			static SDL_Surface* Load_BMP(const char* pathfile);
+			static SDL_Texture* LoadTexture_BMP(SDL_Renderer* renderer, const char* pathfile);
 			virtual ~MickSDLAssets();
 
 		private:

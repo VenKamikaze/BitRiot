@@ -91,6 +91,12 @@ const Uint8 COLORKEY_G = 0;
 const Uint8 COLORKEY_B = 0;
 const Uint8 COLORKEY_A = 0;
 
+// Controls initialisation parameters, such as FULLSCREEN, etc
+unsigned int initFlags = 0; // start with all turned off
+
+// Initialisation parameters supported
+static const unsigned int ASK_FULLSCREEN	= (1 << 1);
+
 // PROTOTYPES /////////////////////////////////////////////
 
 // game console
@@ -308,7 +314,7 @@ int consoleInit()
     }
 
     sdl_window = SDL_CreateWindow(WINDOW_TITLE, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                                  WINDOW_WIDTH, WINDOW_HEIGHT, SDL_WINDOW_SHOWN);
+                                  WINDOW_WIDTH, WINDOW_HEIGHT, (initFlags & ASK_FULLSCREEN) ? SDL_WINDOW_FULLSCREEN_DESKTOP : SDL_WINDOW_SHOWN );
     if (sdl_window == NULL)
     {
         cerr << "Failed to create sdl_window!";
@@ -415,11 +421,39 @@ int consoleMain()
 
 } // end Game_Main
 
+static void show_opts(std::string exec)
+{
+    std::cerr << "Usage: " << exec << " <option(s)>\n"
+              << "Options:\n"
+              << "\t-h\t\tShow this help message\n"
+              << "\t-f\t\tScale to fullscreen\n"
+              << std::endl;
+}
 
+static void setInitFlags(int argc, char* argv[])
+{
+    int c = 0;
+
+    while ((c = getopt (argc, argv, "f")) != -1)
+    {
+      switch (c)
+      {
+        case 'f':
+          initFlags = initFlags | ASK_FULLSCREEN;
+          break;
+        default :  /* h */
+          show_opts(argv[0]);
+          break; 
+      }
+    }
+}
 
 int main(int argc, char* argv[])
 {
     int quitkey = 0;
+
+    if(argc > 0)
+      setInitFlags(argc, argv);
 
     // Init sub-systems
     try
