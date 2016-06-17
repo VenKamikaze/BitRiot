@@ -122,6 +122,12 @@ void MickSDLInput::updateEventQueue()
 		}
 		else if (event.type == SDL_KEYDOWN)
 		{
+			// add ESC here for now to be able to quit fullscreen
+			if (event.key.keysym.sym == SDLK_ESCAPE)
+			{
+				quitEvent = true;
+			}
+
 			MickEvent myevent;
 			myevent.type = A_KEY_IS_DOWN;
 			myevent.key  = reverseTranslateMap->find(event.key.keysym.sym)->second;
