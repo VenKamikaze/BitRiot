@@ -134,7 +134,7 @@ void MickSDLInput::updateEventQueue()
       aKeyIsUp = true;
 			keysCurrentlyDown.erase(myevent.key);
 			aKeyIsDown = (!keysCurrentlyDown.empty());
-			printf("keyup: %d, sdl: %d\n", myevent.key, event.key.keysym.sym);
+			//printf("keyup: %d, sdl: %d\n", myevent.key, event.key.keysym.sym);
 		}
 		else if (event.type == SDL_KEYDOWN)
 		{
@@ -147,7 +147,7 @@ void MickSDLInput::updateEventQueue()
 			MickEvent myevent;
 			myevent.type = A_KEY_IS_DOWN;
 			myevent.key  = reverseTranslateMap->find(event.key.keysym.sym)->second;
-			printf("keydown: %d, sdl: %d\n", myevent.key, event.key.keysym.sym);
+			//printf("keydown: %d, sdl: %d\n", myevent.key, event.key.keysym.sym);
 			//newEvents.push(myevent);
 
 			aKeyIsDown = true;
