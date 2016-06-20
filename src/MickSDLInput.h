@@ -20,9 +20,8 @@ class MickSDLInput : MickBaseInput
 		virtual ~MickSDLInput();
 
 		SDL_Event* popEvent();
-	    bool isKeyDown(KEY k); // cannot inline {return ( !(keysCurrentlyDown.end() == keysCurrentlyDown.find(k)) ); };
-
-		bool isKeyReleased(KEY k) { return false; };
+	  bool isKeyDown(KEY k);
+		bool isKeyReleased(KEY k);
 
 		std::set<KEY>* getKeysDown();
 
@@ -40,6 +39,7 @@ class MickSDLInput : MickBaseInput
 	private:
 		SDL_Event event;
 		std::set<KEY> keysCurrentlyDown;
+		std::set<KEY> keysRecentlyReleased;
 
 };
 

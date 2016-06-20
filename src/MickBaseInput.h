@@ -191,6 +191,7 @@ class MickBaseInput
 
 		virtual bool isKeyDown(KEY k) =0;
 		virtual bool isKeyReleased(KEY k) =0;
+    bool isAKeyReleased() { return aKeyIsUp; };
 		bool isAKeyDown() {return aKeyIsDown; };
 		bool doQuit() { return quitEvent; };
 
@@ -203,6 +204,7 @@ class MickBaseInput
 		virtual void setupKeymap() =0;
 		std::queue<MickEvent> newEvents;
 		bool aKeyIsDown;
+		bool aKeyIsUp;
 		bool quitEvent;
 };
 
