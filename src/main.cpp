@@ -327,6 +327,8 @@ int consoleInit()
         cerr << "Failed to create sdl_renderer!";
         return 1;
     }
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
+    SDL_RenderSetLogicalSize(sdl_renderer, WINDOW_WIDTH, WINDOW_HEIGHT);
 
     Uint32 pixel_format = SDL_GetWindowPixelFormat(sdl_window);
 
