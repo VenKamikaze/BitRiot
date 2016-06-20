@@ -17,6 +17,7 @@ MickSDLInput::MickSDLInput() : MickBaseInput()
 {
 	// TODO Auto-generated constructor stub
 	aKeyIsDown = false;
+	aKeyIsUp = false;
 	quitEvent = false;
 	translateMap = new map<KEY, SDL_Keycode>();
 	reverseTranslateMap = new map<SDL_Keycode, KEY>();
@@ -104,6 +105,20 @@ bool MickSDLInput::isKeyDown(KEY k)
 	return ( !(keysCurrentlyDown.end() == keysCurrentlyDown.find(k)) );
 }
 
+/**
+ * Pop off the event when we detect a key was released
+ */
+bool MickSDLInput::isKeyReleased(KEY k)
+{
+  bool keyWasReleased = (keysRecentlyReleased.end() != keysRecentlyReleased.find(k));
+  if(keyWasReleased)
+  {
+    keysRecentlyReleased.erase(k);
+		aKeyIsUp = (!keysRecentlyReleased.empty());
+  }
+	return keyWasReleased;
+}
+
 void MickSDLInput::updateEventQueue()
 {
 	while(SDL_PollEvent(&event))
@@ -115,10 +130,11 @@ void MickSDLInput::updateEventQueue()
 			myevent.key  = reverseTranslateMap->find(event.key.keysym.sym)->second;
 			//newEvents.push(myevent);
 
+      keysRecentlyReleased.insert(myevent.key);
+      aKeyIsUp = true;
 			keysCurrentlyDown.erase(myevent.key);
 			aKeyIsDown = (!keysCurrentlyDown.empty());
-			//printf("keyup: %d, sdl: %d\n", myevent.key, event.key.keysym.sym);
-			//printf("actual key: %d", KEY_UP);
+			printf("keyup: %d, sdl: %d\n", myevent.key, event.key.keysym.sym);
 		}
 		else if (event.type == SDL_KEYDOWN)
 		{
@@ -131,6 +147,7 @@ void MickSDLInput::updateEventQueue()
 			MickEvent myevent;
 			myevent.type = A_KEY_IS_DOWN;
 			myevent.key  = reverseTranslateMap->find(event.key.keysym.sym)->second;
+			printf("keydown: %d, sdl: %d\n", myevent.key, event.key.keysym.sym);
 			//newEvents.push(myevent);
 
 			aKeyIsDown = true;

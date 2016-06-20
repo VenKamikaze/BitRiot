@@ -76,7 +76,7 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
 		e.setType(GOT_QUIT);
 		throw e;
 	}
-	else if(input->isAKeyDown())
+	else if(input->isAKeyDown() || input->isAKeyReleased())
 	{
 		for (int i = 0; i < m_numPlayers; i++)
 		{
@@ -121,7 +121,9 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
 					action2Down[i] = true;
 					selection[i] = EGG1;
 				}
-			} else {
+			} 
+      else // action1Down == true || action2Down == true
+      {
 				if (action1Down[i] == true)
 				{
 					// get action1 + direction
@@ -151,7 +153,7 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
 						p_infoPanel->setSelection(BLOCK, i + 1);
 					}
 
-					if (input->isKeyDown(m_keyMap[i][ACTION1_KEY]) == false)
+					if (input->isKeyReleased(m_keyMap[i][ACTION1_KEY]))
 					{
 						// control released this frame, try to place item
 						if (p_dynamicMap->tileHasStaticEntity(p_players[i]->getTileX(), p_players[i]->getTileY()) == false)
@@ -165,7 +167,9 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
 						p_infoPanel->setSelection(PLAYER_CHARACTER, i + 1);
 					}
 					// end if action1Down == true
-				} else {
+				} 
+        else 
+        {
 					// action2Down == true
 					// get action2 + direction
 					if (input->isKeyDown(m_keyMap[i][UP_KEY]))
@@ -188,7 +192,7 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
 					p_infoPanel->setSelection(selection[i], i + 1);
 
 
-					if (input->isKeyDown(m_keyMap[i][ACTION2_KEY]) == false)
+					if (input->isKeyReleased(m_keyMap[i][ACTION2_KEY]))
 					{
 						// action2 released this frame, try to place egg
 						if (p_dynamicMap->tileHasStaticEntity(p_players[i]->getTileX(), p_players[i]->getTileY()) == false)
