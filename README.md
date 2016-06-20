@@ -10,6 +10,7 @@ It was original built against the win32 API, and I figured I'd like to learn the
 I contacted the original author and they were happy for me to work on this code. When I asked about licencing they said they would have licensed it as something free "like Apache", hence the Apache Software License now added to the source code!
 
 The game now works in Linux w/SDL 1.2.x, however may have some minor input issues which I haven't bothered to clean up.
+*Note: There is now a working sdl2 branch thanks to contributors!*
 
 There are two software tags:
 * win32-v1
@@ -17,12 +18,15 @@ There are two software tags:
 
 The master branch has the latest sdl-v1.1 code and is unlikely to advance as I lost interest in the project some time ago.
 
+The sdl2 branch should always have a reasonably stable SDL2 release of the game, with ongoing sdl2 development limited to the 'sdl2_ongoing' branch.
+
 Things that I'd like to do, but likely won't ever find time for (in order of personal interest):
 
-* Cleanups / fix up the input code a bit
-* Port this to SDL2 (and I guess OpenGL)
+* Fix up the input code (done! in sdl2 branch)
+* Cleanups (code formatting and style, also some collections always grow e.g. in the input code)
+* Port this to SDL2 (done! although work continues)
 * Write up some notes to explain the porting process to SDL2, as a quick 'n' dirty tutorial for others thinking of doing this for other games.
-* Scaling / resolution options.
+* Scaling / resolution options (fullscreen option now exists in sdl2 branch!).
 * Create a basic menu selection screen on startup to configure game parameters
 * Handle controller input
 * Network play (honestly, unless someone else did this I highly doubt I'd get around to even attempting)
