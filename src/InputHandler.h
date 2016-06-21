@@ -11,7 +11,6 @@
 #include <SDL2/SDL.h>
 #include "MickSDLInput.h"
 #include "InputException.h"
-//#include "DInput.h"
 
 
 class InputHandler
@@ -23,7 +22,7 @@ public:
 	void setPointers(int numPlayers, PlayerCharacterEntity * player1,
 		PlayerCharacterEntity * player2, PlayerCharacterEntity * player3,
 		PlayerCharacterEntity * player4, DynamicMap * dynamicMap, InfoPanel * panel);
-	
+
 	void setKeys();
 
 	void processKeyboardInput();

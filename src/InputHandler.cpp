@@ -3,14 +3,11 @@
 
 InputHandler::InputHandler()
 {
-
 	setKeys();
-
 }
 
 InputHandler::~InputHandler()
 {
-
 
 }
 
@@ -56,7 +53,6 @@ void InputHandler::setKeys()
 	m_keyMap[3][RIGHT_KEY] =  KEY_RIGHT;
 	m_keyMap[3][ACTION1_KEY] =  KEY_RCTRL;
 	m_keyMap[3][ACTION2_KEY] =  KEY_RSHIFT;
-
 }
 
 void InputHandler::setPlayerDead(int player, bool flag)
@@ -121,7 +117,7 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
 					action2Down[i] = true;
 					selection[i] = EGG1;
 				}
-			} 
+			}
       else // action1Down == true || action2Down == true
       {
 				if (action1Down[i] == true)
@@ -167,8 +163,8 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
 						p_infoPanel->setSelection(PLAYER_CHARACTER, i + 1);
 					}
 					// end if action1Down == true
-				} 
-        else 
+				}
+        else
         {
 					// action2Down == true
 					// get action2 + direction
@@ -209,134 +205,4 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
 			} // end if action1 && action2 down
 		}
 	}
-
-	/*
-	DInput::updateKeyboardState();
-
-	for (int i = 0; i < m_numPlayers; i++)
-	{
-		if (p_players[i] == NULL)
-			continue;
-		if (m_playerDead[i])
-			continue;
-		if (p_players[i]->isControlledByAI())
-			continue;
-
-		static bool action1Down[4] = { false, false, false, false };
-		static bool action2Down[4] = { false, false, false, false };
-		static EntityType selection[4] = { BLOCK, BLOCK, BLOCK, BLOCK };
-
-		if (action1Down[i] == false && action2Down[i] == false)
-		{
-			if (DInput::keyDown(m_keyMap[i][UP_KEY]))
-			{
-				p_players[i]->moveInDirection(UP);
-				p_players[i]->incAnimFrame();
-			}
-			else if (DInput::keyDown(m_keyMap[i][DOWN_KEY]))
-			{
-				p_players[i]->moveInDirection(DOWN);
-				p_players[i]->incAnimFrame();
-			}
-			else if (DInput::keyDown(m_keyMap[i][LEFT_KEY]))
-			{
-				p_players[i]->moveInDirection(LEFT);
-				p_players[i]->incAnimFrame();
-			}
-			else if (DInput::keyDown(m_keyMap[i][RIGHT_KEY]))
-			{
-				p_players[i]->moveInDirection(RIGHT);
-				p_players[i]->incAnimFrame();
-			}
-			if (DInput::keyDown(m_keyMap[i][ACTION1_KEY]))
-				action1Down[i] = true;
-			else if (DInput::keyDown(m_keyMap[i][ACTION2_KEY]))
-			{
-				action2Down[i] = true;
-				selection[i] = EGG1;
-			}
-		} else {
-			if (action1Down[i] == true)
-			{
-				// get action1 + direction
-				if (DInput::keyDown(m_keyMap[i][UP_KEY]))
-				{
-					selection[i] = BOMB;				
-					p_infoPanel->setSelection(BOMB, i + 1);
-				}
-				else if (DInput::keyDown(m_keyMap[i][DOWN_KEY]))
-				{
-					selection[i] = BLOCK;
-					p_infoPanel->setSelection(BLOCK, i + 1);
-				}
-				else if (DInput::keyDown(m_keyMap[i][LEFT_KEY]))
-				{
-					selection[i] = MINE;
-					p_infoPanel->setSelection(MINE, i + 1);
-				}
-				else if (DInput::keyDown(m_keyMap[i][RIGHT_KEY]))
-				{
-					selection[i] = ROCKET_SPIN;
-					p_infoPanel->setSelection(ROCKET_SPIN, i + 1);
-				} 
-				
-				// for no direction press
-				if (selection[i] == BLOCK) {
-					p_infoPanel->setSelection(BLOCK, i + 1);
-				}
-
-				if (DInput::keyDown(m_keyMap[i][ACTION1_KEY]) == false)
-				{
-					// control released this frame, try to place item
-					if (p_dynamicMap->tileHasStaticEntity(p_players[i]->getTileX(), p_players[i]->getTileY()) == false)
-					{
-						// TO DO - if trying to place block, check there is an exit
-						p_players[i]->createEntity(selection[i]);					
-					}	
-
-					action1Down[i] = false;
-					selection[i] = BLOCK;
-					p_infoPanel->setSelection(PLAYER_CHARACTER, i + 1);
-				}
-				// end if action1Down == true
-			} else {
-				// action2Down == true
-				// get action2 + direction
-				if (DInput::keyDown(m_keyMap[i][UP_KEY]))
-				{
-					selection[i] = EGG3;
-				}
-				else if (DInput::keyDown(m_keyMap[i][DOWN_KEY]))
-				{
-					selection[i] = EGG5;
-				}
-				else if (DInput::keyDown(m_keyMap[i][LEFT_KEY]))
-				{
-					selection[i] = EGG2;
-				}
-				else if (DInput::keyDown(m_keyMap[i][RIGHT_KEY]))
-				{
-					selection[i] = EGG4;
-				} 
-				
-				p_infoPanel->setSelection(selection[i], i + 1);
-
-
-				if (DInput::keyDown(m_keyMap[i][ACTION2_KEY]) == false)
-				{
-					// action2 released this frame, try to place egg
-					if (p_dynamicMap->tileHasStaticEntity(p_players[i]->getTileX(), p_players[i]->getTileY()) == false)
-					{
-						p_players[i]->createEntity(selection[i]);
-					}	
-
-					action2Down[i] = false;
-					selection[i] = BLOCK;
-					p_infoPanel->setSelection(PLAYER_CHARACTER, i + 1);
-				}
-
-			}
-		} // end if action1 && action2 down
-	}
-	*/
 }
