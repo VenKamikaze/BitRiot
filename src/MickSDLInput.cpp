@@ -313,7 +313,7 @@ void MickSDLInput::setupReverseKeymap(map<KEY, SDL_Keycode>* forwardMap)
   for ( rTransIt=translateMap->rbegin() ; rTransIt != translateMap->rend(); rTransIt++ )
   {
     reverseTranslateMap->insert(std::pair<SDL_Keycode, KEY>(rTransIt->second, rTransIt->first));
-    printf("reversemap size: %lu\n",reverseTranslateMap->size());
+    //printf("reversemap size: %lu\n",reverseTranslateMap->size());
   }
 }
 

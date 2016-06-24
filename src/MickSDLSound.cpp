@@ -22,7 +22,7 @@ MickSDLSound::~MickSDLSound()
   for ( it = cachedSounds.begin() ; it != cachedSounds.end(); it++ )
   {
     Mix_FreeChunk(it->second.sound);
-    printf("free'd sound chunk %s\n",it->first.c_str());
+    //printf("free'd sound chunk %s\n",it->first.c_str());
   }
   cachedSounds.clear();
 
