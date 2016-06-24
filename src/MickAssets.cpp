@@ -10,23 +10,23 @@
 namespace std
 {
 
-	MickAssets::MickAssets()
-	{
-		// TODO Auto-generated constructor stub
+MickAssets::MickAssets()
+{
+  // TODO Auto-generated constructor stub
 
-	}
+}
 
-	//cacheBitmap?
-	//cacheSound?
+//cacheBitmap?
+//cacheSound?
 
-	bool checkAssetAvailable(const char* pathfile)
-	{
-		return MickUtil::CheckFileExists(pathfile);
-	}
+bool checkAssetAvailable(const char* pathfile)
+{
+  return MickUtil::CheckFileExists(pathfile);
+}
 
-	MickAssets::~MickAssets()
-	{
-		// TODO Auto-generated destructor stub
-	}
+MickAssets::~MickAssets()
+{
+  // TODO Auto-generated destructor stub
+}
 
 } /* namespace std */

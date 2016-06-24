@@ -12,16 +12,17 @@
 #include "MickUtil.h"
 #include "RuntimeException.h"
 
-namespace std {
+namespace std
+{
 
-	class MickAssets
-	{
-		public:
-			MickAssets();
-			static bool checkAssetAvailable(const char* pathfile);
+class MickAssets
+{
+  public:
+    MickAssets();
+    static bool checkAssetAvailable(const char* pathfile);
 
-			virtual ~MickAssets();
-	};
+    virtual ~MickAssets();
+};
 
 } /* namespace std */
 #endif /* MICKASSETS_H_ */

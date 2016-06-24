@@ -7,15 +7,18 @@
 
 #include "RuntimeException.h"
 
-namespace std {
+namespace std
+{
 
-	RuntimeException::RuntimeException() {
-		// TODO Auto-generated constructor stub
+RuntimeException::RuntimeException()
+{
+  // TODO Auto-generated constructor stub
 
-	}
+}
 
-	RuntimeException::~RuntimeException() throw (){
-		// TODO Auto-generated destructor stub
-	}
+RuntimeException::~RuntimeException() throw ()
+{
+  // TODO Auto-generated destructor stub
+}
 
 } /* namespace std */

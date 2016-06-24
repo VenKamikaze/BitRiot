@@ -8,18 +8,18 @@
 
 class DroneEntity : public SimpleMovingEntity
 {
-public:
-	DroneEntity(int uniqueID, int team, int atX, int atY);
-	virtual ~DroneEntity();
+  public:
+    DroneEntity(int uniqueID, int team, int atX, int atY);
+    virtual ~DroneEntity();
 
-	// overridden virtual methods
-	virtual void onCollision(EntityType typeCollidedWith, 
-							 EntityGroupType groupTypeCollidedWith, 
-							 int teamCollidedWith);
+    // overridden virtual methods
+    virtual void onCollision(EntityType typeCollidedWith,
+                             EntityGroupType groupTypeCollidedWith,
+                             int teamCollidedWith);
 
-	virtual void update();
+    virtual void update();
 
-private:
+  private:
 
 
 };

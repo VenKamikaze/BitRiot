@@ -15,31 +15,31 @@
 
 class InputHandler
 {
-public:
-	InputHandler();
-	~InputHandler();
+  public:
+    InputHandler();
+    ~InputHandler();
 
-	void setPointers(int numPlayers, PlayerCharacterEntity * player1,
-		PlayerCharacterEntity * player2, PlayerCharacterEntity * player3,
-		PlayerCharacterEntity * player4, DynamicMap * dynamicMap, InfoPanel * panel);
+    void setPointers(int numPlayers, PlayerCharacterEntity * player1,
+                     PlayerCharacterEntity * player2, PlayerCharacterEntity * player3,
+                     PlayerCharacterEntity * player4, DynamicMap * dynamicMap, InfoPanel * panel);
 
-	void setKeys();
+    void setKeys();
 
-	void processKeyboardInput();
+    void processKeyboardInput();
 
-	void setPlayerDead(int player, bool flag);
+    void setPlayerDead(int player, bool flag);
 
-	static const int NUM_ACTION_BUTTONS = 6;
-	enum ButtonName { UP_KEY, DOWN_KEY, LEFT_KEY, RIGHT_KEY, ACTION1_KEY, ACTION2_KEY };
+    static const int NUM_ACTION_BUTTONS = 6;
+    enum ButtonName { UP_KEY, DOWN_KEY, LEFT_KEY, RIGHT_KEY, ACTION1_KEY, ACTION2_KEY };
 
-private:
-	int m_numPlayers;
-	PlayerCharacterEntity * p_players[4]; // pointers to player character entities
-	DynamicMap * p_dynamicMap;
-	InfoPanel * p_infoPanel;
-	bool m_playerDead[4];
+  private:
+    int m_numPlayers;
+    PlayerCharacterEntity * p_players[4]; // pointers to player character entities
+    DynamicMap * p_dynamicMap;
+    InfoPanel * p_infoPanel;
+    bool m_playerDead[4];
 
-	KEY m_keyMap[4][NUM_ACTION_BUTTONS]; // keymap of 6 action buttons for the 4 max players
+    KEY m_keyMap[4][NUM_ACTION_BUTTONS]; // keymap of 6 action buttons for the 4 max players
 };
 
 

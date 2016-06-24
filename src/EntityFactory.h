@@ -1,5 +1,5 @@
 // EntityFactory.h
-// Singleton factory creates different Entity classes 
+// Singleton factory creates different Entity classes
 // based on supplied entity_type
 #ifndef _ENTITYFACTORYCLASS
 #define _ENTITYFACTORYCLASS
@@ -32,17 +32,17 @@
 
 class EntityFactory
 {
-public:
-	static EntityFactory * getInstance();
+  public:
+    static EntityFactory * getInstance();
 
-	GameEntity * getEntity(EntityType t, int team, int atX, int atY, 
-		unsigned int flags, float offsetX = 0, float offsetY = 0);
+    GameEntity * getEntity(EntityType t, int team, int atX, int atY,
+                           unsigned int flags, float offsetX = 0, float offsetY = 0);
 
-private:
-	int m_idCount; // used to assign a unique ID to each entity
+  private:
+    int m_idCount; // used to assign a unique ID to each entity
 
-	EntityFactory();
-	~EntityFactory();
+    EntityFactory();
+    ~EntityFactory();
 
 };
 
