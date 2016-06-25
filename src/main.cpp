@@ -114,8 +114,6 @@ SDL_Renderer* sdl_renderer = NULL;
 SDL_Texture* sdl_primary_texture = NULL;
 SDL_Surface* sdl_primary = NULL;
 
-SDL_Rect backRect, windowRect, clientArea; // RECTs for blitting pseudo-backbuffer to primary
-
 // game object globals
 GameEngine * engine = NULL;
 
@@ -373,6 +371,7 @@ int consoleInit()
 
 
   // update blitting RECT
+  SDL_Rect clientArea;
   clientArea.x = 0;
   clientArea.y = 0;
   clientArea.w = WINDOW_WIDTH -1 ;
