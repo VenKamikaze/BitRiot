@@ -10,18 +10,21 @@
 /// WIN32 INCLUDES
 #elif defined (WIN32)
 
-#define INITGUID       // make sure all the COM interfaces are available
+//#define INITGUID       // make sure all the COM interfaces are available
 // instead of this you can include the .LIB file
 // DXGUID.LIB
 
-#define WIN32_LEAN_AND_MEAN
+//#define WIN32_LEAN_AND_MEAN
 
-#include <windows.h>   // include important windows stuff
-#include <windowsx.h>
-#include <mmsystem.h>
+//#include <windows.h>   // include important windows stuff
+//#include <windowsx.h>
+//#include <mmsystem.h>
 
 //#include <conio.h>
 //#include <io.h>
+
+#include <getopt.h> // MinGW
+
 #endif
 
 //#define INITGUID       // make sure all the COM interfaces are available
