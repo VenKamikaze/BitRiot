@@ -1,5 +1,5 @@
 project(BitRiot)
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.4.3)
 
 set(CMAKE_BUILD_TYPE Release)
 
@@ -88,12 +88,15 @@ include_directories(${SDL2_INCLUDE_DIR} ${SDL2_MIXER_INCLUDE_DIR} ${SDL2_TTF_INC
 ${PROJECT_SOURCE_DIR}/src )
 add_executable(BitRiot ${SOURCES})
 
+if(MINGW)
+    target_link_libraries(BitRiot ${SDL2_LIBRARY} ${SDL2_MIXER_LIBRARY} ${SDL2_TTF_LIBRARY} shlwapi -mwindows)
+else()
+    target_link_libraries(BitRiot ${SDL2_LIBRARY} ${SDL2_MIXER_LIBRARY} ${SDL2_TTF_LIBRARY})
 
-target_link_libraries(BitRiot ${SDL2_LIBRARY} ${SDL2_MIXER_LIBRARY} ${SDL2_TTF_LIBRARY})
-
-add_custom_command(
-    TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ln -sf ${PROJECT_SOURCE_DIR}/data ${PROJECT_BINARY_DIR}/
-    COMMAND ln -sf ${PROJECT_SOURCE_DIR}/bitmaps ${PROJECT_BINARY_DIR}/
-    COMMAND ln -sf ${PROJECT_SOURCE_DIR}/audio ${PROJECT_BINARY_DIR}/
-)
+    add_custom_command(
+        TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ln -sf ${PROJECT_SOURCE_DIR}/data ${PROJECT_BINARY_DIR}/
+        COMMAND ln -sf ${PROJECT_SOURCE_DIR}/bitmaps ${PROJECT_BINARY_DIR}/
+        COMMAND ln -sf ${PROJECT_SOURCE_DIR}/audio ${PROJECT_BINARY_DIR}/
+    )
+endif()
