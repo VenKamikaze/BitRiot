@@ -8,21 +8,22 @@
 #ifndef SDLHELPER_H_
 #define SDLHELPER_H_
 
-#include "SDL/SDL.h"
+#include <SDL2/SDL.h>
 
-namespace std {
+namespace std
+{
 
 class SDLHelper
 {
-	public:
-		SDLHelper();
-		virtual ~SDLHelper();
+  public:
+    SDLHelper();
+    virtual ~SDLHelper();
 
-		// SURFACE MUST BE LOCKED BEFORE CALLING
-		static Uint32 GetPixel(SDL_Surface* surface, int x, int y );
+    // SURFACE MUST BE LOCKED BEFORE CALLING
+    static Uint32 GetPixel(SDL_Surface* surface, int x, int y );
 
-		// SURFACE MUST BE LOCKED BEFORE CALLING
-		static void PutPixel(SDL_Surface* surface, int x, int y, Uint32 pixel );
+    // SURFACE MUST BE LOCKED BEFORE CALLING
+    static void PutPixel(SDL_Surface* surface, int x, int y, Uint32 pixel );
 
 };
 

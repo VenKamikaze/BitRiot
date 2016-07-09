@@ -6,20 +6,20 @@
 
 class EnPlusEntity : public GameEntity
 {
-public:
-	EnPlusEntity(int uniqueID, int teamNumber, int atX, int atY);
-	virtual ~EnPlusEntity() {}
+  public:
+    EnPlusEntity(int uniqueID, int teamNumber, int atX, int atY);
+    virtual ~EnPlusEntity() {}
 
-	// overridden virtual methods
-	virtual void onCollision(EntityType typeCollidedWith, 
-							 EntityGroupType groupTypeCollidedWith, 
-							 int teamCollidedWith);
+    // overridden virtual methods
+    virtual void onCollision(EntityType typeCollidedWith,
+                             EntityGroupType groupTypeCollidedWith,
+                             int teamCollidedWith);
 
-	virtual void update();
+    virtual void update();
 
-private:
-	int m_decayCounter;
-	int m_initialDecayCount;
+  private:
+    int m_decayCounter;
+    int m_initialDecayCount;
 
 };
 

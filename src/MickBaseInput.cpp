@@ -11,7 +11,7 @@ using namespace std;
 
 MickBaseInput::MickBaseInput()
 {
-	// TODO Auto-generated constructor stub
+  // TODO Auto-generated constructor stub
 
 }
 
@@ -20,5 +20,5 @@ MickBaseInput::MickBaseInput()
 
 MickBaseInput::~MickBaseInput()
 {
-	// TODO Auto-generated destructor stub
+  // TODO Auto-generated destructor stub
 }

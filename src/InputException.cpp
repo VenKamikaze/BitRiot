@@ -7,15 +7,18 @@
 
 #include "InputException.h"
 
-namespace std {
+namespace std
+{
 
-	InputException::InputException() {
-		// TODO Auto-generated constructor stub
+InputException::InputException()
+{
+  // TODO Auto-generated constructor stub
 
-	}
+}
 
-	InputException::~InputException() throw (){
-		// TODO Auto-generated destructor stub
-	}
+InputException::~InputException() throw ()
+{
+  // TODO Auto-generated destructor stub
+}
 
 } /* namespace std */

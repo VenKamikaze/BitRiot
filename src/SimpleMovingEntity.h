@@ -1,4 +1,4 @@
-// shared base class for concrete class entities that share 
+// shared base class for concrete class entities that share
 // a lot of functionality
 
 #ifndef _SIMPLEMOVINGENTITY
@@ -9,28 +9,28 @@
 
 class SimpleMovingEntity : public GameEntity
 {
-public:
-	SimpleMovingEntity(int uniqueID, int teamNumber, int atX, int atY, 
-		float offsetX = 0.0f, float offsetY = 0.0f);
-	virtual ~SimpleMovingEntity();
+  public:
+    SimpleMovingEntity(int uniqueID, int teamNumber, int atX, int atY,
+                       float offsetX = 0.0f, float offsetY = 0.0f);
+    virtual ~SimpleMovingEntity();
 
-	// overridden virtual methods
-	virtual void onCollision(EntityType typeCollidedWith, 
-							 EntityGroupType groupTypeCollidedWith, 
-							 int teamCollidedWith);
+    // overridden virtual methods
+    virtual void onCollision(EntityType typeCollidedWith,
+                             EntityGroupType groupTypeCollidedWith,
+                             int teamCollidedWith);
 
-	virtual void update();
+    virtual void update();
 
-protected:
-	SimpleBrain * m_pBrain;
+  protected:
+    SimpleBrain * m_pBrain;
 
-	int m_velocityModifier;
+    int m_velocityModifier;
 
-	int m_animCounter;
-	int m_initialAnimCount;
+    int m_animCounter;
+    int m_initialAnimCount;
 
-	int m_decayCounter;
-	int m_initialDecayCount;
+    int m_decayCounter;
+    int m_initialDecayCount;
 
 };
 

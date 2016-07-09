@@ -9,37 +9,37 @@
 #define MICKSDLINPUT_H_
 
 #include "MickBaseInput.h"
-#include "SDL/SDL.h"
+#include <SDL2/SDL.h>
 #include <map>
 #include <set>
 
 class MickSDLInput : MickBaseInput
 {
-	public:
-		MickSDLInput();
-		virtual ~MickSDLInput();
+  public:
+    MickSDLInput();
+    virtual ~MickSDLInput();
 
-		SDL_Event* popEvent();
-	    bool isKeyDown(KEY k); // cannot inline {return ( !(keysCurrentlyDown.end() == keysCurrentlyDown.find(k)) ); };
+    SDL_Event* popEvent();
+    bool isKeyDown(KEY k);
+    bool isKeyReleased(KEY k);
 
-		bool isKeyReleased(KEY k) { return false; };
+    std::set<KEY>* getKeysDown();
 
-		std::set<KEY>* getKeysDown();
+    void keyEvent(KEY k);
 
-		void keyEvent(KEY k);
+    //KEY_EVENT newEvent();
+    void updateEventQueue();
 
-		//KEY_EVENT newEvent();
-		void updateEventQueue();
+    static MickBaseInput* getInstance();
 
-		static MickBaseInput* getInstance();
+  protected:
+    void setupKeymap();
+    void setupReverseKeymap(std::map<KEY, SDL_Keycode>* forwardMap);
 
-	protected:
-		void setupKeymap();
-		void setupReverseKeymap(std::map<KEY, SDLKey>* forwardMap);
-
-	private:
-		SDL_Event event;
-		std::set<KEY> keysCurrentlyDown;
+  private:
+    SDL_Event event;
+    std::set<KEY> keysCurrentlyDown;
+    std::set<KEY> keysRecentlyReleased;
 
 };
 

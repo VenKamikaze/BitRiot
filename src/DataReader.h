@@ -34,34 +34,34 @@ using namespace std;
 
 class DataReader
 {
-public:
-	static DataReader * getInstance();
-	~DataReader();
+  public:
+    static DataReader * getInstance();
+    ~DataReader();
 
-	const int getIntFromFile(const string & constantName, const string & filename);
-	const string getStringFromFile(const string & constantName, const string & filename);
+    const int getIntFromFile(const string & constantName, const string & filename);
+    const string getStringFromFile(const string & constantName, const string & filename);
 
-	void clearCache(); // clears out the current DataReader object
+    void clearCache(); // clears out the current DataReader object
 
-	// for displaying error messages
-	//void setWindowHandle(HWND windowHandle);
-	bool displayAnyErrors();
+    // for displaying error messages
+    //void setWindowHandle(HWND windowHandle);
+    bool displayAnyErrors();
 
-private:
-	DataReader();
+  private:
+    DataReader();
 
     map<string , map<string, int> > * m_pIntFilemap;
-	map<string , map<string, string> > * m_pStrFilemap;
+    map<string , map<string, string> > * m_pStrFilemap;
 
     bool readTextFile(const string & filename);
-	inline bool isWhitespace(char c);
-	inline bool isAlphaNum(char c);
-	inline bool isAlpha(char c);
-	inline bool isDigit(char c);
-	bool isNumericString(string s);
+    inline bool isWhitespace(char c);
+    inline bool isAlphaNum(char c);
+    inline bool isAlpha(char c);
+    inline bool isDigit(char c);
+    bool isNumericString(string s);
 
-	//HWND m_windowHandle;
-	string m_errorString;
+    //HWND m_windowHandle;
+    string m_errorString;
 };
 
 #endif

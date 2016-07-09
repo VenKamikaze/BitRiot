@@ -9,21 +9,23 @@
 #define MICKSDLASSETS_H_
 
 #include "MickAssets.h"
-#include "SDL/SDL.h"
+#include <SDL2/SDL.h>
 
 
-namespace std {
+namespace std
+{
 
-	class MickSDLAssets: public std::MickAssets
-	{
-		public:
-			//static SDL_Surface* Load_BMP(string pathfile);
-			static SDL_Surface* Load_BMP(const char* pathfile);
-			virtual ~MickSDLAssets();
+class MickSDLAssets: public std::MickAssets
+{
+  public:
+    //static SDL_Surface* Load_BMP(string pathfile);
+    static SDL_Surface* Load_BMP(const char* pathfile);
+    static SDL_Texture* LoadTexture_BMP(SDL_Renderer* renderer, const char* pathfile);
+    virtual ~MickSDLAssets();
 
-		private:
-			MickSDLAssets();
-	};
+  private:
+    MickSDLAssets();
+};
 
 } /* namespace std */
 #endif /* MICKSDLASSETS_H_ */

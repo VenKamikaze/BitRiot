@@ -12,19 +12,19 @@
 
 class MickBaseSound
 {
-	protected:
-		bool initialised;
-		void setBaseInstance(MickBaseSound* backend);
+  protected:
+    bool initialised;
+    void setBaseInstance(MickBaseSound* backend);
 
-	public:
-		MickBaseSound();
-		virtual ~MickBaseSound();
+  public:
+    MickBaseSound();
+    virtual ~MickBaseSound();
 
-		static MickBaseSound* getInstance();
+    static MickBaseSound* getInstance();
 
-		virtual void initAudio() = 0;
-		virtual void playSound(std::string fileName) = 0;
-		//virtual void loadSound(string fileName) = 0; // implement this for pre-caching
+    virtual void initAudio() = 0;
+    virtual void playSound(std::string fileName) = 0;
+    //virtual void loadSound(string fileName) = 0; // implement this for pre-caching
 
 };
 

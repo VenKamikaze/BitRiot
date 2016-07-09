@@ -7,32 +7,33 @@
 #ifndef _ENTITYMESSAGEQUEUE
 #define _ENTITYMESSAGEQUEUE
 
-//#include "DSound.h" // put DSound here so everything that calls the EntityMessageQueue can play sounds
-
 #include <queue>
 #include "EntityMessage.h"
 
 class EntityMessageQueue
 {
-public:
-	static EntityMessageQueue * getInstance();
-	~EntityMessageQueue();
+  public:
+    static EntityMessageQueue * getInstance();
+    ~EntityMessageQueue();
 
-	void postDestroyMessage(int sender);
-	void postCreateMessage(int typeParam, int teamParam, int atX, int atY, 
-		unsigned int flags, float offsetX = 0.0f, float offsetY = 0.0f);
-	void postMoveMessage(int sender, int fromX, int fromY, int toX, int toY);
+    void postDestroyMessage(int sender);
+    void postCreateMessage(int typeParam, int teamParam, int atX, int atY,
+                           unsigned int flags, float offsetX = 0.0f, float offsetY = 0.0f);
+    void postMoveMessage(int sender, int fromX, int fromY, int toX, int toY);
 
-	EntityMessage * getMessageAtFront(); // messages returned from
-	bool deleteMessageAtFront(); // pops and deletes message at front of queue
+    EntityMessage * getMessageAtFront(); // messages returned from
+    bool deleteMessageAtFront(); // pops and deletes message at front of queue
 
-	inline bool empty() { return m_msgQueue.empty(); } // checks if the message queue is empty
+    inline bool empty()
+    {
+      return m_msgQueue.empty();  // checks if the message queue is empty
+    }
 
 
-private:
-	EntityMessageQueue() {}
+  private:
+    EntityMessageQueue() {}
 
-	std::queue<EntityMessage *> m_msgQueue; // the actual queue of EntityMessage object pointers
+    std::queue<EntityMessage *> m_msgQueue; // the actual queue of EntityMessage object pointers
 
 };
 
