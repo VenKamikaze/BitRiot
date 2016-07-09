@@ -6,20 +6,20 @@
 
 class IQPowerupEntity : public GameEntity
 {
-public:
-	IQPowerupEntity(int uniqueID, int teamNumber, int atX, int atY);
-	virtual ~IQPowerupEntity() {}
+  public:
+    IQPowerupEntity(int uniqueID, int teamNumber, int atX, int atY);
+    virtual ~IQPowerupEntity() {}
 
-	// overridden virtual methods
-	virtual void onCollision(EntityType typeCollidedWith, 
-							 EntityGroupType groupTypeCollidedWith, 
-							 int teamCollidedWith);
+    // overridden virtual methods
+    virtual void onCollision(EntityType typeCollidedWith,
+                             EntityGroupType groupTypeCollidedWith,
+                             int teamCollidedWith);
 
-	virtual void update();
+    virtual void update();
 
-private:
-	int m_decayCounter;
-	int m_initialDecayCount;
+  private:
+    int m_decayCounter;
+    int m_initialDecayCount;
 
 };
 

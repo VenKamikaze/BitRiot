@@ -9,7 +9,7 @@
 
 #ifdef __cplusplus
 extern "C" {            /* Assume C declarations for C++ */
-#endif	/* __cplusplus */
+#endif  /* __cplusplus */
 
 extern IDirectDrawPalette  *DDLoadPalette(IDirectDraw7 *pdd, LPCSTR szBitmap);
 extern IDirectDrawSurface7 *DDLoadBitmap(IDirectDraw7 *pdd, LPCSTR szBitmap, int dx, int dy);
@@ -20,4 +20,4 @@ extern HRESULT              DDSetColorKey(IDirectDrawSurface7 *pdds, COLORREF rg
 
 #ifdef __cplusplus
 }
-#endif	/* __cplusplus */
+#endif  /* __cplusplus */

@@ -15,31 +15,31 @@
 
 class MickSDLInput : MickBaseInput
 {
-	public:
-		MickSDLInput();
-		virtual ~MickSDLInput();
+  public:
+    MickSDLInput();
+    virtual ~MickSDLInput();
 
-		SDL_Event* popEvent();
-	  bool isKeyDown(KEY k);
-		bool isKeyReleased(KEY k);
+    SDL_Event* popEvent();
+    bool isKeyDown(KEY k);
+    bool isKeyReleased(KEY k);
 
-		std::set<KEY>* getKeysDown();
+    std::set<KEY>* getKeysDown();
 
-		void keyEvent(KEY k);
+    void keyEvent(KEY k);
 
-		//KEY_EVENT newEvent();
-		void updateEventQueue();
+    //KEY_EVENT newEvent();
+    void updateEventQueue();
 
-		static MickBaseInput* getInstance();
+    static MickBaseInput* getInstance();
 
-	protected:
-		void setupKeymap();
-		void setupReverseKeymap(std::map<KEY, SDL_Keycode>* forwardMap);
+  protected:
+    void setupKeymap();
+    void setupReverseKeymap(std::map<KEY, SDL_Keycode>* forwardMap);
 
-	private:
-		SDL_Event event;
-		std::set<KEY> keysCurrentlyDown;
-		std::set<KEY> keysRecentlyReleased;
+  private:
+    SDL_Event event;
+    std::set<KEY> keysCurrentlyDown;
+    std::set<KEY> keysRecentlyReleased;
 
 };
 

@@ -13,19 +13,19 @@
 
 class EntityRendererFactory
 {
-public:
-	static EntityRendererFactory * getInstance();
+  public:
+    static EntityRendererFactory * getInstance();
 
-	void initSurfaces(SDL_Surface* sdl_primary);
+    void initSurfaces(SDL_Surface* sdl_primary);
 
-	EntityRenderer * getEntityRenderer(EntityType t);
+    EntityRenderer * getEntityRenderer(EntityType t);
 
-private:
-	// array of pointers to EntityRenderers
-	EntityRenderer * m_pList[NUM_ENTITY_TYPES];
+  private:
+    // array of pointers to EntityRenderers
+    EntityRenderer * m_pList[NUM_ENTITY_TYPES];
 
-	EntityRendererFactory();
-	~EntityRendererFactory();
+    EntityRendererFactory();
+    ~EntityRendererFactory();
 };
 
 

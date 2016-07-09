@@ -14,22 +14,22 @@
 
 class SpawningPool
 {
-public:
-	SpawningPool(int CPUpoints);
-	~SpawningPool();
+  public:
+    SpawningPool(int CPUpoints);
+    ~SpawningPool();
 
-	void update();
+    void update();
 
-private:
-	int m_pointsLeft;
-	int m_IQsLeft, m_ENsLeft;
+  private:
+    int m_pointsLeft;
+    int m_IQsLeft, m_ENsLeft;
 
-	int m_minDelay, m_maxDelay, m_delayCounter;
+    int m_minDelay, m_maxDelay, m_delayCounter;
 
-	bool getEmptyTile(int & x, int & y);
-	EntityType getRandomType();
-	unsigned int getRobotFlags();
-	int getTypeCost(EntityType type);
+    bool getEmptyTile(int & x, int & y);
+    EntityType getRandomType();
+    unsigned int getRobotFlags();
+    int getTypeCost(EntityType type);
 
 
 };

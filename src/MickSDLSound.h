@@ -14,27 +14,28 @@
 #include <map>
 
 
-struct MickSoundFile {
-	Mix_Chunk *sound = 0; //TODO: switch to nullptr (c++11)?
+struct MickSoundFile
+{
+  Mix_Chunk *sound = 0; //TODO: switch to nullptr (c++11)?
 };
 
 //class MickSDLSound: public std::MickBaseSound
 class MickSDLSound : MickBaseSound
 {
-	public:
-		MickSDLSound();
-		virtual ~MickSDLSound();
+  public:
+    MickSDLSound();
+    virtual ~MickSDLSound();
 
-		void initAudio();
-		void playSound(std::string fileName);
+    void initAudio();
+    void playSound(std::string fileName);
 
-		static MickSDLSound* getInstance();
+    static MickSDLSound* getInstance();
 
-	protected:
-		void loadSound(std::string fileName, MickSoundFile* sound);
+  protected:
+    void loadSound(std::string fileName, MickSoundFile* sound);
 
-	private:
-		std::map<std::string, MickSoundFile> cachedSounds;
+  private:
+    std::map<std::string, MickSoundFile> cachedSounds;
 
 };
 

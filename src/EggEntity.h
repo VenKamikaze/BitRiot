@@ -10,26 +10,26 @@
 
 class EggEntity : public GameEntity
 {
-public:
-	EggEntity(int uniqueID, int teamNumber, EntityType eggType, EntityType hatchType, int atX, int atY, unsigned int flags);
-	~EggEntity();
+  public:
+    EggEntity(int uniqueID, int teamNumber, EntityType eggType, EntityType hatchType, int atX, int atY, unsigned int flags);
+    ~EggEntity();
 
-	// overridden virtual methods
-	virtual void onCollision(EntityType typeCollidedWith, 
-							 EntityGroupType groupTypeCollidedWith, 
-							 int teamCollidedWith);
+    // overridden virtual methods
+    virtual void onCollision(EntityType typeCollidedWith,
+                             EntityGroupType groupTypeCollidedWith,
+                             int teamCollidedWith);
 
-	virtual void update();
+    virtual void update();
 
 
 
-private:
-	EntityType m_hatchling;
-	int m_animCounter, m_hatchCounter;
+  private:
+    EntityType m_hatchling;
+    int m_animCounter, m_hatchCounter;
 
-	unsigned int m_hatchFlags;
-	
-	void hatch();
+    unsigned int m_hatchFlags;
+
+    void hatch();
 };
 
 #endif
