@@ -30,9 +30,9 @@ The sdl2 branch should always have a reasonably stable SDL2 release of the game,
 
 Things that I'd like to do, but likely won't ever find time for (in order of personal interest):
 
-* -Fix up the input code- (done!)
-* -Port this to SDL2- (done! work may or may not continue to switch a lot of surfaces into textures)
-* Cleanups (-code formatting and style- (done), also some collections always grow e.g. in the input code)
+* ~~Fix up the input code~~ (done!)
+* ~~Port this to SDL2~~ (done! work may or may not continue to switch a lot of surfaces into textures)
+* Cleanups (~~code formatting and style~~ (done), also some collections always grow e.g. in the input code)
 * Scaling / resolution options (Partly done - fullscreen option '-f' available).
 * Write up some notes to explain the porting process to SDL2, as a quick 'n' dirty tutorial for others thinking of doing this for other games.
 * Controller input
