@@ -176,6 +176,7 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
     //m_surface->Blt(&destRect, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &ddbltfx);
 
 
+    // Render the health bar
     if (health > 100)
     {
       int extraHealth = health - 100;

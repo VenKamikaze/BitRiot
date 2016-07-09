@@ -124,6 +124,8 @@ EntityRenderer::EntityRenderer(SDL_Surface* sdl_primary, const char * filename)
     //m_animSurface[i]->Blt(&destRect, m_animSurface[0], &sourceRect, DDBLT_WAIT, NULL);
     SDL_BlitSurface(m_animSurface[0], &sourceRect, tempSurface, &destRect);
     m_animSurface[i] = tempSurface;
+    SDL_FreeSurface(tempSurface);
+    tempSurface = NULL;
   }
 
   // set transparent color key
