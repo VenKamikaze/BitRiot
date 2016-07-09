@@ -1,4 +1,4 @@
-// An energy drop spawns from an EGG1 
+// An energy drop spawns from an EGG1
 // the idea is to give energy back to the player
 // more than the it costs the player to create it
 // This leads to an "energy farming" tactic
@@ -10,18 +10,18 @@
 
 class EnergyDropEntity : public GameEntity
 {
-public:
-	EnergyDropEntity(int uniqueID, int teamNumber, int atX, int atY);
-	virtual ~EnergyDropEntity();
+  public:
+    EnergyDropEntity(int uniqueID, int teamNumber, int atX, int atY);
+    virtual ~EnergyDropEntity();
 
-	// overridden virtual methods
-	virtual void onCollision(EntityType typeCollidedWith, 
-							 EntityGroupType groupTypeCollidedWith, 
-							 int teamCollidedWith);
+    // overridden virtual methods
+    virtual void onCollision(EntityType typeCollidedWith,
+                             EntityGroupType groupTypeCollidedWith,
+                             int teamCollidedWith);
 
-	virtual void update();
+    virtual void update();
 
-private:
+  private:
 
 
 };

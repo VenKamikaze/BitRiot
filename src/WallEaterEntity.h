@@ -9,18 +9,18 @@
 
 class WallEaterEntity : public SimpleMovingEntity
 {
-public:
-	WallEaterEntity(int uniqueID, int team, int atX, int atY);
-	virtual ~WallEaterEntity();
-	
-	// overridden virtual methods
-	virtual void onCollision(EntityType typeCollidedWith, 
-							 EntityGroupType groupTypeCollidedWith, 
-							 int teamCollidedWith);
+  public:
+    WallEaterEntity(int uniqueID, int team, int atX, int atY);
+    virtual ~WallEaterEntity();
 
-	virtual void update();
+    // overridden virtual methods
+    virtual void onCollision(EntityType typeCollidedWith,
+                             EntityGroupType groupTypeCollidedWith,
+                             int teamCollidedWith);
 
-private:
+    virtual void update();
+
+  private:
 
 };
 

@@ -8,19 +8,19 @@
 
 class EffectEntity : public GameEntity
 {
-public:
-	EffectEntity(int uniqueID, EntityType effectType, int atX, int atY, float offsetX = 0.0f, float offsetY = 0.0f);
-	~EffectEntity() {}
+  public:
+    EffectEntity(int uniqueID, EntityType effectType, int atX, int atY, float offsetX = 0.0f, float offsetY = 0.0f);
+    ~EffectEntity() {}
 
-	// overridden virtual methods
-	virtual void onCollision(EntityType typeCollidedWith, 
-							 EntityGroupType groupTypeCollidedWith, 
-							 int teamCollidedWith) {} // does nothing
+    // overridden virtual methods
+    virtual void onCollision(EntityType typeCollidedWith,
+                             EntityGroupType groupTypeCollidedWith,
+                             int teamCollidedWith) {} // does nothing
 
-	virtual void update();
+    virtual void update();
 
-private:
-	int m_animCounter, m_origAnimCounter;
+  private:
+    int m_animCounter, m_origAnimCounter;
 };
 
 #endif

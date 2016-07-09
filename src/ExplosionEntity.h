@@ -7,18 +7,18 @@
 
 class ExplosionEntity : public GameEntity
 {
-public:
-	ExplosionEntity(int uniqueID, int atX, int atY);
-	~ExplosionEntity();
+  public:
+    ExplosionEntity(int uniqueID, int atX, int atY);
+    ~ExplosionEntity();
 
-	// overridden virtual methods
-	virtual void onCollision(EntityType typeCollidedWith, 
-							 EntityGroupType groupTypeCollidedWith, 
-							 int teamCollidedWith);
+    // overridden virtual methods
+    virtual void onCollision(EntityType typeCollidedWith,
+                             EntityGroupType groupTypeCollidedWith,
+                             int teamCollidedWith);
 
-	virtual void update();
+    virtual void update();
 
-private:
+  private:
 
 };
 

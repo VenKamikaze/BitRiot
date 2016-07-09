@@ -10,23 +10,23 @@
 
 class RobotEntity : public SimpleMovingEntity
 {
-public:
-	RobotEntity(int uniqueID, int team, int atX, int atY, unsigned int flags);
-	virtual ~RobotEntity() {}
+  public:
+    RobotEntity(int uniqueID, int team, int atX, int atY, unsigned int flags);
+    virtual ~RobotEntity() {}
 
-	// overridden virtual methods
-	virtual void onCollision(EntityType typeCollidedWith, 
-							 EntityGroupType groupTypeCollidedWith, 
-							 int teamCollidedWith);
+    // overridden virtual methods
+    virtual void onCollision(EntityType typeCollidedWith,
+                             EntityGroupType groupTypeCollidedWith,
+                             int teamCollidedWith);
 
-	virtual void update();
+    virtual void update();
 
-private:
-	int m_minActionCount, m_maxActionCount;
-	int m_actionCounter;
+  private:
+    int m_minActionCount, m_maxActionCount;
+    int m_actionCounter;
 
-	bool m_layBlocks, m_layMines, m_fireRockets, m_layBombs;
-	void performAction(); // does one of the above
+    bool m_layBlocks, m_layMines, m_fireRockets, m_layBombs;
+    void performAction(); // does one of the above
 
 
 };
