@@ -19,38 +19,6 @@ Uint32 EntityRenderer::TEAM_BASE_COLOR[] = {0,0,0,0,0};
 
 EntityRenderer::EntityRenderer(SDL_Surface* sdl_primary, const char * filename)
 {
-  /*
-  TEAM_HIGHLIGHT_COLOR[NUM_TEAMS] =
-  {
-    SDL_MapRGB(sdl_primary->format, 238, 166, 247), // team 0 - computer team highlight
-    SDL_MapRGB(sdl_primary->format, 247, 166, 166), // team 1 - red team
-    SDL_MapRGB(sdl_primary->format, 166, 185, 247), // team 2 - blue team
-    SDL_MapRGB(sdl_primary->format, 186, 247, 192), // team 3 - green team
-    SDL_MapRGB(sdl_primary->format, 241, 237, 166) // team 4 - yellow team
-  };
-  */
-
-  /*
-  TEAM_BASE_COLOR[NUM_TEAMS] =
-  {
-    SDL_MapRGB(sdl_primary->format, 200, 23, 221), // team 0 - computer team base colour
-    SDL_MapRGB(sdl_primary->format, 221, 23, 23), // team 1 - red team
-    SDL_MapRGB(sdl_primary->format, 23, 69, 221), // team 2 - blue team
-    SDL_MapRGB(sdl_primary->format, 72, 221, 86), // team 3 - green team
-    SDL_MapRGB(sdl_primary->format, 208, 196, 23) // team 4 - yellow team
-  };
-  */
-  /*
-  TEAM_SHADOW_COLOR[NUM_TEAMS] =
-  {
-    SDL_MapRGB(sdl_primary->format, 142, 16, 158), // team 0 - computer team shadow colour
-    SDL_MapRGB(sdl_primary->format, 158, 16, 16), // team 1 - red team
-    SDL_MapRGB(sdl_primary->format, 16, 49, 158), // team 2 - blue team
-    SDL_MapRGB(sdl_primary->format, 51, 158, 61), // team 3 - green team
-    SDL_MapRGB(sdl_primary->format, 148, 140, 16) // team 4 - yellow team
-  };
-  */
-
   if (! teamColoursInitialised)
   {
     TEAM_HIGHLIGHT_COLOR[0] = SDL_MapRGB(sdl_primary->format, 238, 166, 247); // team 0 - computer team highlight
@@ -74,15 +42,7 @@ EntityRenderer::EntityRenderer(SDL_Surface* sdl_primary, const char * filename)
 
   }
 
-  // load anim surface from file using ddutil.h
-  //m_animSurface[0] = DDLoadBitmap(lpdd, filename, 0, 0);
   SDL_Surface* tempSurface = SDL_LoadBMP(filename);
-
-  //DDSURFACEDESC2 ddsd;
-  //memset(&ddsd,0,sizeof(ddsd));
-  //ddsd.dwSize = sizeof(ddsd);
-
-  //m_animSurface[0]->GetSurfaceDesc(&ddsd);
 
   if(tempSurface)
   {
@@ -98,40 +58,20 @@ EntityRenderer::EntityRenderer(SDL_Surface* sdl_primary, const char * filename)
     m_numFrames[i] = m_animSurface[0]->w / Map::TILE_WIDTH;
   }
 
-  // copy loaded bitmap to other surfaces
-  // set surface to offscreen type
-  //ddsd.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN | DDSCAPS_VIDEOMEMORY; // M2S not sure..
-
-  //RECT sourceRect, destRect;
-  /*sourceRect.top = destRect.top = 0;
-  sourceRect.left = destRect.left = 0;
-  sourceRect.bottom = destRect.bottom = ddsd.dwHeight;
-  sourceRect.right = destRect.right = ddsd.dwWidth;*/
-
   SDL_Rect sourceRect, destRect;
   sourceRect.y = destRect.y = 0;
   sourceRect.x = destRect.x = 0;
-  sourceRect.h = destRect.h = m_animSurface[0]->h;  // M2S check this, seems like it will show all frames on one surface
-  sourceRect.w = destRect.w = m_animSurface[0]->w;  // M2S check this, seems like it will show all frames on one surface
+  sourceRect.h = destRect.h = m_animSurface[0]->h;
+  sourceRect.w = destRect.w = m_animSurface[0]->w;
 
   for (int i = 1; i < NUM_TEAMS; ++i)
   {
-    // create surface
-    //lpdd->CreateSurface(&ddsd, &(m_animSurface[i]), NULL);
+    tempSurface = SDL_CreateRGBSurface(0, m_animSurface[0]->w, m_animSurface[0]->h, m_animSurface[0]->format->BitsPerPixel, m_animSurface[0]->format->Rmask, m_animSurface[0]->format->Gmask, m_animSurface[0]->format->Bmask, 0);
 
-    SDL_Surface* tempSurface = SDL_CreateRGBSurface(0, m_animSurface[0]->w, m_animSurface[0]->h, m_animSurface[0]->format->BitsPerPixel, m_animSurface[0]->format->Rmask, m_animSurface[0]->format->Gmask, m_animSurface[0]->format->Bmask, 0);
     // copy to this surface
-    //m_animSurface[i]->Blt(&destRect, m_animSurface[0], &sourceRect, DDBLT_WAIT, NULL);
     SDL_BlitSurface(m_animSurface[0], &sourceRect, tempSurface, &destRect);
     m_animSurface[i] = tempSurface;
-    SDL_FreeSurface(tempSurface);
-    tempSurface = NULL;
   }
-
-  // set transparent color key
-  //DDCOLORKEY key;
-  //key.dwColorSpaceLowValue = TRANSPARENT_COLOR;
-  //key.dwColorSpaceHighValue = TRANSPARENT_COLOR;
 
   // change to team colours and apply color key
   for (int i = 0; i < NUM_TEAMS; ++i)
@@ -139,7 +79,6 @@ EntityRenderer::EntityRenderer(SDL_Surface* sdl_primary, const char * filename)
     changeToTeamColour(m_animSurface[i], i);
 
     SDL_SetColorKey( m_animSurface[i], SDL_TRUE, SDL_MapRGB(m_animSurface[i]->format, 0, 255, 255) );
-    //m_animSurface[i]->SetColorKey(DDCKEY_SRCBLT, &key);
   }
 
 }
