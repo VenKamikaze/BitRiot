@@ -43,6 +43,7 @@ void GameEngine::runEngine()
         int blockPercentage = 55;
 
         bool gender[5] = { true, true, false, false, true };
+        //bool botAI[4] = { true, true, true, false };
         bool botAI[4] = { true, true, true, false };
         // after setting initialisation parameters
 

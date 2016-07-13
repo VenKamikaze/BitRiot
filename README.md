@@ -48,6 +48,11 @@ Please note: If you'd found the original BitRiot release anywhere, you might not
 To build the game, first make sure you have the necessary dependencies installed on your system. The main master branch is now using SDL2. Assuming you are compiling this branch, you will need:
 CMake 3.4.3, SDL 2.0.x, SDL2_mixer and SDL2_ttf.
 
+on ubuntu/debian:
+```
+sudo apt-get install cmake libsdl2-dev libsdl2-ttf-dev libsdl2-mixer-dev
+```
+
 ## CMake
 
 ```

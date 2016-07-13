@@ -55,7 +55,7 @@ void GameSound::loadSounds()
         error << "File: " << filenames[i].c_str() << " is not found.";
         cerr << error.str();
 
-        return;
+        return; //why don't we want to know about everything that's missing
       }
     }
   }

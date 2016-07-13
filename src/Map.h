@@ -18,10 +18,13 @@ class Map
     //void init(LPDIRECTDRAW7 lpdd); // need to init surfaces before map can be rendered
     void init(SDL_Surface* SDL_primary); // need to init surfaces before map can be rendered
     ~Map();
-
-    const static int MAP_WIDTH = 17; // usually 17
-    const static int MAP_HEIGHT = 13; // usually 13
-
+    
+    static int GET_MAP_WIDTH(); //not really needed right now
+    static int GET_MAP_HEIGHT(); //not really needed right now
+    
+    static int MAP_WIDTH; // usually 17
+    static int MAP_HEIGHT; // usually 13
+    
     const static int TILE_WIDTH = 32;
     const static int TILE_HEIGHT = 32;
 
@@ -33,16 +36,20 @@ class Map
 
     void render(SDL_Surface*  destination, int offsetX = 0, int offsetY = 0);
 
-    StaticTile staticTileAt(int x, int y)
-    {
-      return m_staticMap[x][y];
-    }
+    StaticTile staticTileAt(int x, int y);
+    
+    void setStaticTileAt(int x, int y, StaticTile staticTile);
     void renderTileTo(SDL_Surface* dest, int atX, int atY, StaticTile tileType);
+
+    
 
   private:
     Map();
     // static map data
-    StaticTile m_staticMap[MAP_WIDTH][MAP_HEIGHT]; // 2D array of wall tiles
+    StaticTile *m_staticMap; // 2D array of wall tiles
+    
+
+
     SDL_Surface*  m_staticSurface[NUM_STATIC_TILES]; // pointers to surfaces for static map
 
 };
