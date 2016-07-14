@@ -177,7 +177,7 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
     destRect.w = health;
     if (health > 100)
     {
-      destRect.w = destRect.x + 100;
+      destRect.w = 100;
     }
     SDL_FillRect(m_surface, &destRect, fillColour);
     //m_surface->Blt(&destRect, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &ddbltfx);
@@ -188,8 +188,12 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
       intensity = (unsigned char)(((float)extraHealth/100.0f)*255);
       //ddbltfx.dwFillColor = ((255 - intensity) << 8) + (intensity << 0);
       fillColour = SDL_MapRGB(m_surface->format, 0, (255-intensity), intensity);
-
-      destRect.w = destRect.x + extraHealth;
+      
+      if (extraHealth>100)
+      {
+        extraHealth=100;
+      }
+      destRect.w = extraHealth;
 
       SDL_FillRect(m_surface, &destRect, fillColour);
       //m_surface->Blt(&destRect, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &ddbltfx);
@@ -198,44 +202,52 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
     
     if (DRAW_HEALTH_UNDER_PLAYERS)
     {
-      int destX = (playerPointer[i]->getTileX() * Map::TILE_WIDTH) + (int)(playerPointer[i]->getOffsetX() * (Map::TILE_WIDTH/2));
-      int destY = (playerPointer[i]->getTileY() * Map::TILE_WIDTH) + (int)(playerPointer[i]->getOffsetY() * (Map::TILE_WIDTH/2)) + Map::TILE_WIDTH + 2;
-      
-      destRect.x = destX;
-      destRect.y = destY;
-      
-      destRect.h = 3;
-      
-      int maxWidth=Map::TILE_WIDTH;
-      int width=   ((float)health/100.0f) *maxWidth;
-      if (width > maxWidth)
+      if (m_playerDead[i] != true && playerPointer[i] != NULL)
       {
-        width = maxWidth;
-      }
-      
-      Uint32 backColour = SDL_MapRGB(m_surface->format, 0, 0, 0);
-      
-      destRect.w = maxWidth;
-      SDL_FillRect(dest, &destRect, backColour);
-      
-      destRect.w = width;
-      SDL_FillRect(dest, &destRect, fillColour);
-      
-      // Render the health bar
-      if (health > 100)
-      {
-        int extraHealth = health - 100;
-        intensity = (unsigned char)(((float)extraHealth/100.0f)*255);
-        //ddbltfx.dwFillColor = ((255 - intensity) << 8) + (intensity << 0);
-        fillColour = SDL_MapRGB(m_surface->format, 0, (255-intensity), intensity);
-
-        destRect.w = destRect.x + extraHealth;
-
+        int destX = (playerPointer[i]->getTileX() * Map::TILE_WIDTH) + (int)(playerPointer[i]->getOffsetX() * (Map::TILE_WIDTH/2));
+        int destY = (playerPointer[i]->getTileY() * Map::TILE_WIDTH) + (int)(playerPointer[i]->getOffsetY() * (Map::TILE_WIDTH/2)) + Map::TILE_WIDTH + 2;
+        
+        destRect.x = destX;
+        destRect.y = destY;
+        
+        destRect.h = 3;
+        
+        int maxWidth=Map::TILE_WIDTH;
+        int width=   ((float)health/100.0f) *maxWidth;
+        if (width > maxWidth)
+        {
+          width = maxWidth;
+        }
+        
+        Uint32 backColour = SDL_MapRGB(m_surface->format, 0, 0, 0);
+        
+        destRect.w = maxWidth;
+        SDL_FillRect(dest, &destRect, backColour);
+        
+        destRect.w = width;
         SDL_FillRect(dest, &destRect, fillColour);
-        //m_surface->Blt(&destRect, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &ddbltfx);
+        
+        // Render the health bar
+        if (health > 100)
+        {
+          int extraHealth = health - 100;
+          intensity = (unsigned char)(((float)extraHealth/100.0f)*255);
+          //ddbltfx.dwFillColor = ((255 - intensity) << 8) + (intensity << 0);
+          fillColour = SDL_MapRGB(m_surface->format, 0, (255-intensity), intensity);
+          
+          if (extraHealth>100)
+          {
+            extraHealth=100;
+          }
+          destRect.w = extraHealth;
+
+          SDL_FillRect(dest, &destRect, fillColour);
+          //m_surface->Blt(&destRect, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &ddbltfx);
+        }
       }
-      
     }
+    
+    
 
   }
 

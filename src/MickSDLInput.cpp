@@ -6,6 +6,8 @@
  */
 
 #include "MickSDLInput.h"
+#include "InputHandler.h"
+
 
 using namespace std;
 
@@ -13,8 +15,10 @@ static map<KEY, SDL_Keycode>* translateMap;
 static map<SDL_Keycode, KEY>* reverseTranslateMap;
 static MickSDLInput *s_instance = NULL;
 
-MickSDLInput::MickSDLInput() : MickBaseInput()
+MickSDLInput::MickSDLInput(InputHandler *inputHandler) : MickBaseInput()
 {
+  m_pInputHandler=inputHandler;
+  
   // TODO Auto-generated constructor stub
   aKeyIsDown = false;
   aKeyIsUp = false;
@@ -22,13 +26,16 @@ MickSDLInput::MickSDLInput() : MickBaseInput()
   translateMap = new map<KEY, SDL_Keycode>();
   reverseTranslateMap = new map<SDL_Keycode, KEY>();
   setupKeymap();
+  setupControllers();
 }
 
-MickBaseInput* MickSDLInput::getInstance()
+MickBaseInput* MickSDLInput::getInstance(InputHandler *inputHandler)
 {
+  
+  
   if (!s_instance)
   {
-    s_instance = new MickSDLInput();
+    s_instance = new MickSDLInput(inputHandler); //TODO: need to handle inputHandler better or refactor to support inputHandler changing
   }
   return s_instance;
 }
@@ -121,8 +128,116 @@ bool MickSDLInput::isKeyReleased(KEY k)
   return keyWasReleased;
 }
 
+
+
+void MickSDLInput::setKeyState(KEY key, bool down)
+{
+  if (down)
+  {
+    if (!isKeyDown(key))
+    {
+      aKeyIsDown = true;
+      keysCurrentlyDown.insert(key);
+    }
+  }
+  else
+  {
+    if (isKeyDown(key))
+    {
+      keysRecentlyReleased.insert(key);
+      aKeyIsUp = true;
+      keysCurrentlyDown.erase(key);
+      aKeyIsDown = (!keysCurrentlyDown.empty());
+    }
+  }
+  
+}
+
+void MickSDLInput::setupControllers()
+{
+  m_pInputHandler->usingControllers=true;
+  
+  SDL_GameControllerAddMappingsFromFile("data/gamecontrollerdb.txt");
+  
+  int numJoysticks=SDL_NumJoysticks();
+  
+  printf("Seting up controllers (%i)\n",numJoysticks);
+  
+  for (int i = 0; i < numJoysticks; ++i)
+  {
+    if (SDL_IsGameController(i))
+    {
+      SDL_GameController *controller = SDL_GameControllerOpen(i);
+      if (controller)
+      {
+        printf("Found a valid controller, named: %s\n", SDL_GameControllerName(controller));
+      }
+      else
+      {
+        fprintf(stderr, "Could not open gamecontroller %i: %s\n", i, SDL_GetError());
+      }
+      
+    }
+  }
+}
+
+
+void MickSDLInput::setControllerInput(SDL_JoystickID joystickID, Uint8 button, Uint8 state)
+{
+  
+  PlayerCharacterEntity *attachedPlayer=m_pInputHandler->getPlayerAttachedToController(joystickID);
+  if (!attachedPlayer)
+  {
+    attachedPlayer=m_pInputHandler->attachNewControllerToPlayer(joystickID);
+    if (attachedPlayer)
+    {
+      printf("Attached controller: %i to player: %i\n", joystickID, attachedPlayer->getTeam());
+    }
+    else
+    {
+      printf("No free players to attach controller: %i",joystickID);
+    }
+    return; //eat attaching button press
+  }
+  
+  int i=attachedPlayer->getTeam()-1;
+  bool pressed=state==SDL_PRESSED;
+  KEY keyIndex=KEY_UNKNOWN;
+  
+  if (button==SDL_CONTROLLER_BUTTON_A || button==SDL_CONTROLLER_BUTTON_X)
+  {
+    keyIndex=m_pInputHandler->m_keyMap[i][InputHandler::ACTION1_KEY];
+  }
+  if (button==SDL_CONTROLLER_BUTTON_B || button==SDL_CONTROLLER_BUTTON_Y)
+  {
+    keyIndex=m_pInputHandler->m_keyMap[i][InputHandler::ACTION2_KEY];
+  }
+  if (button==SDL_CONTROLLER_BUTTON_DPAD_UP)
+  {
+    keyIndex=m_pInputHandler->m_keyMap[i][InputHandler::UP_KEY];
+  }
+  if (button==SDL_CONTROLLER_BUTTON_DPAD_DOWN)
+  {
+    keyIndex=m_pInputHandler->m_keyMap[i][InputHandler::DOWN_KEY];
+  }
+  if (button==SDL_CONTROLLER_BUTTON_DPAD_LEFT)
+  {
+    keyIndex=m_pInputHandler->m_keyMap[i][InputHandler::LEFT_KEY];
+  }
+  if (button==SDL_CONTROLLER_BUTTON_DPAD_RIGHT)
+  {
+    keyIndex=m_pInputHandler->m_keyMap[i][InputHandler::RIGHT_KEY];
+  }
+  if (keyIndex!=KEY_UNKNOWN)
+  {
+    setKeyState(keyIndex,pressed); //TODO: mapping directly into the keyboard array, but this is not the best
+                                   //but will require a refactor of processKeyboardInput() to fix
+  }
+}
+
 void MickSDLInput::updateEventQueue()
 {
+  
   while(SDL_PollEvent(&event))
   {
     if(event.type == SDL_KEYUP)
@@ -132,10 +247,8 @@ void MickSDLInput::updateEventQueue()
       myevent.key  = reverseTranslateMap->find(event.key.keysym.sym)->second;
       //newEvents.push(myevent);
 
-      keysRecentlyReleased.insert(myevent.key);
-      aKeyIsUp = true;
-      keysCurrentlyDown.erase(myevent.key);
-      aKeyIsDown = (!keysCurrentlyDown.empty());
+      setKeyState(myevent.key, false);
+      
       //printf("keyup: %d, sdl: %d\n", myevent.key, event.key.keysym.sym);
     }
     else if (event.type == SDL_KEYDOWN)
@@ -151,10 +264,26 @@ void MickSDLInput::updateEventQueue()
       myevent.key  = reverseTranslateMap->find(event.key.keysym.sym)->second;
       //printf("keydown: %d, sdl: %d\n", myevent.key, event.key.keysym.sym);
       //newEvents.push(myevent);
-
-      aKeyIsDown = true;
-      keysCurrentlyDown.insert(myevent.key);
+      
+      setKeyState(myevent.key, true);
     }
+    else if (event.type == SDL_CONTROLLERBUTTONDOWN || event.type == SDL_CONTROLLERBUTTONUP)
+    {
+      setControllerInput(event.jbutton.which, event.jbutton.button, event.jbutton.state);
+    }
+    else if (event.type == SDL_CONTROLLERDEVICEADDED)
+    {
+      printf("New gamecontroller found: %i\n", event.jbutton.which);
+      if (SDL_IsGameController(event.jbutton.which))
+      {
+        SDL_GameControllerOpen(event.jbutton.which);
+      }
+		}
+		else if (event.type == SDL_CONTROLLERDEVICEREMOVED)
+		{
+			printf("Gamecontroller removed: %i\n", event.jbutton.which);
+			m_pInputHandler->detachController(event.jbutton.which);
+		}
     else if (event.type == SDL_QUIT)
     {
       quitEvent = true;
