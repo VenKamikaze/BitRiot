@@ -55,7 +55,7 @@ void EntityRendererFactory::initSurfaces(SDL_Surface* sdl_primary)
 //          error.str().c_str(),
 //          NULL, MB_ICONEXCLAMATION);
 //        SendMessage(windowHandle,WM_CLOSE,0,0);
-        return;
+        return; //why don't we want to know about everything that's missing
       }
 
       // initialise renderer

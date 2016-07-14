@@ -31,6 +31,7 @@
 // game object includes
 #include "GameEngine.h"
 
+
 #ifndef NULL
 #define NULL 0
 #endif
@@ -39,8 +40,7 @@
 
 // defines for windows interface
 #define WINDOW_TITLE      "Bit Riot Beta - SDL2 Port"
-const int WINDOW_WIDTH = (Map::MAP_WIDTH * Map::TILE_WIDTH) + InfoPanel::WIDTH;   // size of window
-const int WINDOW_HEIGHT = Map::MAP_HEIGHT * Map::TILE_HEIGHT;
+
 
 #define WINDOW_BPP        32    // bitdepth of window (8,16,24 etc.)
 // note: if windowed and not
@@ -92,6 +92,10 @@ int consoleInit()
     cerr << "Failed to SDL_Init video!";
     return 1;
   }
+  
+  
+  const int WINDOW_WIDTH = (Map::MAP_WIDTH * Map::TILE_WIDTH) + InfoPanel::WIDTH;   // size of window
+  const int WINDOW_HEIGHT = Map::MAP_HEIGHT * Map::TILE_HEIGHT;
 
   sdl_window = SDL_CreateWindow(WINDOW_TITLE, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
                                 WINDOW_WIDTH, WINDOW_HEIGHT, (initFlags & ASK_FULLSCREEN) ? SDL_WINDOW_FULLSCREEN_DESKTOP : SDL_WINDOW_SHOWN );
@@ -109,7 +113,7 @@ int consoleInit()
   }
   SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
   SDL_RenderSetLogicalSize(sdl_renderer, WINDOW_WIDTH, WINDOW_HEIGHT);
-
+  
   Uint32 pixel_format = SDL_GetWindowPixelFormat(sdl_window);
 
   sdl_primary_texture = SDL_CreateTexture(sdl_renderer, pixel_format, SDL_TEXTUREACCESS_STREAMING,
@@ -129,6 +133,8 @@ int consoleInit()
 
   sdl_primary = SDL_CreateRGBSurface(0, WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_BPP,
                                      rmask, gmask, bmask, amask);
+                                     
+  
   if (sdl_primary == NULL)
   {
     cerr << "Failed to create sdl_primary!";
@@ -206,6 +212,7 @@ static void show_opts(std::string exec)
             << "Options:\n"
             << "\t-h\t\tShow this help message\n"
             << "\t-f\t\tScale to fullscreen\n"
+            << "\t-b\t\tUse a big map\n"
             << std::endl;
 }
 
@@ -213,12 +220,16 @@ static void setInitFlags(int argc, char* argv[])
 {
   int c = 0;
 
-  while ((c = getopt (argc, argv, "f")) != -1)
+  while ((c = getopt (argc, argv, "fb")) != -1)
   {
     switch (c)
     {
       case 'f':
         initFlags = initFlags | ASK_FULLSCREEN;
+        break;
+      case 'b':
+        Map::MAP_WIDTH=25;
+        Map::MAP_HEIGHT=19;
         break;
       default :  /* h */
         show_opts(argv[0]);
