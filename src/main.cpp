@@ -87,12 +87,11 @@ GameEngine* engine = NULL;
 
 int consoleInit()
 {
-  if (SDL_Init(SDL_INIT_VIDEO) < 0 )
+  if (SDL_Init(SDL_INIT_EVERYTHING) < 0 )
   {
     cerr << "Failed to SDL_Init video!";
     return 1;
   }
-  
   
   const int WINDOW_WIDTH = (Map::MAP_WIDTH * Map::TILE_WIDTH) + InfoPanel::WIDTH;   // size of window
   const int WINDOW_HEIGHT = Map::MAP_HEIGHT * Map::TILE_HEIGHT;
@@ -104,7 +103,10 @@ int consoleInit()
     cerr << "Failed to create sdl_window!";
     return 1;
   }
-
+  
+  SDL_JoystickEventState(SDL_ENABLE);
+  
+  
   sdl_renderer = SDL_CreateRenderer(sdl_window, -1, 0);
   if (sdl_renderer == NULL)
   {
