@@ -91,7 +91,8 @@ void GameEngine::runEngine()
         m_pEntityManager->runFrame();
 
         m_pEntityManager->renderEntities(lpddsback);
-        m_pPanel->renderSurfaceTo(lpddsback, (Map::MAP_WIDTH * Map::TILE_WIDTH), 0);
+        m_pPanel->renderSurfaceTo(lpddsback, (Map::MAP_WIDTH * Map::TILE_WIDTH), 0); //Possible but very rare crash here, due to dangling pointers
+                                                                                     //as m_pPanel->setPlayerDead being updated one frame late
 
       }
       break;
