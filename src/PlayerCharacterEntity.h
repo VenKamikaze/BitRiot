@@ -4,6 +4,7 @@
 #define _PLAYERCHARACTER
 
 #include "GameEntity.h"
+#include "MickSDLInput.h"
 
 #include "AIGoal.h"
 #include "AIInstruction.h"

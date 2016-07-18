@@ -13,6 +13,7 @@ using namespace std;
 
 static map<KEY, SDL_Keycode>* translateMap;
 static map<SDL_Keycode, KEY>* reverseTranslateMap;
+static map<SDL_JoystickID, SDL_Haptic*>* hapticDevices;
 static MickSDLInput *s_instance = NULL;
 
 MickSDLInput::MickSDLInput(InputHandler *inputHandler) : MickBaseInput()
@@ -25,6 +26,7 @@ MickSDLInput::MickSDLInput(InputHandler *inputHandler) : MickBaseInput()
   quitEvent = false;
   translateMap = new map<KEY, SDL_Keycode>();
   reverseTranslateMap = new map<SDL_Keycode, KEY>();
+  hapticDevices = new map<SDL_JoystickID, SDL_Haptic*>();
   setupKeymap();
   setupControllers();
 }
@@ -138,6 +140,7 @@ void MickSDLInput::setKeyState(KEY key, bool down)
     {
       aKeyIsDown = true;
       keysCurrentlyDown.insert(key);
+      // DEBUG printf("kcd size = %ld\n", keysCurrentlyDown.size());
     }
   }
   else
@@ -148,6 +151,7 @@ void MickSDLInput::setKeyState(KEY key, bool down)
       aKeyIsUp = true;
       keysCurrentlyDown.erase(key);
       aKeyIsDown = (!keysCurrentlyDown.empty());
+      // DEBUG printf("krr size = %ld\n", keysRecentlyReleased.size());
     }
   }
   
@@ -181,6 +185,47 @@ void MickSDLInput::setupControllers()
   }
 }
 
+/**
+  * Will try to rumble a joystick at given strength and for milliseconds in time
+  * Also sets up a joystick as a haptic device on first call
+ **/
+bool MickSDLInput::rumbleController(SDL_JoystickID joystickID, float strength, Uint32 ms)
+{
+  SDL_Haptic* haptic = NULL;
+  bool newDevice = false;
+  bool rumbled = false;
+  if( hapticDevices->find(joystickID) != hapticDevices->end() )
+  {
+    haptic = hapticDevices->find(joystickID)->second;
+  }
+  else
+  {
+    haptic = SDL_HapticOpenFromJoystick(SDL_JoystickFromInstanceID(joystickID));
+    newDevice = true;
+  }
+  if(haptic)
+  {   
+    if (SDL_HapticRumbleInit(haptic) != 0) // 0 == success
+    {   
+      SDL_HapticClose(haptic);
+      haptic = NULL;
+    }   
+    else
+    {   
+      rumbled = (SDL_HapticRumblePlay(haptic, strength, ms) == 0);
+      if (!rumbled)
+      {
+        printf( "Warning: Unable to play rumble! %s\n", SDL_GetError() );
+      }
+      else if(newDevice)
+      {
+        hapticDevices->insert(std::pair<SDL_JoystickID, SDL_Haptic*>(joystickID, haptic));
+        printf( "Added controller: %i to haptics! \n", joystickID);
+      }
+    }
+  }
+  return rumbled;
+}
 
 void MickSDLInput::setControllerInput(SDL_JoystickID joystickID, Uint8 button, Uint8 state)
 {
@@ -188,10 +233,11 @@ void MickSDLInput::setControllerInput(SDL_JoystickID joystickID, Uint8 button, U
   PlayerCharacterEntity *attachedPlayer=m_pInputHandler->getPlayerAttachedToController(joystickID);
   if (!attachedPlayer)
   {
+    MickSDLInput::rumbleController(joystickID, 0.75f, 300);
     attachedPlayer=m_pInputHandler->attachNewControllerToPlayer(joystickID);
     if (attachedPlayer)
     {
-      printf("Attached controller: %i to player: %i\n", joystickID, attachedPlayer->getTeam());
+      printf("Attached controller: %i to player: %i\n", joystickID, attachedPlayer->getTeam() );
     }
     else
     {
