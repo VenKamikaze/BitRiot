@@ -36,11 +36,11 @@ class MickSDLInput : MickBaseInput
     void updateEventQueue();
 
     static MickBaseInput* getInstance(InputHandler *inputHandler);
+    static bool rumbleController(SDL_JoystickID joystickID, float strength, Uint32 length);
 
   protected:
     
     void setControllerInput(SDL_JoystickID joystickID, Uint8 button, Uint8 state);
-    
     
     void setupKeymap();
     void setupControllers();
@@ -51,6 +51,7 @@ class MickSDLInput : MickBaseInput
     SDL_Event event;
     std::set<KEY> keysCurrentlyDown;
     std::set<KEY> keysRecentlyReleased;
+    std::set<SDL_JoystickID> hapticJoysticks;
     
     InputHandler *m_pInputHandler;
     
