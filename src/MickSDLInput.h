@@ -51,7 +51,6 @@ class MickSDLInput : MickBaseInput
     SDL_Event event;
     std::set<KEY> keysCurrentlyDown;
     std::set<KEY> keysRecentlyReleased;
-    std::set<SDL_JoystickID> hapticJoysticks;
     
     InputHandler *m_pInputHandler;
     
