@@ -37,21 +37,10 @@ class PlayerCharacterEntity : public GameEntity
       return m_controlledByAI;
     }
 
-    void setHapticController(bool haptic)  // TODO: refactor this, player shouldn't need to be aware of haptic.
-    {
-      m_controllerHasHaptic = haptic;
-    }
-
-    bool isHapticController()
-    {
-      return m_controllerHasHaptic;
-    }
-
     bool createEntity(EntityType type);
 
     
     int attachedController=-1;
-    bool m_controllerHasHaptic=false;
     bool m_controlledByAI;
     
     

@@ -187,8 +187,7 @@ void MickSDLInput::setupControllers()
 
 /**
   * Will try to rumble a joystick at given strength and for milliseconds in time
-  * Opening and closing the haptic device each time is probably quite inefficient,
-  *   but in terms of design is somewhat clean
+  * Also sets up a joystick as a haptic device on first call
  **/
 bool MickSDLInput::rumbleController(SDL_JoystickID joystickID, float strength, Uint32 ms)
 {
