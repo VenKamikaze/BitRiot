@@ -204,11 +204,11 @@ bool MickSDLInput::rumbleController(SDL_JoystickID joystickID, float strength, U
     if(SDL_JoystickIsHaptic(SDL_JoystickFromInstanceID(joystickID)) == SDL_TRUE)
     {
       haptic = SDL_HapticOpenFromJoystick(SDL_JoystickFromInstanceID(joystickID));
-      if (SDL_HapticRumbleInit(haptic) != 0) // 0 == success
+      if (haptic != NULL && SDL_HapticRumbleInit(haptic) != 0) // 0 == success
       {   
         SDL_HapticClose(haptic);
         haptic = NULL;
-      }   
+      }
       newDevice = true;
     }
   }
