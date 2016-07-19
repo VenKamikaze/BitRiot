@@ -194,25 +194,30 @@ bool MickSDLInput::rumbleController(SDL_JoystickID joystickID, float strength, U
   SDL_Haptic* haptic = NULL;
   bool newDevice = false;
   bool rumbled = false;
+
   if( hapticDevices->find(joystickID) != hapticDevices->end() )
   {
     haptic = hapticDevices->find(joystickID)->second;
   }
   else
   {
-    haptic = SDL_HapticOpenFromJoystick(SDL_JoystickFromInstanceID(joystickID));
-    newDevice = true;
+    if(SDL_JoystickIsHaptic(SDL_JoystickFromInstanceID(joystickID)) == SDL_TRUE)
+    {
+      haptic = SDL_HapticOpenFromJoystick(SDL_JoystickFromInstanceID(joystickID));
+      if (SDL_HapticRumbleInit(haptic) != 0) // 0 == success
+      {   
+        SDL_HapticClose(haptic);
+        haptic = NULL;
+      }   
+      newDevice = true;
+    }
   }
+
   if(haptic)
-  {   
-    if (SDL_HapticRumbleInit(haptic) != 0) // 0 == success
-    {   
-      SDL_HapticClose(haptic);
-      haptic = NULL;
-    }   
-    else
-    {   
-      rumbled = (SDL_HapticRumblePlay(haptic, strength, ms) == 0);
+  {
+    if (SDL_HapticRumbleSupported(haptic) == SDL_TRUE)
+    {
+      rumbled = (SDL_HapticRumblePlay(haptic, strength, ms) == 0); // 0 == success
       if (!rumbled)
       {
         printf( "Warning: Unable to play rumble! %s\n", SDL_GetError() );
@@ -222,6 +227,15 @@ bool MickSDLInput::rumbleController(SDL_JoystickID joystickID, float strength, U
         hapticDevices->insert(std::pair<SDL_JoystickID, SDL_Haptic*>(joystickID, haptic));
         printf( "Added controller: %i to haptics! \n", joystickID);
       }
+    }
+    else
+    {
+       // Cleaning this up means that it would be re-openned every time rumbleController is called, which is inefficient.
+       // Instead, leave it as an available device; hopefully 'SDL_HapticRumbleSupported' is a quick call
+       // If not, we can make hapticDevices hold a NULL value for a joystickID where we have a haptic device without rumble (?)
+       //SDL_HapticClose(haptic);
+       //haptic = NULL;
+       //hapticDevices->remove(...);
     }
   }
   return rumbled;
@@ -329,6 +343,14 @@ void MickSDLInput::updateEventQueue()
 		{
 			printf("Gamecontroller removed: %i\n", event.jbutton.which);
 			m_pInputHandler->detachController(event.jbutton.which);
+      if( hapticDevices->find(event.jbutton.which) != hapticDevices->end() )
+      {
+        SDL_Haptic* haptic = hapticDevices->find(event.jbutton.which)->second;
+        SDL_HapticClose(haptic);
+        haptic = NULL;
+        hapticDevices->erase(event.jbutton.which);
+			  printf("Haptics removed: %i\n", event.jbutton.which);
+      }
 		}
     else if (event.type == SDL_QUIT)
     {
