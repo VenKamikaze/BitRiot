@@ -4,6 +4,7 @@
 #define _PLAYERCHARACTER
 
 #include "GameEntity.h"
+#include "MickSDLInput.h"
 
 #include "AIGoal.h"
 #include "AIInstruction.h"
@@ -39,13 +40,16 @@ class PlayerCharacterEntity : public GameEntity
     bool createEntity(EntityType type);
 
 
+    int attachedController=-1;
+    bool m_controlledByAI;
+
+
   protected:
     int m_animCounter;
     int m_animDelay;
 
     int m_velocityModifier;
 
-    bool m_controlledByAI;
 
     int m_IQ; // used for egg intelligence chance
 

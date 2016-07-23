@@ -43,8 +43,17 @@ void GameEngine::runEngine()
         int blockPercentage = 55;
 
         bool gender[5] = { true, true, false, false, true };
-        //bool botAI[4] = { true, true, true, false };
-        bool botAI[4] = { true, true, true, false };
+
+
+        bool botAI[4] = { false, false, false, false };
+
+        if (true) //enable AI
+        {
+          botAI[0] = true;
+          botAI[1] = true;
+          botAI[2] = true;
+        }
+
         // after setting initialisation parameters
 
         m_pEntityManager = new EntityManager();
@@ -82,7 +91,8 @@ void GameEngine::runEngine()
         m_pEntityManager->runFrame();
 
         m_pEntityManager->renderEntities(lpddsback);
-        m_pPanel->renderSurfaceTo(lpddsback, (Map::MAP_WIDTH * Map::TILE_WIDTH), 0);
+        m_pPanel->renderSurfaceTo(lpddsback, (Map::MAP_WIDTH * Map::TILE_WIDTH), 0); //Possible but very rare crash here, due to dangling pointers
+        //as m_pPanel->setPlayerDead being updated one frame late
 
       }
       break;

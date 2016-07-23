@@ -117,6 +117,11 @@ void PlayerCharacterEntity::onCollision(EntityType typeCollidedWith,
     m_health--;
     EntityMessageQueue::getInstance()->postCreateMessage(DAMAGE_EFFECT,
         m_team, m_tileX, m_tileY, 0, m_offsetX, m_offsetY);
+    if(! isControlledByAI() && attachedController != -1 )
+    {
+      // Try to rumble the controller if possible
+      MickSDLInput::rumbleController(attachedController, 0.5f, 200);
+    }
   }
 
   if (typeCollidedWith == ENERGY_DROP)
