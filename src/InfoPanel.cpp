@@ -14,7 +14,7 @@ InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, bool * isMale)
 {
   WIDTH = PANEL_TILE_WIDTH * Map::TILE_WIDTH;
   HEIGHT = Map::MAP_HEIGHT * Map::TILE_HEIGHT;
-  
+
   m_players = numPlayers;
 
   for (int i = 0; i < 4; i++)
@@ -188,7 +188,7 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
       intensity = (unsigned char)(((float)extraHealth/100.0f)*255);
       //ddbltfx.dwFillColor = ((255 - intensity) << 8) + (intensity << 0);
       fillColour = SDL_MapRGB(m_surface->format, 0, (255-intensity), intensity);
-      
+
       if (extraHealth>100)
       {
         extraHealth=100;
@@ -198,35 +198,35 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
       SDL_FillRect(m_surface, &destRect, fillColour);
       //m_surface->Blt(&destRect, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &ddbltfx);
     }
-    
-    
+
+
     if (DRAW_HEALTH_UNDER_PLAYERS)
     {
       if (m_playerDead[i] != true && playerPointer[i] != NULL)
       {
         int destX = (playerPointer[i]->getTileX() * Map::TILE_WIDTH) + (int)(playerPointer[i]->getOffsetX() * (Map::TILE_WIDTH/2));
         int destY = (playerPointer[i]->getTileY() * Map::TILE_WIDTH) + (int)(playerPointer[i]->getOffsetY() * (Map::TILE_WIDTH/2)) + Map::TILE_WIDTH + 2;
-        
+
         destRect.x = destX;
         destRect.y = destY;
-        
+
         destRect.h = 3;
-        
+
         int maxWidth=Map::TILE_WIDTH;
         int width=   ((float)health/100.0f) *maxWidth;
         if (width > maxWidth)
         {
           width = maxWidth;
         }
-        
+
         Uint32 backColour = SDL_MapRGB(m_surface->format, 0, 0, 0);
-        
+
         destRect.w = maxWidth;
         SDL_FillRect(dest, &destRect, backColour);
-        
+
         destRect.w = width;
         SDL_FillRect(dest, &destRect, fillColour);
-        
+
         // Render the health bar
         if (health > 100)
         {
@@ -234,7 +234,7 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
           intensity = (unsigned char)(((float)extraHealth/100.0f)*255);
           //ddbltfx.dwFillColor = ((255 - intensity) << 8) + (intensity << 0);
           fillColour = SDL_MapRGB(m_surface->format, 0, (255-intensity), intensity);
-          
+
           if (extraHealth>100)
           {
             extraHealth=100;
@@ -246,8 +246,8 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
         }
       }
     }
-    
-    
+
+
 
   }
 

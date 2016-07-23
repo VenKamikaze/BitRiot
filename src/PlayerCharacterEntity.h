@@ -39,17 +39,17 @@ class PlayerCharacterEntity : public GameEntity
 
     bool createEntity(EntityType type);
 
-    
+
     int attachedController=-1;
     bool m_controlledByAI;
-    
-    
+
+
   protected:
     int m_animCounter;
     int m_animDelay;
 
     int m_velocityModifier;
-    
+
 
     int m_IQ; // used for egg intelligence chance
 

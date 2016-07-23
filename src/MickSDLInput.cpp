@@ -19,7 +19,7 @@ static MickSDLInput *s_instance = NULL;
 MickSDLInput::MickSDLInput(InputHandler *inputHandler) : MickBaseInput()
 {
   m_pInputHandler=inputHandler;
-  
+
   // TODO Auto-generated constructor stub
   aKeyIsDown = false;
   aKeyIsUp = false;
@@ -33,8 +33,8 @@ MickSDLInput::MickSDLInput(InputHandler *inputHandler) : MickBaseInput()
 
 MickBaseInput* MickSDLInput::getInstance(InputHandler *inputHandler)
 {
-  
-  
+
+
   if (!s_instance)
   {
     s_instance = new MickSDLInput(inputHandler); //TODO: need to handle inputHandler better or refactor to support inputHandler changing
@@ -154,19 +154,19 @@ void MickSDLInput::setKeyState(KEY key, bool down)
       // DEBUG printf("krr size = %ld\n", keysRecentlyReleased.size());
     }
   }
-  
+
 }
 
 void MickSDLInput::setupControllers()
 {
   m_pInputHandler->usingControllers=true;
-  
+
   SDL_GameControllerAddMappingsFromFile("data/gamecontrollerdb.txt");
-  
+
   int numJoysticks=SDL_NumJoysticks();
-  
+
   printf("Seting up controllers (%i)\n",numJoysticks);
-  
+
   for (int i = 0; i < numJoysticks; ++i)
   {
     if (SDL_IsGameController(i))
@@ -180,7 +180,7 @@ void MickSDLInput::setupControllers()
       {
         fprintf(stderr, "Could not open gamecontroller %i: %s\n", i, SDL_GetError());
       }
-      
+
     }
   }
 }
@@ -205,7 +205,7 @@ bool MickSDLInput::rumbleController(SDL_JoystickID joystickID, float strength, U
     {
       haptic = SDL_HapticOpenFromJoystick(SDL_JoystickFromInstanceID(joystickID));
       if (haptic != NULL && SDL_HapticRumbleInit(haptic) != 0) // 0 == success
-      {   
+      {
         SDL_HapticClose(haptic);
         haptic = NULL;
       }
@@ -230,12 +230,12 @@ bool MickSDLInput::rumbleController(SDL_JoystickID joystickID, float strength, U
     }
     else
     {
-       // Cleaning this up means that it would be re-openned every time rumbleController is called, which is inefficient.
-       // Instead, leave it as an available device; hopefully 'SDL_HapticRumbleSupported' is a quick call
-       // If not, we can make hapticDevices hold a NULL value for a joystickID where we have a haptic device without rumble (?)
-       //SDL_HapticClose(haptic);
-       //haptic = NULL;
-       //hapticDevices->remove(...);
+      // Cleaning this up means that it would be re-openned every time rumbleController is called, which is inefficient.
+      // Instead, leave it as an available device; hopefully 'SDL_HapticRumbleSupported' is a quick call
+      // If not, we can make hapticDevices hold a NULL value for a joystickID where we have a haptic device without rumble (?)
+      //SDL_HapticClose(haptic);
+      //haptic = NULL;
+      //hapticDevices->remove(...);
     }
   }
   return rumbled;
@@ -243,7 +243,7 @@ bool MickSDLInput::rumbleController(SDL_JoystickID joystickID, float strength, U
 
 void MickSDLInput::setControllerInput(SDL_JoystickID joystickID, Uint8 button, Uint8 state)
 {
-  
+
   PlayerCharacterEntity *attachedPlayer=m_pInputHandler->getPlayerAttachedToController(joystickID);
   if (!attachedPlayer)
   {
@@ -259,11 +259,11 @@ void MickSDLInput::setControllerInput(SDL_JoystickID joystickID, Uint8 button, U
     }
     return; //eat attaching button press
   }
-  
+
   int i=attachedPlayer->getTeam()-1;
   bool pressed=state==SDL_PRESSED;
   KEY keyIndex=KEY_UNKNOWN;
-  
+
   if (button==SDL_CONTROLLER_BUTTON_A || button==SDL_CONTROLLER_BUTTON_X)
   {
     keyIndex=m_pInputHandler->m_keyMap[i][InputHandler::ACTION1_KEY];
@@ -291,13 +291,13 @@ void MickSDLInput::setControllerInput(SDL_JoystickID joystickID, Uint8 button, U
   if (keyIndex!=KEY_UNKNOWN)
   {
     setKeyState(keyIndex,pressed); //TODO: mapping directly into the keyboard array, but this is not the best
-                                   //but will require a refactor of processKeyboardInput() to fix
+    //but will require a refactor of processKeyboardInput() to fix
   }
 }
 
 void MickSDLInput::updateEventQueue()
 {
-  
+
   while(SDL_PollEvent(&event))
   {
     if(event.type == SDL_KEYUP)
@@ -308,7 +308,7 @@ void MickSDLInput::updateEventQueue()
       //newEvents.push(myevent);
 
       setKeyState(myevent.key, false);
-      
+
       //printf("keyup: %d, sdl: %d\n", myevent.key, event.key.keysym.sym);
     }
     else if (event.type == SDL_KEYDOWN)
@@ -324,7 +324,7 @@ void MickSDLInput::updateEventQueue()
       myevent.key  = reverseTranslateMap->find(event.key.keysym.sym)->second;
       //printf("keydown: %d, sdl: %d\n", myevent.key, event.key.keysym.sym);
       //newEvents.push(myevent);
-      
+
       setKeyState(myevent.key, true);
     }
     else if (event.type == SDL_CONTROLLERBUTTONDOWN || event.type == SDL_CONTROLLERBUTTONUP)
@@ -338,20 +338,20 @@ void MickSDLInput::updateEventQueue()
       {
         SDL_GameControllerOpen(event.jbutton.which);
       }
-		}
-		else if (event.type == SDL_CONTROLLERDEVICEREMOVED)
-		{
-			printf("Gamecontroller removed: %i\n", event.jbutton.which);
-			m_pInputHandler->detachController(event.jbutton.which);
+    }
+    else if (event.type == SDL_CONTROLLERDEVICEREMOVED)
+    {
+      printf("Gamecontroller removed: %i\n", event.jbutton.which);
+      m_pInputHandler->detachController(event.jbutton.which);
       if( hapticDevices->find(event.jbutton.which) != hapticDevices->end() )
       {
         SDL_Haptic* haptic = hapticDevices->find(event.jbutton.which)->second;
         SDL_HapticClose(haptic);
         haptic = NULL;
         hapticDevices->erase(event.jbutton.which);
-			  printf("Haptics removed: %i\n", event.jbutton.which);
+        printf("Haptics removed: %i\n", event.jbutton.which);
       }
-		}
+    }
     else if (event.type == SDL_QUIT)
     {
       quitEvent = true;

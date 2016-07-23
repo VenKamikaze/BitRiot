@@ -65,7 +65,8 @@ PlayerCharacterEntity *InputHandler::getPlayerAttachedToController(int controlle
   for (int i = 0; i < m_numPlayers; i++)
   {
     if (m_playerDead[i]) //Seems p_players[] is not nulled when memory is released.
-    {                    //TODO: game needs a proper way of handling dangling pointers
+    {
+      //TODO: game needs a proper way of handling dangling pointers
       continue;
     }
     if (p_players[i] == NULL)

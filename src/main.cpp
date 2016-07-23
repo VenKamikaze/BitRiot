@@ -92,7 +92,7 @@ int consoleInit()
     cerr << "Failed to SDL_Init video!";
     return 1;
   }
-  
+
   const int WINDOW_WIDTH = (Map::MAP_WIDTH * Map::TILE_WIDTH) + InfoPanel::WIDTH;   // size of window
   const int WINDOW_HEIGHT = Map::MAP_HEIGHT * Map::TILE_HEIGHT;
 
@@ -103,10 +103,10 @@ int consoleInit()
     cerr << "Failed to create sdl_window!";
     return 1;
   }
-  
+
   SDL_JoystickEventState(SDL_ENABLE);
-  
-  
+
+
   sdl_renderer = SDL_CreateRenderer(sdl_window, -1, 0);
   if (sdl_renderer == NULL)
   {
@@ -115,7 +115,7 @@ int consoleInit()
   }
   SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
   SDL_RenderSetLogicalSize(sdl_renderer, WINDOW_WIDTH, WINDOW_HEIGHT);
-  
+
   Uint32 pixel_format = SDL_GetWindowPixelFormat(sdl_window);
 
   sdl_primary_texture = SDL_CreateTexture(sdl_renderer, pixel_format, SDL_TEXTUREACCESS_STREAMING,
@@ -135,8 +135,8 @@ int consoleInit()
 
   sdl_primary = SDL_CreateRGBSurface(0, WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_BPP,
                                      rmask, gmask, bmask, amask);
-                                     
-  
+
+
   if (sdl_primary == NULL)
   {
     cerr << "Failed to create sdl_primary!";

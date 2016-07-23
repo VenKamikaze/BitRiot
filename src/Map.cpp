@@ -36,12 +36,12 @@ void Map::setStaticTileAt(int x, int y, Map::StaticTile staticTile)
 
 void Map::init(SDL_Surface* sdl_primary)
 {
-  
 
-  
+
+
   m_staticMap=new StaticTile[MAP_WIDTH*MAP_HEIGHT];
-  
-  
+
+
   // initialise basic static map as all empty tiles
   for (int x = 0; x < MAP_WIDTH; ++x)
     for (int y = 0; y < MAP_HEIGHT; ++y)
@@ -95,7 +95,7 @@ void Map::init(SDL_Surface* sdl_primary)
 Map::Map()
 {
   m_staticMap=0;
-  
+
   for (int i = 0; i < NUM_STATIC_TILES; ++i)
   {
     m_staticSurface[i] = NULL;
@@ -108,7 +108,7 @@ Map::~Map()
   {
     delete m_staticMap;
   }
-  
+
   for (int i = 0; i < NUM_STATIC_TILES; ++i)
     if (m_staticSurface[i])
     {
@@ -147,9 +147,9 @@ void Map::clearBlocks()
 void Map::render(SDL_Surface*  dest, int offsetX, int offsetY)
 {
   SDL_Rect sourceRect, destRect;
-  
-  
-  
+
+
+
   sourceRect.x = 0;
   sourceRect.w = TILE_WIDTH-1;
   sourceRect.y = 0;
@@ -168,8 +168,8 @@ void Map::render(SDL_Surface*  dest, int offsetX, int offsetY)
       // choose source surface from map
       //dest->Blt(&destRect, m_staticSurface[m_staticMap[x][y]], &sourceRect, DDBLT_WAIT, NULL);
       SDL_BlitSurface(m_staticSurface[staticTileAt(x,y)], &sourceRect, dest, &destRect);
-      
-      
+
+
       //dest->Draw(&destRect, m_staticSurface[m_staticMap[x][y]], &sourceRect, DDBLT_WAIT, NULL);
     }
 }

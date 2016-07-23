@@ -25,9 +25,9 @@ class MickSDLInput : MickBaseInput
     SDL_Event* popEvent();
     bool isKeyDown(KEY k);
     bool isKeyReleased(KEY k);
-    
+
     void setKeyState(KEY k, bool down);
-    
+
     std::set<KEY>* getKeysDown();
 
     void keyEvent(KEY k);
@@ -39,21 +39,21 @@ class MickSDLInput : MickBaseInput
     static bool rumbleController(SDL_JoystickID joystickID, float strength, Uint32 length);
 
   protected:
-    
+
     void setControllerInput(SDL_JoystickID joystickID, Uint8 button, Uint8 state);
-    
+
     void setupKeymap();
     void setupControllers();
-    
+
     void setupReverseKeymap(std::map<KEY, SDL_Keycode>* forwardMap);
-    
+
   private:
     SDL_Event event;
     std::set<KEY> keysCurrentlyDown;
     std::set<KEY> keysRecentlyReleased;
-    
+
     InputHandler *m_pInputHandler;
-    
+
 };
 
 
