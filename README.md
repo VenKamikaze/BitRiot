@@ -25,6 +25,11 @@ This indicates both the framework used underneath (win32, sdl, sdl2), plus the v
 
 The master branch typically has the latest stable sdl2 code. It may or may not advance further as I don't have as much time to spend on this as I'd like. That being said, I'm very open to any contributions. Contributions to this code base are what enabled SDL2 support in the first place.
 
+The newest SDL2 version (v1.3) now supports a larger map option on startup (-b), fullscreen (-f), game controllers (plus rumble support) and hot joining (take over from CPU player).
+
+![Larger map screenshot](https://raw.github.com/VenKamikaze/BitRiot/master/doco/screenshots/BitRiot-2.png)
+
+
 ## Branches
 
 The sdl2 branch should always have a reasonably stable SDL2 release of the game, with ongoing sdl2 development limited to the 'sdl2_ongoing' branch.
