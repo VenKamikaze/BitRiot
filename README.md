@@ -15,7 +15,7 @@ There are also older versions of the game code working with SDL 1.2.x, and an ev
 
 ## Tags
 
-There are three software tags:
+Here's an example of the tagged releases:
 * win32-v1
 * sdl-v1.1
 * sdl2-v1.2
