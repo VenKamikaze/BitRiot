@@ -9,3 +9,5 @@ newbombfuse2.wav
 
 Conor for the following sounds:
 Flyby.wav
+
+Also thanks to Michael Straube!

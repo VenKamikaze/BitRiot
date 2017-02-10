@@ -60,9 +60,72 @@ void InputHandler::setPlayerDead(int player, bool flag)
   m_playerDead[player] = flag;
 }
 
+PlayerCharacterEntity *InputHandler::getPlayerAttachedToController(int controllerId)
+{
+  for (int i = 0; i < m_numPlayers; i++)
+  {
+    if (m_playerDead[i]) //Seems p_players[] is not nulled when memory is released.
+    {
+      //TODO: game needs a proper way of handling dangling pointers
+      continue;
+    }
+    if (p_players[i] == NULL)
+    {
+      continue;
+    }
+    if (p_players[i]->attachedController==controllerId)
+    {
+      return p_players[i];
+    }
+  }
+  return 0;
+}
+
+PlayerCharacterEntity *InputHandler::attachNewControllerToPlayer(int controllerId)
+{
+  for (int i = m_numPlayers-1; i >= 0; i--)
+  {
+    if (m_playerDead[i])
+    {
+      continue;
+    }
+    if (p_players[i] == NULL)
+    {
+      continue;
+    }
+    if (p_players[i]->attachedController==-1)
+    {
+      p_players[i]->attachedController=controllerId;
+      p_players[i]->m_controlledByAI=false;
+      return p_players[i];
+    }
+  }
+  return 0;
+}
+
+void InputHandler::detachController(int controllerId)
+{
+  for (int i = 0; i < m_numPlayers; i++)
+  {
+    if (m_playerDead[i])
+    {
+      continue;
+    }
+    if (p_players[i] == NULL)
+    {
+      continue;
+    }
+    if (p_players[i]->attachedController==controllerId)
+    {
+      p_players[i]->attachedController=-1;
+    }
+  }
+}
+
+
 void InputHandler::processKeyboardInput(/*SDL_Event event*/)
 {
-  MickBaseInput* input = MickSDLInput::getInstance();
+  MickBaseInput* input = MickSDLInput::getInstance(this);
   input->updateEventQueue();
 
   if(input->doQuit())

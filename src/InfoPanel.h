@@ -17,8 +17,13 @@ class InfoPanel
     ~InfoPanel();
 
     static const int PANEL_TILE_WIDTH = 7;
-    static const int WIDTH = PANEL_TILE_WIDTH * Map::TILE_WIDTH;
-    static const int HEIGHT = Map::MAP_HEIGHT * Map::TILE_HEIGHT;
+    //static const int WIDTH = PANEL_TILE_WIDTH * Map::TILE_WIDTH;
+    //static const int HEIGHT = Map::MAP_HEIGHT * Map::TILE_HEIGHT;
+
+    static int WIDTH;
+    static int HEIGHT;
+
+    static bool DRAW_HEALTH_UNDER_PLAYERS;
 
     void setPlayerPointers(int num, PlayerCharacterEntity * player1,
                            PlayerCharacterEntity * player2,
