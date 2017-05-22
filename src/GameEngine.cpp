@@ -68,7 +68,7 @@ void GameEngine::runEngine()
       if(menuSystem == NULL)
 		throw std::runtime_error(std::string("About to render menu, but no menu rendering system found!"));
 
-      if(menuSystem->showMenu())
+      if(! menuSystem->showMenu())
       {
     	//menuSystem->getSettings();
         m_state = GAME_INIT;

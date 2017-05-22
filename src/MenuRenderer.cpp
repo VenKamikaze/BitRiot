@@ -68,7 +68,7 @@ bool MenuRenderer::showMenu()
 {
     SDL_Event event;
 
-    bool menuDone = false;
+    bool continueRenderingMenu = true;
 
 	SDL_Renderer* renderer = ((RocketSDL2Renderer*) m_context->GetRenderInterface())->GetSDLRenderer();
 
@@ -84,7 +84,7 @@ bool MenuRenderer::showMenu()
         switch(event.type)
         {
             case SDL_QUIT:
-            	menuDone = true;
+            	continueRenderingMenu = false;
                 break;
 
             case SDL_MOUSEMOTION:
@@ -123,7 +123,7 @@ bool MenuRenderer::showMenu()
     }
     m_context->Update();
 
-    return menuDone;
+    return continueRenderingMenu;
 }
 
 MenuRenderer::~MenuRenderer()
