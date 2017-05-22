@@ -57,6 +57,10 @@ public:
 	/// Called by Rocket when a loaded texture is no longer required.
 	virtual void ReleaseTexture(Rocket::Core::TextureHandle texture_handle);
 
+	SDL_Renderer* GetSDLRenderer() {
+		return mRenderer;
+	}
+
 private:
     SDL_Renderer* mRenderer;
     SDL_Window* mScreen;

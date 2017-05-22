@@ -32,8 +32,24 @@
 #include "GameEngine.h"
 
 
+#include <GL/glew.h>
+
 #ifndef NULL
 #define NULL 0
+#endif
+
+#define LIBROCKET_TEST 1
+#ifdef LIBROCKET_TEST
+
+#include "MenuRenderer.h"
+
+#include <Rocket/Core.h>
+#include <Rocket/Core/Input.h>
+#include <Rocket/Debugger/Debugger.h>
+
+#include "rocket/glue/SystemInterfaceSDL2.h"
+#include "rocket/glue/RenderInterfaceSDL2.h"
+#include "rocket/glue/ShellFileInterface.h"
 #endif
 
 // DEFINES ////////////////////////////////////////////////
@@ -79,11 +95,17 @@ SDL_Renderer* sdl_renderer = NULL;
 SDL_Texture* sdl_primary_texture = NULL;
 SDL_Surface* sdl_primary = NULL;
 
+MenuRenderer* rocketMenu = NULL;
+
 // game object globals
 GameEngine* engine = NULL;
 
-
 // FUNCTIONS //////////////////////////////////////////////
+
+#if !(SDL_VIDEO_RENDER_OGL)
+    #error "Only the opengl sdl backend is supported. To add support for others, see http://mdqinc.com/blog/2013/01/integrating-librocket-with-sdl-2/"
+#endif
+
 
 int consoleInit()
 {
@@ -115,6 +137,10 @@ int consoleInit()
   }
   SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
   SDL_RenderSetLogicalSize(sdl_renderer, WINDOW_WIDTH, WINDOW_HEIGHT);
+
+  //SDL_RendererInfo rendererInfo;
+  //SDL_GetRendererInfo(sdl_renderer, &rendererInfo);
+  //std::cout << "Renderer: " << rendererInfo.name << std::endl;
 
   Uint32 pixel_format = SDL_GetWindowPixelFormat(sdl_window);
 
@@ -253,13 +279,32 @@ int main(int argc, char* argv[])
   try
   {
     quitkey = consoleInit();
+#ifdef LIBROCKET_TEST
+    rocketMenu = new MenuRenderer(sdl_renderer, sdl_window);
+    engine->setMenuSystem(rocketMenu);
+#endif
   }
   catch(exception &e)
   {
-    cerr << e.what();
+    fprintf(stderr, "Exception occurred in initialisation code(): %s\n", e.what());
     quitkey = -1;
   }
 
+/*#ifdef LIBROCKET_TEST
+  try
+  {
+	  while(!menuDone)
+	  {
+		  menuDone = rocketMenu->showMenu();
+	  }
+  }
+  catch(exception &e)
+  {
+	  fprintf(stderr, "Caught exception when rendering menu.");
+	  cerr << e.what();
+  }
+#endif
+*/
   // Do game loop
   try
   {
@@ -328,7 +373,7 @@ int main(int argc, char* argv[])
   }
   catch(exception& e)
   {
-    printf("Caught exception in main game loop.");
+    fprintf(stderr, "Caught exception in main game loop.");
     cerr << "Caught exception! ";
     cerr << e.what();
   }
@@ -377,6 +422,13 @@ int main(int argc, char* argv[])
   }
 
   delete MickSDLSound::getInstance(); // hmm...
+
+#ifdef LIBROCKET_TEST
+  if (rocketMenu)
+  {
+	  delete rocketMenu;
+  }
+#endif
 
   cout << "Exiting.. " << endl;
   return 0;

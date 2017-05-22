@@ -8,7 +8,7 @@ GameEngine::GameEngine(SDL_Surface* back)
   //lpdd = p_dd;
   lpddsback = back;
 
-  m_state = GAME_INIT;
+  m_state = MENU_RUNNING;
 }
 
 GameEngine::~GameEngine()
@@ -32,74 +32,81 @@ GameEngine::~GameEngine()
 
 }
 
+void GameEngine::resetGame(int numHumanPlayers) {
+	int numPlayers = 4;
+	int blockPercentage = 55;
+	bool gender[5] = { true, true, false, false, true };
+	bool botAI[4] = { true, true, true, true }; // init all as AI first
+	for (int player = numPlayers-1; player >= (numPlayers - numHumanPlayers) ; player--)
+	{ // reverse iterate, player one is actually botAI[3]
+		botAI[player] = false;
+	}
+
+	// after setting initialisation parameters
+	m_pEntityManager = new EntityManager();
+	m_pPanel = new InfoPanel(lpddsback, numPlayers, &gender[1]);
+	m_pInputHandler = new InputHandler();
+	m_pSpawningPool = new SpawningPool(numPlayers * 100);
+	initHumanPlayers(numPlayers, &gender[0], &botAI[0]);
+	m_pInputHandler->setPointers(numPlayers, m_pPlayers[1], m_pPlayers[2],
+			m_pPlayers[3], m_pPlayers[4], m_pEntityManager->getDynamicMap(),
+			m_pPanel);
+	m_pPanel->setPlayerPointers(numPlayers, m_pPlayers[1], m_pPlayers[2],
+			m_pPlayers[3], m_pPlayers[4]);
+	seedBlocksOnMap(blockPercentage);
+
+	//m_state = GAME_RUNNING;
+	//runEngine();
+}
+
 void GameEngine::runEngine()
 {
   switch (m_state)
   {
+    case MENU_RUNNING:
+    {
+      if(menuSystem == NULL)
+		throw std::runtime_error(std::string("About to render menu, but no menu rendering system found!"));
+
+      if(menuSystem->showMenu())
+      {
+    	//menuSystem->getSettings();
+        m_state = GAME_INIT;
+      }
+	  break;
+    }
     case GAME_INIT:
-      {
-        int numPlayers = 4;
-
-        int blockPercentage = 55;
-
-        bool gender[5] = { true, true, false, false, true };
-
-
-        bool botAI[4] = { false, false, false, false };
-
-        if (true) //enable AI
-        {
-          botAI[0] = true;
-          botAI[1] = true;
-          botAI[2] = true;
-        }
-
-        // after setting initialisation parameters
-
-        m_pEntityManager = new EntityManager();
-        m_pPanel = new InfoPanel(lpddsback, numPlayers, &gender[1]);
-        m_pInputHandler = new InputHandler();
-        m_pSpawningPool = new SpawningPool(numPlayers * 100);
-
-        initHumanPlayers(numPlayers, &gender[0], &botAI[0]);
-
-        m_pInputHandler->setPointers(numPlayers, m_pPlayers[1],
-                                     m_pPlayers[2], m_pPlayers[3], m_pPlayers[4],
-                                     m_pEntityManager->getDynamicMap(), m_pPanel);
-        m_pPanel->setPlayerPointers(numPlayers, m_pPlayers[1],
-                                    m_pPlayers[2], m_pPlayers[3], m_pPlayers[4]);
-        seedBlocksOnMap(blockPercentage);
-        m_state = GAME_RUNNING;
-        runEngine();
-      }
+    {
+      resetGame(0);
+      m_state = GAME_RUNNING;
       break;
+    }
     case GAME_RUNNING:
+    {
+      // read keyboard and other devices here
+      for (int i = 0; i < 4; i++)
       {
-
-        // read keyboard and other devices here
-        for (int i = 0; i < 4; i++)
-        {
-          m_pInputHandler->setPlayerDead(i, m_pEntityManager->getPlayerDead(i + 1));
-          m_pPanel->setPlayerDead(i, m_pEntityManager->getPlayerDead(i + 1));
-        }
-        m_pInputHandler->processKeyboardInput();
-
-        // game logic here...
-
-        m_pSpawningPool->update();
-
-        m_pEntityManager->runFrame();
-
-        m_pEntityManager->renderEntities(lpddsback);
-        m_pPanel->renderSurfaceTo(lpddsback, (Map::MAP_WIDTH * Map::TILE_WIDTH), 0); //Possible but very rare crash here, due to dangling pointers
-        //as m_pPanel->setPlayerDead being updated one frame late
-
+        m_pInputHandler->setPlayerDead(i, m_pEntityManager->getPlayerDead(i + 1));
+        m_pPanel->setPlayerDead(i, m_pEntityManager->getPlayerDead(i + 1));
       }
+      m_pInputHandler->processKeyboardInput();
+
+      // game logic here...
+
+      m_pSpawningPool->update();
+
+      m_pEntityManager->runFrame();
+
+      m_pEntityManager->renderEntities(lpddsback);
+      m_pPanel->renderSurfaceTo(lpddsback, (Map::MAP_WIDTH * Map::TILE_WIDTH), 0); //Possible but very rare crash here, due to dangling pointers
+      //as m_pPanel->setPlayerDead being updated one frame late
       break;
+    }
     case GAME_OVER:
-
+    {
 
       break;
+    }
   }
 }
 

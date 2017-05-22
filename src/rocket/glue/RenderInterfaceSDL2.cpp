@@ -43,14 +43,11 @@ RocketSDL2Renderer::RocketSDL2Renderer(SDL_Renderer* renderer, SDL_Window* scree
 // Called by Rocket when it wants to render geometry that it does not wish to optimise.
 void RocketSDL2Renderer::RenderGeometry(Rocket::Core::Vertex* vertices, int num_vertices, int* indices, int num_indices, const Rocket::Core::TextureHandle texture, const Rocket::Core::Vector2f& translation)
 {
-    fprintf(stdout, "\nm2.1\n");
     // SDL uses shaders that we need to disable here  
     glUseProgramObjectARB(0);
     glPushMatrix();
     glTranslatef(translation.x, translation.y, 0);
  
-    fprintf(stdout, "\nm2.2\n");
-
     std::vector<Rocket::Core::Vector2f> Positions(num_vertices);
     std::vector<Rocket::Core::Colourb> Colors(num_vertices);
     std::vector<Rocket::Core::Vector2f> TexCoords(num_vertices);
@@ -63,7 +60,6 @@ void RocketSDL2Renderer::RenderGeometry(Rocket::Core::Vertex* vertices, int num_
         sdl_texture = (SDL_Texture *) texture;
         SDL_GL_BindTexture(sdl_texture, &texw, &texh);
     }
-    fprintf(stdout, "\nm2.3\n");
  
     for(int  i = 0; i < num_vertices; i++) {
         Positions[i] = vertices[i].position;
@@ -74,7 +70,6 @@ void RocketSDL2Renderer::RenderGeometry(Rocket::Core::Vertex* vertices, int num_
         }
         else TexCoords[i] = vertices[i].tex_coord;
     };
-    fprintf(stdout, "\nm2.4\n");
  
     glEnableClientState(GL_VERTEX_ARRAY);
     glEnableClientState(GL_COLOR_ARRAY);
@@ -82,8 +77,6 @@ void RocketSDL2Renderer::RenderGeometry(Rocket::Core::Vertex* vertices, int num_
     glColorPointer(4, GL_UNSIGNED_BYTE, 0, &Colors[0]);
     glTexCoordPointer(2, GL_FLOAT, 0, &TexCoords[0]);
 
-    fprintf(stdout, "\nm2.5\n");
- 
     glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -91,19 +84,14 @@ void RocketSDL2Renderer::RenderGeometry(Rocket::Core::Vertex* vertices, int num_
     glDisableClientState(GL_VERTEX_ARRAY);
     glDisableClientState(GL_COLOR_ARRAY);
 
-    fprintf(stdout, "\nm2.6\n");
- 
     if (sdl_texture) {
         SDL_GL_UnbindTexture(sdl_texture);
         glDisableClientState(GL_TEXTURE_COORD_ARRAY);
     }
 
-    fprintf(stdout, "\nm2.7\n");
- 
     glColor4f(1.0, 1.0, 1.0, 1.0);
     glPopMatrix();
 
-    fprintf(stdout, "\nm2.8\n");
     /* Reset blending and draw a fake point just outside the screen to let SDL know that it needs to reset its state in case it wants to render a texture */
     glDisable(GL_BLEND);
     SDL_SetRenderDrawBlendMode(mRenderer, SDL_BLENDMODE_NONE);
@@ -131,8 +119,6 @@ void RocketSDL2Renderer::SetScissorRegion(int x, int y, int width, int height)
 // Called by Rocket when a texture is required by the library.		
 bool RocketSDL2Renderer::LoadTexture(Rocket::Core::TextureHandle& texture_handle, Rocket::Core::Vector2i& texture_dimensions, const Rocket::Core::String& source)
 {
-    fprintf(stdout, "\nm2.x\n");
-
     Rocket::Core::FileInterface* file_interface = Rocket::Core::GetFileInterface();
     Rocket::Core::FileHandle file_handle = file_interface->Open(source);
     if (!file_handle)
@@ -179,7 +165,6 @@ bool RocketSDL2Renderer::LoadTexture(Rocket::Core::TextureHandle& texture_handle
 // Called by Rocket when a texture is required to be built from an internally-generated sequence of pixels.
 bool RocketSDL2Renderer::GenerateTexture(Rocket::Core::TextureHandle& texture_handle, const Rocket::Core::byte* source, const Rocket::Core::Vector2i& source_dimensions)
 {
-    fprintf(stdout, "\nm2.y\n");
     #if SDL_BYTEORDER == SDL_BIG_ENDIAN
         Uint32 rmask = 0xff000000;
         Uint32 gmask = 0x00ff0000;
