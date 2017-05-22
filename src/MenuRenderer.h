@@ -26,14 +26,14 @@
 class MenuRenderer
 {
   public:
-	MenuRenderer(SDL_Renderer *renderer, SDL_Window *screen);
-	bool showMenu();
-	virtual ~MenuRenderer();
+    MenuRenderer(SDL_Renderer *renderer, SDL_Window *screen);
+    bool showMenu();
+    virtual ~MenuRenderer();
 
   private:
-	void init(SDL_Renderer* renderer, SDL_Window *screen);
+    void init(SDL_Renderer* renderer, SDL_Window *screen);
 
-	Rocket::Core::Context* m_context = NULL;
+    Rocket::Core::Context* m_context = NULL;
 
 };
 

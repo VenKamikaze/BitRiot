@@ -103,7 +103,7 @@ GameEngine* engine = NULL;
 // FUNCTIONS //////////////////////////////////////////////
 
 #if !(SDL_VIDEO_RENDER_OGL)
-    #error "Only the opengl sdl backend is supported. To add support for others, see http://mdqinc.com/blog/2013/01/integrating-librocket-with-sdl-2/"
+#error "Only the opengl sdl backend is supported. To add support for others, see http://mdqinc.com/blog/2013/01/integrating-librocket-with-sdl-2/"
 #endif
 
 
@@ -290,21 +290,21 @@ int main(int argc, char* argv[])
     quitkey = -1;
   }
 
-/*#ifdef LIBROCKET_TEST
-  try
-  {
-	  while(!menuDone)
-	  {
-		  menuDone = rocketMenu->showMenu();
-	  }
-  }
-  catch(exception &e)
-  {
-	  fprintf(stderr, "Caught exception when rendering menu.");
-	  cerr << e.what();
-  }
-#endif
-*/
+  /*#ifdef LIBROCKET_TEST
+    try
+    {
+      while(!menuDone)
+      {
+        menuDone = rocketMenu->showMenu();
+      }
+    }
+    catch(exception &e)
+    {
+      fprintf(stderr, "Caught exception when rendering menu.");
+      cerr << e.what();
+    }
+  #endif
+  */
   // Do game loop
   try
   {
@@ -426,7 +426,7 @@ int main(int argc, char* argv[])
 #ifdef LIBROCKET_TEST
   if (rocketMenu)
   {
-	  delete rocketMenu;
+    delete rocketMenu;
   }
 #endif
 

@@ -169,7 +169,7 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
 
     //ddbltfx.dwFillColor = ((255 - intensity) << 16) + (intensity << 8);
 
-    Uint32 fillColour = SDL_MapRGB(m_surface->format, (255-intensity), intensity ,0);
+    Uint32 fillColour = SDL_MapRGB(m_surface->format, (255-intensity), intensity,0);
     destRect.y = yOffset + Map::TILE_HEIGHT; // + (int)(1.25f * (float)Map::TILE_HEIGHT);
     /*destRect.h = yOffset + (int)(1.75f * (float)Map::TILE_HEIGHT);*/
     destRect.h = Map::TILE_HEIGHT;

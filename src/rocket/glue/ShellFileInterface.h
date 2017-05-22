@@ -14,7 +14,7 @@
  *
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -32,33 +32,33 @@
 #include <Rocket/Core/FileInterface.h>
 
 /**
-	Rocket file interface for the shell examples.
-	@author Lloyd Weehuizen
+  Rocket file interface for the shell examples.
+  @author Lloyd Weehuizen
  */
 
 class ShellFileInterface : public Rocket::Core::FileInterface
 {
-public:
-	ShellFileInterface(const Rocket::Core::String& root);
-	virtual ~ShellFileInterface();
+  public:
+    ShellFileInterface(const Rocket::Core::String& root);
+    virtual ~ShellFileInterface();
 
-	/// Opens a file.		
-	virtual Rocket::Core::FileHandle Open(const Rocket::Core::String& path);
+    /// Opens a file.
+    virtual Rocket::Core::FileHandle Open(const Rocket::Core::String& path);
 
-	/// Closes a previously opened file.		
-	virtual void Close(Rocket::Core::FileHandle file);
+    /// Closes a previously opened file.
+    virtual void Close(Rocket::Core::FileHandle file);
 
-	/// Reads data from a previously opened file.		
-	virtual size_t Read(void* buffer, size_t size, Rocket::Core::FileHandle file);
+    /// Reads data from a previously opened file.
+    virtual size_t Read(void* buffer, size_t size, Rocket::Core::FileHandle file);
 
-	/// Seeks to a point in a previously opened file.		
-	virtual bool Seek(Rocket::Core::FileHandle file, long offset, int origin);
+    /// Seeks to a point in a previously opened file.
+    virtual bool Seek(Rocket::Core::FileHandle file, long offset, int origin);
 
-	/// Returns the current position of the file pointer.		
-	virtual size_t Tell(Rocket::Core::FileHandle file);
+    /// Returns the current position of the file pointer.
+    virtual size_t Tell(Rocket::Core::FileHandle file);
 
-private:
-	Rocket::Core::String root;
+  private:
+    Rocket::Core::String root;
 };
 
 #endif

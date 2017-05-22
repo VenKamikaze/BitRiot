@@ -2,8 +2,8 @@
 
 DataReader::DataReader()
 {
-  m_pIntFilemap = new map<string , map<string, int> >;
-  m_pStrFilemap = new map<string , map<string, string> >;
+  m_pIntFilemap = new map<string, map<string, int> >;
+  m_pStrFilemap = new map<string, map<string, string> >;
 
   m_errorString = "";
   //m_windowHandle = NULL;
@@ -55,7 +55,7 @@ void DataReader::clearCache()
 
 const int DataReader::getIntFromFile(const string & constantName, const string & filename)
 {
-  map<string , map<string, int> >::iterator filemapIterator = m_pIntFilemap->find(filename);
+  map<string, map<string, int> >::iterator filemapIterator = m_pIntFilemap->find(filename);
   if (filemapIterator == m_pIntFilemap->end())
   {
     // filename was not found in filemap, try loading it in
@@ -95,7 +95,7 @@ const int DataReader::getIntFromFile(const string & constantName, const string &
 
 const string DataReader::getStringFromFile(const string & constantName, const string & filename)
 {
-  map<string , map<string, string> >::iterator filemapIterator = m_pStrFilemap->find(filename);
+  map<string, map<string, string> >::iterator filemapIterator = m_pStrFilemap->find(filename);
   if (filemapIterator == m_pStrFilemap->end())
   {
     // filename was not found in filemap, try loading it in
