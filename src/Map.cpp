@@ -75,12 +75,12 @@ void Map::init(SDL_Surface* sdl_primary)
     m_staticSurface[i] = NULL;
   }
 
-  SDL_Surface* tempSurface[] = { std::MickSDLAssets::Load_BMP("bitmaps/wall.bmp"), std::MickSDLAssets::Load_BMP("bitmaps/empty.bmp"), std::MickSDLAssets::Load_BMP("bitmaps/empty.bmp") };
+  SDL_Surface* tempSurface[] = { std::MickSDLAssets::Load_BMP("assets/bitmaps/wall.bmp"), std::MickSDLAssets::Load_BMP("assets/bitmaps/empty.bmp"), std::MickSDLAssets::Load_BMP("assets/bitmaps/empty.bmp") };
 
-  m_staticSurface[WALL] = SDL_ConvertSurface(tempSurface[0], sdl_primary->format, 0); //SDL_LoadBMP("bitmaps/wall.bmp");
-  m_staticSurface[EMPTY] = SDL_ConvertSurface(tempSurface[1], sdl_primary->format, 0);  //SDL_LoadBMP("bitmaps/empty.bmp");
-  m_staticSurface[BLOCK] =  SDL_ConvertSurface(tempSurface[2], sdl_primary->format, 0); //SDL_LoadBMP("bitmaps/empty.bmp");
-  //m_staticSurface[BLOCK] = DDLoadBitmap(surface, "bitmaps/empty.bmp", 0, 0);
+  m_staticSurface[WALL] = SDL_ConvertSurface(tempSurface[0], sdl_primary->format, 0); //SDL_LoadBMP("assets/bitmaps/wall.bmp");
+  m_staticSurface[EMPTY] = SDL_ConvertSurface(tempSurface[1], sdl_primary->format, 0);  //SDL_LoadBMP("assets/bitmaps/empty.bmp");
+  m_staticSurface[BLOCK] =  SDL_ConvertSurface(tempSurface[2], sdl_primary->format, 0); //SDL_LoadBMP("assets/bitmaps/empty.bmp");
+  //m_staticSurface[BLOCK] = DDLoadBitmap(surface, "assets/bitmaps/empty.bmp", 0, 0);
 
   SDL_FreeSurface(tempSurface[0]);
   SDL_FreeSurface(tempSurface[1]);

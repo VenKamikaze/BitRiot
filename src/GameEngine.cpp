@@ -250,7 +250,7 @@ void GameEngine::initHumanPlayers(int numPlayers, bool * maleGender, bool * botA
 
     // set image filename with "extension"
     stringstream ss;
-    ss << "bitmaps/player" << i;
+    ss << "assets/bitmaps/player" << i;
     if (maleGender[i] == true)
     {
       ss << "male.bmp";

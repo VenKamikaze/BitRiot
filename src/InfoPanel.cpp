@@ -42,7 +42,7 @@ InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, bool * isMale)
   for (int i = 0; i < 4; i++)
   {
     stringstream ss;
-    ss << "bitmaps/player" << (i + 1);
+    ss << "assets/bitmaps/player" << (i + 1);
     if (isMale[i])
     {
       ss << "male";
@@ -293,7 +293,7 @@ void InfoPanel::drawTextGDI(const char * text, int x, int y,
   // release device context (or it'd be locked)
   dest->ReleaseDC(xdc);
   */
-  static TTF_Font* font = TTF_OpenFont( "bitmaps/FreeMono.ttf", 10 );
+  static TTF_Font* font = TTF_OpenFont( "assets/bitmaps/FreeMono.ttf", 10 );
   if(!font)
   {
     SDL_Colour colour;
