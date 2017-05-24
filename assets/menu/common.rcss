@@ -1,0 +1,25 @@
+body
+{
+  font-family: Delicious;
+  
+  font-weight: normal;
+  font-style: normal;
+  font-size: 18;
+
+  margin: 0;
+}
+
+button:focus
+{
+  color:rgb(120,120,255);
+}
+
+button:hover
+{
+  color:rgb(150,150,200);
+}
+
+.menu-container button
+{
+  tab-index: auto;
+}

@@ -30,7 +30,7 @@ void MenuRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
 
   RocketSDL2Renderer* rocketRenderGlue = new RocketSDL2Renderer(renderer, screen);
   RocketSDL2SystemInterface* rocketSystemGlue = new RocketSDL2SystemInterface();
-  ShellFileInterface* rocketFileGlue = new ShellFileInterface("../Samples/assets/");
+  ShellFileInterface* rocketFileGlue = new ShellFileInterface("assets/menu/");
 
   Rocket::Core::SetFileInterface(rocketFileGlue);
   Rocket::Core::SetRenderInterface(rocketRenderGlue);
@@ -51,7 +51,7 @@ void MenuRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
 
   Rocket::Debugger::Initialise(Context);
 
-  Rocket::Core::ElementDocument *Document = Context->LoadDocument("demo.rml");
+  Rocket::Core::ElementDocument *Document = Context->LoadDocument("mainmenu.rml");
 
   if(Document)
   {
@@ -106,6 +106,7 @@ bool MenuRenderer::showMenu()
 
       case SDL_KEYDOWN:
         {
+          printf("keydown: %d, sdl: %d\n", event.key, event.key.keysym.sym);
           // Intercept SHIFT + ~ key stroke to toggle libRocket's
           // visual debugger tool
           if( event.key.keysym.sym == SDLK_BACKQUOTE &&
@@ -113,6 +114,16 @@ bool MenuRenderer::showMenu()
           {
             Rocket::Debugger::SetVisible( ! Rocket::Debugger::IsVisible() );
             break;
+          }
+          else if(event.key.keysym.sym == SDLK_ESCAPE)
+          {
+        	continueRenderingMenu = false;
+        	break;
+          }
+          else if(event.key.keysym.sym == SDLK_DOWN)
+          {
+        	Rocket::Core::ElementDocument *document = m_context->GetDocument(0);
+        	document->GetElementById("singleplayer");/*->SetPseudoClass("hover", true);*/
           }
 
           m_context->ProcessKeyDown(systemInterface->TranslateKey(event.key.keysym.sym), systemInterface->GetKeyModifiers());

@@ -1,0 +1,19 @@
+<html>
+	<head>
+		<title>Main Menu</title>
+		<link rel="stylesheet" type="text/css" href="rkt.rcss"/>
+		<link rel="stylesheet" type="text/css" href="common.rcss"/>
+		<link type="text/rcss" href="mainmenu.rcss"/>
+	</head>
+	<body class="background" onshow="onShowNewScreen();">
+		
+    <div class="menu-container">
+      <div class="menu">
+	      <button onclick="begin()">Quick Start</button><br />
+	      <button onclick="exit()">Exit</button><br />
+      </div>
+    </div>
+		
+	</body>
+
+</html>
