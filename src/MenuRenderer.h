@@ -22,10 +22,12 @@
 #include "rocket/glue/RenderInterfaceSDL2.h"
 #include "rocket/glue/ShellFileInterface.h"
 
+#include "rocket/MickRocketElementUtil.h"
+
 #include "GameSettings.h"
 #include "rocket/events/EventInstancer.h"
 #include "rocket/events/EventManager.h"
-#include "rocket/events/EventHandlerStartGame.h"
+#include "rocket/events/EventHandlerOptions.h"
 
 class MenuRenderer
 {
@@ -40,7 +42,6 @@ class MenuRenderer
     Rocket::Core::Element* getChildElementWithTabIndex(Rocket::Core::Element* parentNode, int tabIndex);
 
     Rocket::Core::Context* m_context = NULL;
-    const char* TAB_INDEX = "tabindex";
 };
 
 #endif /* MICKRENDERER_H_ */

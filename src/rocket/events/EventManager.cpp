@@ -98,8 +98,9 @@ void EventManager::ProcessEvent(Rocket::Core::Event& event, const Rocket::Core::
 		if (values[0] == "start")
 		{
 			// Start the game with the current settings.
-			// TODO
-			// Load the window, and if successful close the old window.
+			std::GameSettings::getInstance()->setGameState(std::GameSettings::GAME_INIT);
+
+			// Close the rocket menu.
 			event.GetTargetElement()->GetOwnerDocument()->Close();
 		}
 		else if (values[0] == "open" &&
@@ -112,6 +113,7 @@ void EventManager::ProcessEvent(Rocket::Core::Event& event, const Rocket::Core::
 		else if (values[0] == "exit")
 		{
 		  std::GameSettings::getInstance()->setGameState(std::GameSettings::GAME_OVER);
+		  event.GetTargetElement()->GetOwnerDocument()->Close();
 		}
 		else
 		{

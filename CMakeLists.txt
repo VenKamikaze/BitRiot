@@ -70,7 +70,6 @@ set(SOURCES ./src/AIGameView.cpp
 ./src/rocket/events/Event.cpp
 ./src/rocket/events/EventHandler.cpp
 ./src/rocket/events/EventHandlerOptions.cpp
-./src/rocket/events/EventHandlerStartGame.cpp
 ./src/rocket/events/EventInstancer.cpp
 ./src/rocket/events/EventManager.cpp
 ./src/ExplosionEntity.cpp
@@ -87,6 +86,7 @@ set(SOURCES ./src/AIGameView.cpp
 ./src/MickAssets.cpp
 ./src/MickBaseInput.cpp
 ./src/MickBaseSound.cpp
+./src/rocket/MickRocketElementUtil.cpp
 ./src/MickSDLAssets.cpp
 ./src/MickSDLInput.cpp
 ./src/MickSDLSound.cpp

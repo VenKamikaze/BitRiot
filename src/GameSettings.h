@@ -55,9 +55,12 @@ class GameSettings
     }
 
 	inline void setNumberOfPlayers(int allPlayers) {
-    	this->numPlayers = (MAX_PLAYERS >= allPlayers && allPlayers > 0) ? allPlayers : numPlayers;
-    	genders.resize(allPlayers+1);
-    	playerAIs.resize(allPlayers, true);
+		if(MAX_PLAYERS >= allPlayers && allPlayers > 0)
+		{
+	    	numPlayers = allPlayers;
+	    	genders.resize(allPlayers+1);
+	    	playerAIs.resize(allPlayers, true);
+		}
     }
 	inline void setBlockSpawnPercentage(int blockSpawnPercentage) {
     	this->blockPercentage = blockSpawnPercentage;
@@ -76,6 +79,8 @@ class GameSettings
 		this->gameState = state;
 	}
 
+	static const int MAX_PLAYERS = 4; // TODO 6;
+
   private:
 	~GameSettings();
     GAME_STATE gameState;
@@ -89,8 +94,6 @@ class GameSettings
     int mapHeight = Map::MAP_HEIGHT;  // unused for now
 
     float mapRatio = 1.3077;
-
-    const int MAX_PLAYERS = 6;
 
 };
 

@@ -29,6 +29,8 @@
 #define ROCKETINVADERSEVENTHANDLEROPTIONS_H
 
 #include "EventHandler.h"
+#include "GameSettings.h"
+#include "rocket/MickRocketElementUtil.h"
 
 /**
 	@author Peter Curry
@@ -41,6 +43,10 @@ public:
 	virtual ~EventHandlerOptions();
 
 	virtual void ProcessEvent(Rocket::Core::Event& event, const Rocket::Core::String& value);
+
+private:
+	void changeHumanPlayers(Rocket::Core::Event* event);
+	void changeTotalPlayers(Rocket::Core::Event* event);
 };
 
 #endif
