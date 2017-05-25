@@ -22,9 +22,10 @@
 #include "rocket/glue/RenderInterfaceSDL2.h"
 #include "rocket/glue/ShellFileInterface.h"
 
-//#include "rocket/events/EventInstancer.h"
-//#include "rocket/events/EventManager.h"
-//#include "rocket/events/EventHandlerStartGame.h"
+#include "GameSettings.h"
+#include "rocket/events/EventInstancer.h"
+#include "rocket/events/EventManager.h"
+#include "rocket/events/EventHandlerStartGame.h"
 
 class MenuRenderer
 {

@@ -8,7 +8,7 @@ GameEngine::GameEngine(SDL_Surface* back)
   //lpdd = p_dd;
   lpddsback = back;
 
-  m_state = MENU_RUNNING;
+  GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
 }
 
 GameEngine::~GameEngine()
@@ -29,7 +29,6 @@ GameEngine::~GameEngine()
   {
     delete m_pSpawningPool;
   }
-
 }
 
 void GameEngine::resetGame()
@@ -58,16 +57,13 @@ void GameEngine::resetGame()
   m_pPanel->setPlayerPointers(numPlayers, m_pPlayers[1], m_pPlayers[2],
                               m_pPlayers[3], m_pPlayers[4]);
   seedBlocksOnMap(blockPercentage);
-
-  //m_state = GAME_RUNNING;
-  //runEngine();
 }
 
-void GameEngine::runEngine()
+bool GameEngine::runEngine()
 {
-  switch (m_state)
+  switch (GameSettings::getInstance()->getGameState())
   {
-    case MENU_RUNNING:
+    case GameSettings::MENU_RUNNING:
       {
         if(menuSystem == NULL)
         {
@@ -76,17 +72,17 @@ void GameEngine::runEngine()
 
         if(! menuSystem->showMenu())
         {
-          m_state = GAME_INIT;
+          GameSettings::getInstance()->setGameState(GameSettings::GAME_INIT);
         }
         break;
       }
-    case GAME_INIT:
+    case GameSettings::GAME_INIT:
       {
         resetGame();
-        m_state = GAME_RUNNING;
+        GameSettings::getInstance()->setGameState(GameSettings::GAME_RUNNING);
         break;
       }
-    case GAME_RUNNING:
+    case GameSettings::GAME_RUNNING:
       {
         // read keyboard and other devices here
         for (int i = 0; i < 4; i++)
@@ -107,12 +103,13 @@ void GameEngine::runEngine()
         //as m_pPanel->setPlayerDead being updated one frame late
         break;
       }
-    case GAME_OVER:
+    case GameSettings::GAME_OVER:
       {
-
+    	return false;
         break;
       }
   }
+  return true;
 }
 
 

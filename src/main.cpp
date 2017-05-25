@@ -38,9 +38,6 @@
 #define NULL 0
 #endif
 
-#define LIBROCKET_TEST 1
-#ifdef LIBROCKET_TEST
-
 #include "MenuRenderer.h"
 
 #include <Rocket/Core.h>
@@ -50,7 +47,6 @@
 #include "rocket/glue/SystemInterfaceSDL2.h"
 #include "rocket/glue/RenderInterfaceSDL2.h"
 #include "rocket/glue/ShellFileInterface.h"
-#endif
 
 // DEFINES ////////////////////////////////////////////////
 
@@ -86,7 +82,7 @@ static const unsigned int ASK_FULLSCREEN  = (1 << 1);
 // game console
 //int consoleInit();
 //int consoleShutdown();
-int consoleMain();
+bool consoleMain();
 
 // GLOBALS ////////////////////////////////////////////////
 
@@ -215,13 +211,13 @@ int consoleInit()
 
 } // end Game_Init
 
-int consoleMain()
+bool consoleMain()
 {
   SDL_FillRect(sdl_primary, NULL, SDL_MapRGB(sdl_primary->format, 200, 200, 100)); // as per ddbltfxClear
 
   Uint32 startTime = SDL_GetTicks();
 
-  engine->runEngine();
+  bool keepRunning = engine->runEngine();
 
   while ((SDL_GetTicks() - startTime) < 33)
   {
@@ -230,7 +226,7 @@ int consoleMain()
     SDL_Delay(1);
   }
 
-  return 0;
+  return keepRunning;
 
 } // end Game_Main
 
@@ -279,10 +275,8 @@ int main(int argc, char* argv[])
   try
   {
     quitkey = consoleInit();
-#ifdef LIBROCKET_TEST
     rocketMenu = new MenuRenderer(sdl_renderer, sdl_window);
     engine->setMenuSystem(rocketMenu);
-#endif
   }
   catch(exception &e)
   {
@@ -328,7 +322,10 @@ int main(int argc, char* argv[])
       try
       {
         // main game processing goes here
-        consoleMain();
+        if(! consoleMain())
+        {
+          quitkey = 1;
+        }
       }
       catch(InputException& e)
       {
@@ -423,12 +420,10 @@ int main(int argc, char* argv[])
 
   delete MickSDLSound::getInstance(); // hmm...
 
-#ifdef LIBROCKET_TEST
   if (rocketMenu)
   {
     delete rocketMenu;
   }
-#endif
 
   cout << "Exiting.. " << endl;
   return 0;

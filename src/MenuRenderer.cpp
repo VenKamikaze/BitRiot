@@ -51,19 +51,15 @@ void MenuRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
 
   Rocket::Debugger::Initialise(Context);
 
-  Rocket::Core::ElementDocument *Document = Context->LoadDocument("mainmenu.rml");
-
   // Initialise the event instancer and handlers.
-//  EventInstancer* event_instancer = new EventInstancer();
-//  Rocket::Core::Factory::RegisterEventListenerInstancer(event_instancer);
-//  event_instancer->RemoveReference();
+  EventInstancer* event_instancer = new EventInstancer();
+  Rocket::Core::Factory::RegisterEventListenerInstancer(event_instancer);
+  event_instancer->RemoveReference();
 
-//  EventManager::getInstance()->RegisterEventHandler("start_game", new EventHandlerStartGame());
+  EventManager::getInstance()->RegisterEventHandler("start_game", new EventHandlerStartGame());
 
-  if(Document)
+  if(EventManager::getInstance()->LoadWindow("mainmenu.rml"))
   {
-    Document->Show();
-    Document->RemoveReference();
     m_context = Context;
   }
   else
@@ -125,24 +121,15 @@ bool MenuRenderer::showMenu()
           else if(event.key.keysym.sym == SDLK_ESCAPE)
           {
         	continueRenderingMenu = false;
+        	GameSettings::getInstance()->setGameState(GameSettings::GAME_OVER);
         	break;
           }
-          else if(event.key.keysym.sym == SDLK_DOWN)
+          else if(event.key.keysym.sym == SDLK_DOWN
+        		   || event.key.keysym.sym == SDLK_UP)
           {
         	Rocket::Core::Element* focussedElement = m_context->GetFocusElement();
         	int currentTabIndex = getTabIndex(focussedElement);
-        	Rocket::Core::Element* nextElement = getChildElementWithTabIndex(focussedElement->GetParentNode(), ++currentTabIndex);
-        	if(nextElement)
-        	{
-        	  nextElement->Focus();
-        	}
-        	break;
-          }
-          else if(event.key.keysym.sym == SDLK_UP)
-          {
-        	Rocket::Core::Element* focussedElement = m_context->GetFocusElement();
-        	int currentTabIndex = getTabIndex(focussedElement);
-        	Rocket::Core::Element* nextElement = getChildElementWithTabIndex(focussedElement->GetParentNode(), --currentTabIndex);
+        	Rocket::Core::Element* nextElement = getChildElementWithTabIndex(focussedElement->GetParentNode(), (event.key.keysym.sym == SDLK_DOWN) ? ++currentTabIndex : --currentTabIndex);
         	if(nextElement)
         	{
         	  nextElement->Focus();

@@ -21,6 +21,7 @@ class GameSettings
   public:
 	GameSettings();
 	static GameSettings* getInstance();
+	enum GAME_STATE { GAME_INIT, MENU_RUNNING, GAME_RUNNING, GAME_OVER };
 
 	inline int getNumberOfHumanPlayers() {
 		int human = 0;
@@ -68,8 +69,16 @@ class GameSettings
     	playerAIs.at(playerIndex) = isAI;
     }
 
+	inline GAME_STATE getGameState() {
+		return gameState;
+	}
+	inline void setGameState(GAME_STATE state) {
+		this->gameState = state;
+	}
+
   private:
 	~GameSettings();
+    GAME_STATE gameState;
 
 	int numPlayers = 4;
     int blockPercentage = 55;

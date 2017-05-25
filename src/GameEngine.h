@@ -28,18 +28,16 @@ class GameEngine
     }
     ~GameEngine();
 
-    void runEngine();
+    bool runEngine();
 
 
   private:
-    enum GAME_STATE { GAME_INIT, MENU_RUNNING, GAME_RUNNING, GAME_OVER };
-    GAME_STATE m_state;
-    SDL_Surface* lpddsback;
+    SDL_Surface* lpddsback = NULL;
     MenuRenderer* menuSystem = NULL;
-    EntityManager* m_pEntityManager;
-    InfoPanel* m_pPanel;
-    InputHandler* m_pInputHandler;
-    SpawningPool* m_pSpawningPool;
+    EntityManager* m_pEntityManager = NULL;
+    InfoPanel* m_pPanel = NULL;
+    InputHandler* m_pInputHandler = NULL;
+    SpawningPool* m_pSpawningPool = NULL;
     PlayerCharacterEntity* m_pPlayers[NUM_TEAMS];
     int m_numHumanPlayers;
     void resetGame();

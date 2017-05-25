@@ -10,7 +10,7 @@
     <div class="menu-container">
       <div class="menu">
 	      <button id="quickstart" tabindex="1" onclick="begin()">Quick Start</button><br />
-	      <button id="exit" tabindex="2" onclick="exit()">Exit</button><br />
+	      <button id="exit" tabindex="2" onclick="exit">Exit</button><br />
       </div>
     </div>
 		
