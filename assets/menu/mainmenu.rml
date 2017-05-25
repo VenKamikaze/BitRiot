@@ -5,12 +5,12 @@
 		<link rel="stylesheet" type="text/css" href="common.rcss"/>
 		<link type="text/rcss" href="mainmenu.rcss"/>
 	</head>
-	<body class="background" onshow="onShowNewScreen();">
+	<body class="background">
 		
     <div class="menu-container">
       <div class="menu">
-	      <button onclick="begin()">Quick Start</button><br />
-	      <button onclick="exit()">Exit</button><br />
+	      <button id="quickstart" tabindex="1" onclick="begin()">Quick Start</button><br />
+	      <button id="exit" tabindex="2" onclick="exit()">Exit</button><br />
       </div>
     </div>
 		

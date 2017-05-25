@@ -53,6 +53,13 @@ void MenuRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
 
   Rocket::Core::ElementDocument *Document = Context->LoadDocument("mainmenu.rml");
 
+  // Initialise the event instancer and handlers.
+//  EventInstancer* event_instancer = new EventInstancer();
+//  Rocket::Core::Factory::RegisterEventListenerInstancer(event_instancer);
+//  event_instancer->RemoveReference();
+
+//  EventManager::getInstance()->RegisterEventHandler("start_game", new EventHandlerStartGame());
+
   if(Document)
   {
     Document->Show();
@@ -122,8 +129,25 @@ bool MenuRenderer::showMenu()
           }
           else if(event.key.keysym.sym == SDLK_DOWN)
           {
-        	Rocket::Core::ElementDocument *document = m_context->GetDocument(0);
-        	document->GetElementById("singleplayer");/*->SetPseudoClass("hover", true);*/
+        	Rocket::Core::Element* focussedElement = m_context->GetFocusElement();
+        	int currentTabIndex = getTabIndex(focussedElement);
+        	Rocket::Core::Element* nextElement = getChildElementWithTabIndex(focussedElement->GetParentNode(), ++currentTabIndex);
+        	if(nextElement)
+        	{
+        	  nextElement->Focus();
+        	}
+        	break;
+          }
+          else if(event.key.keysym.sym == SDLK_UP)
+          {
+        	Rocket::Core::Element* focussedElement = m_context->GetFocusElement();
+        	int currentTabIndex = getTabIndex(focussedElement);
+        	Rocket::Core::Element* nextElement = getChildElementWithTabIndex(focussedElement->GetParentNode(), --currentTabIndex);
+        	if(nextElement)
+        	{
+        	  nextElement->Focus();
+        	}
+        	break;
           }
 
           m_context->ProcessKeyDown(systemInterface->TranslateKey(event.key.keysym.sym), systemInterface->GetKeyModifiers());
@@ -137,6 +161,33 @@ bool MenuRenderer::showMenu()
   m_context->Update();
 
   return continueRenderingMenu;
+}
+
+int MenuRenderer::getTabIndex(Rocket::Core::Element* element)
+{
+  if(element->HasAttribute(TAB_INDEX))
+  {
+	Rocket::Core::String tabIndex = element->GetAttribute(TAB_INDEX)->Get<Rocket::Core::String>();
+	return atoi(tabIndex.CString());
+  }
+  return 0;
+}
+
+Rocket::Core::Element* MenuRenderer::getChildElementWithTabIndex(Rocket::Core::Element* parentNode, int tabIndex)
+{
+  for(int i = 0; i < parentNode->GetNumChildren(false); i++)
+  {
+	if(parentNode->GetChild(i) != NULL &&
+			parentNode->GetChild(i)->GetAttribute(TAB_INDEX) != NULL)
+	{
+	  Rocket::Core::String siblingTabIndex = parentNode->GetChild(i)->GetAttribute(TAB_INDEX)->Get<Rocket::Core::String>();
+	  if(tabIndex == atoi(siblingTabIndex.CString()))
+	  {
+		return parentNode->GetChild(i);
+	  }
+	}
+  }
+  return NULL;
 }
 
 MenuRenderer::~MenuRenderer()

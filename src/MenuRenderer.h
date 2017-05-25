@@ -22,6 +22,9 @@
 #include "rocket/glue/RenderInterfaceSDL2.h"
 #include "rocket/glue/ShellFileInterface.h"
 
+//#include "rocket/events/EventInstancer.h"
+//#include "rocket/events/EventManager.h"
+//#include "rocket/events/EventHandlerStartGame.h"
 
 class MenuRenderer
 {
@@ -32,9 +35,11 @@ class MenuRenderer
 
   private:
     void init(SDL_Renderer* renderer, SDL_Window *screen);
+    int getTabIndex(Rocket::Core::Element* node);
+    Rocket::Core::Element* getChildElementWithTabIndex(Rocket::Core::Element* parentNode, int tabIndex);
 
     Rocket::Core::Context* m_context = NULL;
-
+    const char* TAB_INDEX = "tabindex";
 };
 
 #endif /* MICKRENDERER_H_ */
