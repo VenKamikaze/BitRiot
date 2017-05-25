@@ -19,73 +19,86 @@ namespace std
 class GameSettings
 {
   public:
-	GameSettings();
-	static GameSettings* getInstance();
-	enum GAME_STATE { GAME_INIT, MENU_RUNNING, GAME_RUNNING, GAME_OVER };
+    GameSettings();
+    static GameSettings* getInstance();
+    enum GAME_STATE { GAME_INIT, MENU_RUNNING, GAME_RUNNING, GAME_OVER };
 
-	inline int getNumberOfHumanPlayers() {
-		int human = 0;
-		for(int i = 0; i < numPlayers; i++)
-		{
-		  if(! playerAIs.at(i))
-		  {
-			++human;
-		  }
-		}
-		return human;
-	}
-
-	inline int getNumberOfPlayers() {
-    	return numPlayers;
-    }
-	inline int getBlockSpawnPercentage() {
-    	return blockPercentage;
-    }
-	inline std::vector<bool> getPlayerGenders() {
-    	return genders;
-    }
-	inline std::vector<bool> getPlayerAIs() {
-    	return playerAIs;
-    }
-	inline int getMapWidth() {
-    	return mapWidth;
-    }
-	inline int getMapHeight() {
-    	return mapHeight;
+    inline int getNumberOfHumanPlayers()
+    {
+      int human = 0;
+      for(int i = 0; i < numPlayers; i++)
+      {
+        if(! playerAIs.at(i))
+        {
+          ++human;
+        }
+      }
+      return human;
     }
 
-	inline void setNumberOfPlayers(int allPlayers) {
-		if(MAX_PLAYERS >= allPlayers && allPlayers > 0)
-		{
-	    	numPlayers = allPlayers;
-	    	genders.resize(allPlayers+1);
-	    	playerAIs.resize(allPlayers, true);
-		}
+    inline int getNumberOfPlayers()
+    {
+      return numPlayers;
     }
-	inline void setBlockSpawnPercentage(int blockSpawnPercentage) {
-    	this->blockPercentage = blockSpawnPercentage;
+    inline int getBlockSpawnPercentage()
+    {
+      return blockPercentage;
     }
-	inline void setPlayerGender(int playerIndex, bool isMale) {
-    	genders.at(playerIndex) = isMale;
+    inline std::vector<bool> getPlayerGenders()
+    {
+      return genders;
     }
-	inline void setPlayerAI(int playerIndex, bool isAI) {
-    	playerAIs.at(playerIndex) = isAI;
+    inline std::vector<bool> getPlayerAIs()
+    {
+      return playerAIs;
+    }
+    inline int getMapWidth()
+    {
+      return mapWidth;
+    }
+    inline int getMapHeight()
+    {
+      return mapHeight;
     }
 
-	inline GAME_STATE getGameState() {
-		return gameState;
-	}
-	inline void setGameState(GAME_STATE state) {
-		this->gameState = state;
-	}
+    inline void setNumberOfPlayers(int allPlayers)
+    {
+      if(MAX_PLAYERS >= allPlayers && allPlayers > 0)
+      {
+        numPlayers = allPlayers;
+        genders.resize(allPlayers+1);
+        playerAIs.resize(allPlayers, true);
+      }
+    }
+    inline void setBlockSpawnPercentage(int blockSpawnPercentage)
+    {
+      this->blockPercentage = blockSpawnPercentage;
+    }
+    inline void setPlayerGender(int playerIndex, bool isMale)
+    {
+      genders.at(playerIndex) = isMale;
+    }
+    inline void setPlayerAI(int playerIndex, bool isAI)
+    {
+      playerAIs.at(playerIndex) = isAI;
+    }
 
-	static const int MAX_PLAYERS = 4; // TODO 6;
+    inline GAME_STATE getGameState()
+    {
+      return gameState;
+    }
+    inline void setGameState(GAME_STATE state)
+    {
+      this->gameState = state;
+    }
+
+    static const int MAX_PLAYERS = 4; // TODO 6;
 
   private:
-	~GameSettings();
+    ~GameSettings();
     GAME_STATE gameState;
 
-	int numPlayers = 4;
+    int numPlayers = 4;
     int blockPercentage = 55;
     std::vector<bool> genders;
     std::vector<bool> playerAIs;

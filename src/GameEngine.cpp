@@ -105,7 +105,7 @@ bool GameEngine::runEngine()
       }
     case GameSettings::GAME_OVER:
       {
-    	return false;
+        return false;
         break;
       }
   }
@@ -214,7 +214,7 @@ void GameEngine::initHumanPlayers(int numPlayers, std::vector<bool>* malePlayers
     {
       case 1:
       case 4:
-    	  atX = 1;
+        atX = 1;
         break;
       case 2:
       case 3:
@@ -222,20 +222,20 @@ void GameEngine::initHumanPlayers(int numPlayers, std::vector<bool>* malePlayers
         break;
       case 5:
       case 6:
-    	atX = GameSettings::getInstance()->getMapWidth() / 2;
-    	break;
+        atX = GameSettings::getInstance()->getMapWidth() / 2;
+        break;
     }
     switch (i)
     {
       case 1:
       case 3:
       case 5:
-    	atY = 1;
+        atY = 1;
         break;
       case 2:
       case 4:
       case 6:
-    	  atY = GameSettings::getInstance()->getMapHeight() - 2;
+        atY = GameSettings::getInstance()->getMapHeight() - 2;
         break;
     }
 

@@ -120,21 +120,21 @@ bool MenuRenderer::showMenu()
           }
           else if(event.key.keysym.sym == SDLK_ESCAPE)
           {
-        	continueRenderingMenu = false;
-        	GameSettings::getInstance()->setGameState(GameSettings::GAME_OVER);
-        	break;
+            continueRenderingMenu = false;
+            GameSettings::getInstance()->setGameState(GameSettings::GAME_OVER);
+            break;
           }
           else if(event.key.keysym.sym == SDLK_DOWN
-        		   || event.key.keysym.sym == SDLK_UP)
+                  || event.key.keysym.sym == SDLK_UP)
           {
-        	Rocket::Core::Element* focussedElement = m_context->GetFocusElement();
-        	int currentTabIndex = MickRocketElementUtil::getTabIndex(focussedElement);
-        	Rocket::Core::Element* nextElement = MickRocketElementUtil::getChildElementWithTabIndex(focussedElement->GetParentNode(), (event.key.keysym.sym == SDLK_DOWN) ? ++currentTabIndex : --currentTabIndex);
-        	if(nextElement)
-        	{
-        	  nextElement->Focus();
-        	}
-        	break;
+            Rocket::Core::Element* focussedElement = m_context->GetFocusElement();
+            int currentTabIndex = MickRocketElementUtil::getTabIndex(focussedElement);
+            Rocket::Core::Element* nextElement = MickRocketElementUtil::getChildElementWithTabIndex(focussedElement->GetParentNode(), (event.key.keysym.sym == SDLK_DOWN) ? ++currentTabIndex : --currentTabIndex);
+            if(nextElement)
+            {
+              nextElement->Focus();
+            }
+            break;
           }
 
           m_context->ProcessKeyDown(systemInterface->TranslateKey(event.key.keysym.sym), systemInterface->GetKeyModifiers());

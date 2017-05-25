@@ -139,7 +139,8 @@ void EventHandlerOptions::ProcessEvent(Rocket::Core::Event& event, const Rocket:
 	}
 	else if (value == "totalplayers")
 	{
-		changeTotalPlayers(&event);
-		changeHumanPlayers(NULL);
+		// TODO, FIXME causes out of bounds check to fail - presumably in GameEngine?
+		//changeTotalPlayers(&event);
+		//changeHumanPlayers(NULL);
 	}
 }
