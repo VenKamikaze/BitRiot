@@ -9,6 +9,7 @@
 
 
 #include "EntityFactory.h"
+#include "GameSettings.h"
 
 class InfoPanel
 {

@@ -9,6 +9,7 @@
 #include "EntityMessageQueue.h"
 #include "DataReader.h"
 #include "GameEntity.h"
+#include "GameSettings.h"
 #include "AIGameView.h"
 
 

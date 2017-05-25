@@ -11,6 +11,7 @@
 #include "AIGameView.h"
 
 #include "Map.h"
+#include "GameSettings.h"
 
 using namespace std;
 #include <list>

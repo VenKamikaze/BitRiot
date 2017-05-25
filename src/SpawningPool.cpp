@@ -184,8 +184,8 @@ EntityType SpawningPool::getRandomType()
 
 bool SpawningPool::getEmptyTile(int & x, int & y)
 {
-  x = 1 + (rand()%(Map::MAP_WIDTH - 1));
-  y = 1 + (rand()%(Map::MAP_HEIGHT - 1));
+  x = 1 + (rand()%(GameSettings::getInstance()->getMapWidth() - 1));
+  y = 1 + (rand()%(GameSettings::getInstance()->getMapHeight() - 1));
 
   if (Map::getInstance()->staticTileAt(x, y) == Map::EMPTY)
   {

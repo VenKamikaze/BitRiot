@@ -13,7 +13,7 @@ bool InfoPanel::DRAW_HEALTH_UNDER_PLAYERS = true;
 InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, std::vector<bool>* malePlayers)
 {
   WIDTH = PANEL_TILE_WIDTH * Map::TILE_WIDTH;
-  HEIGHT = Map::MAP_HEIGHT * Map::TILE_HEIGHT;
+  HEIGHT = GameSettings::getInstance()->getMapHeight() * Map::TILE_HEIGHT;
 
   m_players = numPlayers;
 
@@ -325,7 +325,7 @@ void InfoPanel::drawTextGDI(const char * text, int x, int y,
 
 void InfoPanel::drawBGTiles()
 {
-  for (int y = 0; y < Map::MAP_HEIGHT; y++)
+  for (int y = 0; y < GameSettings::getInstance()->getMapHeight(); y++)
   {
     for (int x = 0; x < InfoPanel::PANEL_TILE_WIDTH; x++)
     {

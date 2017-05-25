@@ -8,6 +8,7 @@
 #include "DynamicMap.h"
 #include "PlayerCharacterEntity.h"
 #include "EntityFactory.h"
+#include "GameSettings.h"
 
 using namespace std;
 

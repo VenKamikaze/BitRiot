@@ -4,7 +4,7 @@
 EntityManager::EntityManager()
 {
   // set dynamicMap vector sizes to map width and height
-  m_pDynamicMap = new DynamicMap(Map::MAP_WIDTH, Map::MAP_HEIGHT);
+  m_pDynamicMap = new DynamicMap(GameSettings::getInstance()->getMapWidth(), GameSettings::getInstance()->getMapHeight());
 
   for (int i = 0; i < 4; i++)
   {
@@ -209,9 +209,9 @@ void EntityManager::runCollisions()
 {
   // sends collision data between colliding entities
   // for each tile, run collisions between entities
-  for (int y = 1; y < Map::MAP_HEIGHT - 1; y++)
+  for (int y = 1; y < GameSettings::getInstance()->getMapHeight() - 1; y++)
   {
-    for (int x = 1; x < Map::MAP_WIDTH - 1; x++)
+    for (int x = 1; x < GameSettings::getInstance()->getMapWidth() - 1; x++)
     {
       if (m_pDynamicMap->entityMap[x][y].size() >= 2)
       {
