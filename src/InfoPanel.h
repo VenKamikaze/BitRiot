@@ -13,7 +13,7 @@
 class InfoPanel
 {
   public:
-    InfoPanel(SDL_Surface* backbuf, int numPlayers, bool * gender);
+    InfoPanel(SDL_Surface* backbuf, int numPlayers, std::vector<bool>* malePlayers);
     ~InfoPanel();
 
     static const int PANEL_TILE_WIDTH = 7;

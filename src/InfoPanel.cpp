@@ -10,7 +10,7 @@ int InfoPanel::HEIGHT=13 * Map::TILE_HEIGHT; //unknown here
 bool InfoPanel::DRAW_HEALTH_UNDER_PLAYERS = true;
 
 
-InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, bool * isMale)
+InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, std::vector<bool>* malePlayers)
 {
   WIDTH = PANEL_TILE_WIDTH * Map::TILE_WIDTH;
   HEIGHT = Map::MAP_HEIGHT * Map::TILE_HEIGHT;
@@ -43,7 +43,7 @@ InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, bool * isMale)
   {
     stringstream ss;
     ss << "assets/bitmaps/player" << (i + 1);
-    if (isMale[i])
+    if (malePlayers->at(i) == true)
     {
       ss << "male";
     }

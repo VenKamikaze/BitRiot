@@ -16,6 +16,7 @@
 #include <SDL2/SDL.h>
 
 #include "MenuRenderer.h"
+#include "GameSettings.h"
 
 class GameEngine
 {
@@ -41,8 +42,8 @@ class GameEngine
     SpawningPool* m_pSpawningPool;
     PlayerCharacterEntity* m_pPlayers[NUM_TEAMS];
     int m_numHumanPlayers;
-    void resetGame(int numHumanPlayers);
-    void initHumanPlayers(int numPlayers, bool* maleGender, bool* botAI);
+    void resetGame();
+    void initHumanPlayers(int numPlayers, std::vector<bool>* malePlayers, std::vector<bool>* playerAIs);
     void seedBlocksOnMap(int blockPercentage);
 
 };

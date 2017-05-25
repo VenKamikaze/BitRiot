@@ -32,24 +32,26 @@ GameEngine::~GameEngine()
 
 }
 
-void GameEngine::resetGame(int numHumanPlayers)
+void GameEngine::resetGame()
 {
-  int numPlayers = 4;
-  int blockPercentage = 55;
-  bool gender[5] = { true, true, false, false, true };
-  bool botAI[4] = { true, true, true, true }; // init all as AI first
+  int numHumanPlayers = GameSettings::getInstance()->getNumberOfHumanPlayers();
+  int numPlayers =  GameSettings::getInstance()->getNumberOfPlayers();
+  int blockPercentage =  GameSettings::getInstance()->getBlockSpawnPercentage();
+  std::vector<bool> genders = GameSettings::getInstance()->getPlayerGenders();
+  std::vector<bool> playerAIs = GameSettings::getInstance()->getPlayerAIs();
+
   for (int player = numPlayers-1; player >= (numPlayers - numHumanPlayers) ; player--)
   {
     // reverse iterate, player one is actually botAI[3]
-    botAI[player] = false;
+    playerAIs.at(player) = false;
   }
 
   // after setting initialisation parameters
   m_pEntityManager = new EntityManager();
-  m_pPanel = new InfoPanel(lpddsback, numPlayers, &gender[1]);
+  m_pPanel = new InfoPanel(lpddsback, numPlayers, &genders);
   m_pInputHandler = new InputHandler();
   m_pSpawningPool = new SpawningPool(numPlayers * 100);
-  initHumanPlayers(numPlayers, &gender[0], &botAI[0]);
+  initHumanPlayers(numPlayers, &genders, &playerAIs);
   m_pInputHandler->setPointers(numPlayers, m_pPlayers[1], m_pPlayers[2],
                                m_pPlayers[3], m_pPlayers[4], m_pEntityManager->getDynamicMap(),
                                m_pPanel);
@@ -74,14 +76,13 @@ void GameEngine::runEngine()
 
         if(! menuSystem->showMenu())
         {
-          //menuSystem->getSettings();
           m_state = GAME_INIT;
         }
         break;
       }
     case GAME_INIT:
       {
-        resetGame(0);
+        resetGame();
         m_state = GAME_RUNNING;
         break;
       }
@@ -102,7 +103,7 @@ void GameEngine::runEngine()
         m_pEntityManager->runFrame();
 
         m_pEntityManager->renderEntities(lpddsback);
-        m_pPanel->renderSurfaceTo(lpddsback, (Map::MAP_WIDTH * Map::TILE_WIDTH), 0); //Possible but very rare crash here, due to dangling pointers
+        m_pPanel->renderSurfaceTo(lpddsback, (GameSettings::getInstance()->getMapWidth() * Map::TILE_WIDTH), 0); //Possible but very rare crash here, due to dangling pointers
         //as m_pPanel->setPlayerDead being updated one frame late
         break;
       }
@@ -135,9 +136,9 @@ void GameEngine::seedBlocksOnMap(int blockPercentage)
 
   EntityMessageQueue * emq = EntityMessageQueue::getInstance();
 
-  for (int y = 1; y < Map::MAP_HEIGHT - 1; y++)
+  for (int y = 1; y < GameSettings::getInstance()->getMapHeight() - 1; y++)
   {
-    for (int x = 1; x < Map::MAP_WIDTH - 1; x++)
+    for (int x = 1; x < GameSettings::getInstance()->getMapWidth() - 1; x++)
     {
       bool badSpot = false;
       // check if in player spawn corners
@@ -145,15 +146,15 @@ void GameEngine::seedBlocksOnMap(int blockPercentage)
       {
         badSpot = true;
       }
-      if ((x < 4) && (y > Map::MAP_HEIGHT - 5))
+      if ((x < 4) && (y > GameSettings::getInstance()->getMapHeight() - 5))
       {
         badSpot = true;
       }
-      if ((x > Map::MAP_WIDTH - 5) && (y < 4))
+      if ((x > GameSettings::getInstance()->getMapWidth() - 5) && (y < 4))
       {
         badSpot = true;
       }
-      if ((x > Map::MAP_WIDTH - 5) && (y > Map::MAP_HEIGHT - 5))
+      if ((x > GameSettings::getInstance()->getMapWidth() - 5) && (y > GameSettings::getInstance()->getMapHeight() - 5))
       {
         badSpot = true;
       }
@@ -170,15 +171,15 @@ void GameEngine::seedBlocksOnMap(int blockPercentage)
       {
         team = 1;
       }
-      if (x >= Map::MAP_WIDTH - 6 && y >= Map::MAP_HEIGHT - 5)
+      if (x >= GameSettings::getInstance()->getMapWidth() - 6 && y >= GameSettings::getInstance()->getMapHeight() - 5)
       {
         team = 2;
       }
-      if (x >= Map::MAP_WIDTH - 6 && y < 5)
+      if (x >= GameSettings::getInstance()->getMapWidth() - 6 && y < 5)
       {
         team = 3;
       }
-      if (x < 6 && y >= Map::MAP_HEIGHT - 5)
+      if (x < 6 && y >= GameSettings::getInstance()->getMapHeight() - 5)
       {
         team = 4;
       }
@@ -199,7 +200,7 @@ void GameEngine::seedBlocksOnMap(int blockPercentage)
 
 }
 
-void GameEngine::initHumanPlayers(int numPlayers, bool * maleGender, bool * botAI)
+void GameEngine::initHumanPlayers(int numPlayers, std::vector<bool>* malePlayers, std::vector<bool>* playerAIs)
 {
   if (numPlayers > NUM_TEAMS)
   {
@@ -216,28 +217,34 @@ void GameEngine::initHumanPlayers(int numPlayers, bool * maleGender, bool * botA
     {
       case 1:
       case 4:
-        atX = 1;
+    	  atX = 1;
         break;
       case 2:
       case 3:
-        atX = Map::MAP_WIDTH - 2;
+        atX = GameSettings::getInstance()->getMapWidth() - 2;
         break;
+      case 5:
+      case 6:
+    	atX = GameSettings::getInstance()->getMapWidth() / 2;
+    	break;
     }
     switch (i)
     {
       case 1:
       case 3:
-        atY = 1;
+      case 5:
+    	atY = 1;
         break;
       case 2:
       case 4:
-        atY = Map::MAP_HEIGHT - 2;
+      case 6:
+    	  atY = GameSettings::getInstance()->getMapHeight() - 2;
         break;
     }
 
     unsigned int flags = 0;
 
-    if (botAI[i - 1] == true)
+    if (playerAIs->at(i - 1) == true)
     {
       flags |= GameEntity::AI_CONTROLLED_BOT_FLAG;
     }
@@ -251,7 +258,7 @@ void GameEngine::initHumanPlayers(int numPlayers, bool * maleGender, bool * botA
     // set image filename with "extension"
     stringstream ss;
     ss << "assets/bitmaps/player" << i;
-    if (maleGender[i] == true)
+    if (malePlayers->at(i) == true)
     {
       ss << "male.bmp";
     }
