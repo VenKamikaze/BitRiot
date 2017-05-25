@@ -67,9 +67,16 @@ set(SOURCES ./src/AIGameView.cpp
 ./src/EntityMessageQueue.cpp
 ./src/EntityRenderer.cpp
 ./src/EntityRendererFactory.cpp
+./src/rocket/events/Event.cpp
+./src/rocket/events/EventHandler.cpp
+./src/rocket/events/EventHandlerOptions.cpp
+./src/rocket/events/EventHandlerStartGame.cpp
+./src/rocket/events/EventInstancer.cpp
+./src/rocket/events/EventManager.cpp
 ./src/ExplosionEntity.cpp
 ./src/GameEngine.cpp
 ./src/GameEntity.cpp
+./src/GameSettings.cpp
 ./src/GameSound.cpp
 ./src/IQPowerupEntity.cpp
 ./src/InfoPanel.cpp
