@@ -36,26 +36,24 @@ void GameEngine::resetGame()
   int numHumanPlayers = GameSettings::getInstance()->getNumberOfHumanPlayers();
   int numPlayers =  GameSettings::getInstance()->getNumberOfPlayers();
   int blockPercentage =  GameSettings::getInstance()->getBlockSpawnPercentage();
-  std::vector<bool> genders = GameSettings::getInstance()->getPlayerGenders();
-  std::vector<bool> playerAIs = GameSettings::getInstance()->getPlayerAIs();
+  std::vector<bool>* genders = GameSettings::getInstance()->getPlayerGenders();
+  std::vector<bool>* playerAIs = GameSettings::getInstance()->getPlayerAIs();
 
   for (int player = numPlayers-1; player >= (numPlayers - numHumanPlayers) ; player--)
   {
     // reverse iterate, player one is actually botAI[3]
-    playerAIs.at(player) = false;
+    playerAIs->at(player) = false;
   }
 
   // after setting initialisation parameters
   m_pEntityManager = new EntityManager();
-  m_pPanel = new InfoPanel(lpddsback, numPlayers, &genders);
+  m_pPanel = new InfoPanel(lpddsback, numPlayers, genders);
   m_pInputHandler = new InputHandler();
   m_pSpawningPool = new SpawningPool(numPlayers * 100);
-  initHumanPlayers(numPlayers, &genders, &playerAIs);
-  m_pInputHandler->setPointers(numPlayers, m_pPlayers[1], m_pPlayers[2],
-                               m_pPlayers[3], m_pPlayers[4], m_pEntityManager->getDynamicMap(),
-                               m_pPanel);
-  m_pPanel->setPlayerPointers(numPlayers, m_pPlayers[1], m_pPlayers[2],
-                              m_pPlayers[3], m_pPlayers[4]);
+  initHumanPlayers(numPlayers, genders, playerAIs);
+  m_pInputHandler->setPointers(numPlayers, m_pPlayers[1], m_pPlayers[2], m_pPlayers[3], m_pPlayers[4],
+      m_pEntityManager->getDynamicMap(), m_pPanel);
+  m_pPanel->setPlayerPointers(numPlayers, m_pPlayers[1], m_pPlayers[2], m_pPlayers[3], m_pPlayers[4]);
   seedBlocksOnMap(blockPercentage);
 }
 
@@ -255,7 +253,7 @@ void GameEngine::initHumanPlayers(int numPlayers, std::vector<bool>* malePlayers
     // set image filename with "extension"
     stringstream ss;
     ss << "assets/bitmaps/player" << i;
-    if (malePlayers->at(i) == true)
+    if (malePlayers->at(i-1) == true)
     {
       ss << "male.bmp";
     }

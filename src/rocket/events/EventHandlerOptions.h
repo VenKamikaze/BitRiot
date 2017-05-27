@@ -25,8 +25,12 @@
  *
  */
 
-#ifndef ROCKETINVADERSEVENTHANDLEROPTIONS_H
-#define ROCKETINVADERSEVENTHANDLEROPTIONS_H
+
+// Note: This class no longer resembles the sample file from libRocket at all, sans the ProcessEvent method definition.
+//       I've kept the MIT license as part of this anyway.
+
+#ifndef ROCKETEVENTHANDLEROPTIONS_H
+#define ROCKETEVENTHANDLEROPTIONS_H
 
 #include "EventHandler.h"
 #include "GameSettings.h"
@@ -47,6 +51,9 @@ public:
 private:
 	void changeHumanPlayers(Rocket::Core::Event* event);
 	void changeTotalPlayers(Rocket::Core::Event* event);
+	void changeBlockTilePercentage(Rocket::Core::Event* event);
+        void togglePlayerGender(Rocket::Core::Event* event, int playerIndex);
+	void OptionsPageInit(Rocket::Core::ElementDocument* bodyElement);
 };
 
 #endif

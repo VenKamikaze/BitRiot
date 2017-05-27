@@ -24,19 +24,8 @@ InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, std::vector<bool>* ma
 
   clearSelections();
 
-  // set up surface
-//  DDSURFACEDESC2 ddsd;
-//  memset(&ddsd,0,sizeof(ddsd));
-//  ddsd.dwSize = sizeof(ddsd);
-//  ddsd.dwFlags = DDSD_WIDTH | DDSD_HEIGHT | DDSD_CAPS;
-//  ddsd.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN | DDSCAPS_VIDEOMEMORY;
-
-//  ddsd.dwWidth = WIDTH;
-//  ddsd.dwHeight = HEIGHT;
-
-//  lpdd->CreateSurface(&ddsd, &m_surface, NULL);
-
-  m_surface = SDL_CreateRGBSurface(0, WIDTH, HEIGHT, backbuf->format->BitsPerPixel, backbuf->format->Rmask, backbuf->format->Gmask, backbuf->format->Bmask, 0);
+  m_surface = SDL_CreateRGBSurface(0, WIDTH, HEIGHT, backbuf->format->BitsPerPixel, backbuf->format->Rmask,
+      backbuf->format->Gmask, backbuf->format->Bmask, 0);
 
   // set up face surfaces
   for (int i = 0; i < 4; i++)
@@ -53,22 +42,14 @@ InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, std::vector<bool>* ma
     }
     ss << "face.bmp";
 
-    //m_faceSurfaces[i] = DDLoadBitmap(lpdd, ss.str().c_str(), 0, 0);
     m_faceSurfaces[i] = SDL_LoadBMP(ss.str().c_str());
-
-
   }
-
-  //DDCOLORKEY key;
-  //key.dwColorSpaceLowValue = TRANSPARENT_COLOR;
-  //key.dwColorSpaceHighValue = TRANSPARENT_COLOR;
 
   // change to team colours and apply color key
   for (int i = 0; i < 4; ++i)
   {
     SDL_SetColorKey( m_faceSurfaces[i], SDL_TRUE, SDL_MapRGB(m_faceSurfaces[i]->format, 0, 255, 255) );
   }
-
 }
 
 InfoPanel::~InfoPanel()

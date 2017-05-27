@@ -17,15 +17,17 @@
 
 #include <Rocket/Core.h>
 
+class MickRocketElementUtil
+{
+  public:
+    MickRocketElementUtil();
 
-class MickRocketElementUtil {
-public:
-	MickRocketElementUtil();
-	static int getTabIndex(Rocket::Core::Element* element);
-	static Rocket::Core::Element* getChildElementWithTabIndex(Rocket::Core::Element* parentNode, int tabIndex);
-	static void appendTextToTextNode(Rocket::Core::Element* element, std::string toAppend);
-	static void replaceEndCharInTextNode(Rocket::Core::Element* element, std::string toReplace);
-	virtual ~MickRocketElementUtil();
+    static int getTabIndex(Rocket::Core::Element* element);
+    static Rocket::Core::Element* getChildElementWithTabIndex(Rocket::Core::Element* parentNode, int tabIndex);
+    static void appendTextToTextNode(Rocket::Core::Element* element, std::string toAppend);
+    static void replaceEndStringInTextNode(Rocket::Core::Element* element, std::string toReplace);
+
+    virtual ~MickRocketElementUtil();
 };
 
 #endif /* MICKROCKETELEMENTUTIL_H_ */

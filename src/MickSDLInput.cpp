@@ -364,6 +364,11 @@ set<KEY>* MickSDLInput::getKeysDown()
   return &keysCurrentlyDown;
 }
 
+SDL_Keycode MickSDLInput::getSDLKeycodeForKey(KEY k)
+{
+  return translateMap->find(k)->second;
+}
+
 void MickSDLInput::setupKeymap()
 {
   translateMap->insert(std::pair<KEY, SDL_Keycode>(KEY_UNKNOWN, SDLK_UNKNOWN  ));

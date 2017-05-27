@@ -44,13 +44,17 @@ class GameSettings
     {
       return blockPercentage;
     }
-    inline std::vector<bool> getPlayerGenders()
+    inline std::vector<bool>* getPlayerGenders()
     {
-      return genders;
+      return &genders;
     }
-    inline std::vector<bool> getPlayerAIs()
+    inline bool getPlayerGender(int playerIndex)
     {
-      return playerAIs;
+      return genders.at(playerIndex);
+    }
+    inline std::vector<bool>* getPlayerAIs()
+    {
+      return &playerAIs;
     }
     inline int getMapWidth()
     {
@@ -93,6 +97,10 @@ class GameSettings
     }
 
     static const int MAX_PLAYERS = 4; // TODO 6;
+    static const int MIN_PLAYERS = 1; // a player vs the default purple non player PC.
+
+    static const int MAX_BLOCK_PCT = 75;
+    static const int MIN_BLOCK_PCT = 20;
 
   private:
     ~GameSettings();
@@ -103,8 +111,8 @@ class GameSettings
     std::vector<bool> genders;
     std::vector<bool> playerAIs;
 
-    int mapWidth = Map::MAP_WIDTH;   // unused for now
-    int mapHeight = Map::MAP_HEIGHT;  // unused for now
+    int mapWidth = Map::MAP_WIDTH;   // not changeable outside of runtime flags for now
+    int mapHeight = Map::MAP_HEIGHT; // not changeable outside of runtime flags for now
 
     float mapRatio = 1.3077;
 
