@@ -41,10 +41,11 @@ void MenuRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
     throw std::runtime_error(std::string("Unable to init libRocket."));
   }
 
-  Rocket::Core::FontDatabase::LoadFontFace("Delicious-Bold.otf");
-  Rocket::Core::FontDatabase::LoadFontFace("Delicious-BoldItalic.otf");
-  Rocket::Core::FontDatabase::LoadFontFace("Delicious-Italic.otf");
-  Rocket::Core::FontDatabase::LoadFontFace("Delicious-Roman.otf");
+  // These appear to be non-free
+  //Rocket::Core::FontDatabase::LoadFontFace("assets/fonts/Delicious-Bold.otf");
+  //Rocket::Core::FontDatabase::LoadFontFace("assets/fonts/Delicious-BoldItalic.otf");
+  //Rocket::Core::FontDatabase::LoadFontFace("assets/fonts/Delicious-Italic.otf");
+  //Rocket::Core::FontDatabase::LoadFontFace("assets/fonts/Delicious-Roman.otf");
 
   Rocket::Core::Context *Context = Rocket::Core::CreateContext("default",
                                    Rocket::Core::Vector2i(window_width, window_height));
