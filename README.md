@@ -20,23 +20,24 @@ Here's an example of the tagged releases:
 * sdl-v1.1
 * sdl2-v1.2
 * sdl2-v1.3
+* sdl2-v1.39
 
-This indicates both the framework used underneath (win32, sdl, sdl2), plus the version of the game code, e.g. v1.1, v1.2. It means that the sdl2-v1.3 tag contains a lot of fixes and changes that are not within the sdl-v1.1 tag.
+This indicates both the framework used underneath (win32, sdl, sdl2), plus the version of the game code, e.g. v1.1, v1.2. It means that the sdl2-v1.39 tag contains a lot of fixes and changes that are not within the sdl-v1.1 tag.
 
 The master branch typically has the latest stable sdl2 code. It may or may not advance further as I don't have as much time to spend on this as I'd like. That being said, I'm very open to any contributions. Contributions to this code base are what enabled SDL2 support in the first place.
 
-The newest SDL2 version (v1.3) now supports a larger map option on startup (-b), fullscreen (-f), game controllers (plus rumble support) and hot joining (take over from CPU player).
+The newest SDL2 version (v1.39) now supports a larger map option on startup (-b), fullscreen (-f), game controllers (plus rumble support) and hot joining (take over from CPU player), and an initial implementation of a main menu.
 
 ![Larger map screenshot](https://raw.github.com/VenKamikaze/BitRiot/master/doco/screenshots/BitRiot-2.png)
 
 
 ## Branches
 
-The sdl2 branch should always have a reasonably stable SDL2 release of the game, with ongoing sdl2 development limited to the 'sdl2_ongoing' branch.
+The 'develop' branch should contain the latest development code for BitRiot, stability is not the primary concern of this branch. The 'master' branch should have somewhat stable / tested code within it. If you are looking to branch to add features, please fork and branch from 'develop' and file pull requests back to that branch, I'm thankful for any contributions you can make.
 
 Things that I'd like to do, but likely won't ever find time for (in order of personal interest). Note if the top two items are completed I'll remove the 'Beta' tag from the game title:
 
-* Create a basic menu selection screen on startup to configure game parameters
+* ~~Create a basic menu selection screen on startup to configure game parameters~~ (partly done, can be improved further)
 * Allow players to restart the game
 * ~~Fix up the input code~~ (done!)
 * ~~Port this to SDL2~~ (done! work may or may not continue to switch a lot of surfaces into textures)
@@ -46,14 +47,12 @@ Things that I'd like to do, but likely won't ever find time for (in order of per
 * ~~Controller input~~ (done!)
 * Network play (honestly, unless someone else did this I highly doubt I'd get around to even attempting)
 
-If you'd ever like to work on this code, please fork it and file pull requests - I'd be glad to accept them.
-
 Please note: If you'd found the original BitRiot release anywhere, you might notice the artwork in this one was different. This was only done out of safety incase there were any concerns over the artwork included in the original release.
 
 # Build
 
-To build the game, first make sure you have the necessary dependencies installed on your system. The main master branch is now using SDL2. Assuming you are compiling this branch, you will need:
-CMake 3.4.3, SDL 2.0.x, SDL2_mixer and SDL2_ttf.
+To build the game, first make sure you have the necessary dependencies installed on your system. The main master branch is now using SDL2 and libRocket. Assuming you are compiling this branch, you will need:
+CMake 3.4.3, SDL 2.0.x, SDL2_mixer and SDL2_ttf, SDL2_image, libRocket v1.3+.
 
 on ubuntu/debian:
 ```
