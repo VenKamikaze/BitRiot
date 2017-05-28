@@ -13,21 +13,30 @@ GameEngine::GameEngine(SDL_Surface* back)
 
 GameEngine::~GameEngine()
 {
+  uninitialise();
+}
+
+void GameEngine::uninitialise()
+{
   if (m_pInputHandler)
   {
     delete m_pInputHandler;
+    m_pInputHandler = NULL;
   }
   if (m_pPanel)
   {
     delete m_pPanel;
+    m_pPanel = NULL;
   }
   if (m_pEntityManager)
   {
     delete m_pEntityManager;
+    m_pEntityManager = NULL;
   }
   if (m_pSpawningPool)
   {
     delete m_pSpawningPool;
+    m_pSpawningPool = NULL;
   }
 }
 
@@ -62,50 +71,61 @@ bool GameEngine::runEngine()
   switch (GameSettings::getInstance()->getGameState())
   {
     case GameSettings::MENU_RUNNING:
+    {
+      if (menuSystem == NULL)
       {
-        if(menuSystem == NULL)
-        {
-          throw std::runtime_error(std::string("About to render menu, but no menu rendering system found!"));
-        }
-
-        if(! menuSystem->showMenu())
-        {
-          GameSettings::getInstance()->setGameState(GameSettings::GAME_INIT);
-        }
-        break;
+        throw std::runtime_error(std::string("About to render menu, but no menu rendering system found!"));
       }
+
+      if (!menuSystem->showMenu())
+      {
+        GameSettings::getInstance()->setGameState(GameSettings::GAME_INIT);
+      }
+      break;
+    }
     case GameSettings::GAME_INIT:
-      {
-        resetGame();
-        GameSettings::getInstance()->setGameState(GameSettings::GAME_RUNNING);
-        break;
-      }
+    {
+      resetGame();
+      GameSettings::getInstance()->setGameState(GameSettings::GAME_RUNNING);
+      break;
+    }
     case GameSettings::GAME_RUNNING:
+    {
+      // read keyboard and other devices here
+      for (int i = 0; i < GameSettings::getInstance()->getNumberOfPlayers(); i++)
       {
-        // read keyboard and other devices here
-        for (int i = 0; i < 4; i++)
-        {
-          m_pInputHandler->setPlayerDead(i, m_pEntityManager->getPlayerDead(i + 1));
-          m_pPanel->setPlayerDead(i, m_pEntityManager->getPlayerDead(i + 1));
-        }
-        m_pInputHandler->processKeyboardInput();
-
-        // game logic here...
-
-        m_pSpawningPool->update();
-
-        m_pEntityManager->runFrame();
-
-        m_pEntityManager->renderEntities(lpddsback);
-        m_pPanel->renderSurfaceTo(lpddsback, (GameSettings::getInstance()->getMapWidth() * Map::TILE_WIDTH), 0); //Possible but very rare crash here, due to dangling pointers
-        //as m_pPanel->setPlayerDead being updated one frame late
-        break;
+        m_pInputHandler->setPlayerDead(i, m_pEntityManager->getPlayerDead(i));
+        m_pPanel->setPlayerDead(i, m_pEntityManager->getPlayerDead(i));
       }
+      if(m_pEntityManager->allPlayersDead())
+      {
+        // If every player is dead, set game over state
+        // TODO look into a timed delay (maybe 5 seconds?) before setting GAME_OVER,
+        //   during which we continue to update and runFrame for a few seconds.
+        // This would be useful when all human players are dead but AI is still alive, incase
+        //   a human player wants to take over the AI.
+        GameSettings::getInstance()->setGameState(GameSettings::GAME_OVER);
+      }
+      m_pInputHandler->processKeyboardInput();
+
+      // game logic here...
+
+      m_pSpawningPool->update();
+
+      m_pEntityManager->runFrame();
+
+      m_pEntityManager->renderEntities(lpddsback);
+      m_pPanel->renderSurfaceTo(lpddsback, (GameSettings::getInstance()->getMapWidth() * Map::TILE_WIDTH), 0); //Possible but very rare crash here, due to dangling pointers
+      //as m_pPanel->setPlayerDead being updated one frame late
+      break;
+    }
     case GameSettings::GAME_OVER:
-      {
-        return false;
-        break;
-      }
+    {
+      // TODO show a score ? maybe number of seconds alive, number of bombs/eggs spawned etc?
+      // show for 10 seconds then set back to MENU_RUNNING?
+      return false;
+      break;
+    }
   }
   return true;
 }

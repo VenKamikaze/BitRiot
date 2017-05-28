@@ -25,9 +25,21 @@ class EntityManager
 
     void processMessageQueue(); // processes all messages in EntityMessageQueue (create, move and destroy entities)
     PlayerCharacterEntity * getPlayerPointer(int team);
-    bool getPlayerDead(int team)
+    bool getPlayerDead(int playerIndex)
     {
-      return m_playerDead[team - 1];
+      return m_playerDead->at(playerIndex);
+    }
+
+    bool allPlayersDead()
+    {
+      for(unsigned int i = 0; i < m_playerDead->size(); i++)
+      {
+        if(! m_playerDead->at(i))
+        {
+          return false;
+        }
+      }
+      return true;
     }
 
     DynamicMap * getDynamicMap()
@@ -40,7 +52,8 @@ class EntityManager
     void runAI(); // runs AI and movement for every entity
     void runCollisions(); // sends collision data between colliding entities
 
-    bool m_playerDead[4];
+    std::vector<bool>* m_playerDead = NULL;
+    //bool m_playerDead[4];
 
     // entity manager data structures
     DynamicMap * m_pDynamicMap;
