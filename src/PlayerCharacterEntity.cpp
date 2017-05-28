@@ -237,13 +237,13 @@ void PlayerCharacterEntity::determineGoals()
   bool goalFound = false;
   for (int x = m_tileX - RANGE; x <= m_tileX + RANGE; ++x)
   {
-    if (x < 0 || x >= Map::MAP_WIDTH)
+    if (x < 0 || x >= GameSettings::getInstance()->getMapWidth())
     {
       continue;
     }
     for (int y = m_tileY - RANGE; y <= m_tileY + RANGE; ++y)
     {
-      if (y < 0 || y >= Map::MAP_HEIGHT)
+      if (y < 0 || y >= GameSettings::getInstance()->getMapHeight())
       {
         continue;
       }
@@ -428,9 +428,9 @@ void PlayerCharacterEntity::determineInstructionsFromGoal()
               break;
             }
 
-            if (xCheck <= 0 || xCheck >= Map::MAP_WIDTH - 1)
+            if (xCheck <= 0 || xCheck >= GameSettings::getInstance()->getMapWidth() - 1)
               continue;
-            if (yCheck <= 0 || yCheck >= Map::MAP_HEIGHT - 1)
+            if (yCheck <= 0 || yCheck >= GameSettings::getInstance()->getMapHeight() - 1)
               continue;
 
             // is location accessible
@@ -1452,13 +1452,13 @@ void PlayerCharacterEntity::checkEnvironment()
   {
     for (int x = m_tileX - EGG_RANGE; x <= m_tileX + EGG_RANGE; ++x)
     {
-      if (x < 0 || x >= Map::MAP_WIDTH)
+      if (x < 0 || x >= GameSettings::getInstance()->getMapWidth())
       {
         continue;
       }
       for (int y = m_tileY - EGG_RANGE; y <= m_tileY + EGG_RANGE; ++y)
       {
-        if (y < 0 || y >= Map::MAP_HEIGHT)
+        if (y < 0 || y >= GameSettings::getInstance()->getMapHeight())
         {
           continue;
         }
@@ -1515,13 +1515,13 @@ void PlayerCharacterEntity::checkEnvironment()
     bool nearbyThief = false;
     for (int x = targetX - EGG_RANGE; x <= targetX + EGG_RANGE; ++x)
     {
-      if (x < 0 || x >= Map::MAP_WIDTH)
+      if (x < 0 || x >= GameSettings::getInstance()->getMapWidth())
       {
         continue;
       }
       for (int y = targetY - EGG_RANGE; y <= targetY + EGG_RANGE; ++y)
       {
-        if (y < 0 || y >= Map::MAP_HEIGHT)
+        if (y < 0 || y >= GameSettings::getInstance()->getMapHeight())
         {
           continue;
         }

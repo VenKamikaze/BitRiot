@@ -15,34 +15,34 @@
 //#include "DDraw.h"
 #include <SDL2/SDL.h>
 
+#include "MenuRenderer.h"
+#include "GameSettings.h"
+
 class GameEngine
 {
   public:
     GameEngine(SDL_Surface* lpddsback);
+    void setMenuSystem(MenuRenderer* rocketMenu)
+    {
+      menuSystem = rocketMenu;
+    }
     ~GameEngine();
 
-    void runEngine();
+    bool runEngine();
 
 
   private:
-    enum GAME_STATE { GAME_INIT, GAME_RUNNING, GAME_OVER };
-    GAME_STATE m_state;
-
-    //LPDIRECTDRAW7 lpdd;
-    SDL_Surface*  lpddsback;
-
-    EntityManager * m_pEntityManager;
-    InfoPanel * m_pPanel;
-    InputHandler * m_pInputHandler;
-    SpawningPool * m_pSpawningPool;
-
-    PlayerCharacterEntity * m_pPlayers[NUM_TEAMS];
-    int m_numHumanPlayers; // number of human players, 1 - 4
-    void initHumanPlayers(int numPlayers, bool * maleGender, bool * botAI);
-
-
-    void seedBlocksOnMap(int blockPercentage); //places cpu team blocks over most of the map
-    // blockPercentage is value from 0 to 100
+    SDL_Surface* lpddsback = NULL;
+    MenuRenderer* menuSystem = NULL;
+    EntityManager* m_pEntityManager = NULL;
+    InfoPanel* m_pPanel = NULL;
+    InputHandler* m_pInputHandler = NULL;
+    SpawningPool* m_pSpawningPool = NULL;
+    PlayerCharacterEntity* m_pPlayers[NUM_TEAMS];
+    int m_numHumanPlayers;
+    void resetGame();
+    void initHumanPlayers(int numPlayers, std::vector<bool>* malePlayers, std::vector<bool>* playerAIs);
+    void seedBlocksOnMap(int blockPercentage);
 
 };
 

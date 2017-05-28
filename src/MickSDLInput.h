@@ -16,7 +16,7 @@ class InputHandler;
 #include <set>
 
 
-class MickSDLInput : MickBaseInput
+class MickSDLInput : public MickBaseInput
 {
   public:
     MickSDLInput(InputHandler *inputHandler);
@@ -37,6 +37,8 @@ class MickSDLInput : MickBaseInput
 
     static MickBaseInput* getInstance(InputHandler *inputHandler);
     static bool rumbleController(SDL_JoystickID joystickID, float strength, Uint32 length);
+
+    SDL_Keycode getSDLKeycodeForKey(KEY k); // needed for libRocket key translation map
 
   protected:
 
