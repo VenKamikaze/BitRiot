@@ -10,10 +10,10 @@ int InfoPanel::HEIGHT=13 * Map::TILE_HEIGHT; //unknown here
 bool InfoPanel::DRAW_HEALTH_UNDER_PLAYERS = true;
 
 
-InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, bool * isMale)
+InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, std::vector<bool>* malePlayers)
 {
   WIDTH = PANEL_TILE_WIDTH * Map::TILE_WIDTH;
-  HEIGHT = Map::MAP_HEIGHT * Map::TILE_HEIGHT;
+  HEIGHT = GameSettings::getInstance()->getMapHeight() * Map::TILE_HEIGHT;
 
   m_players = numPlayers;
 
@@ -24,26 +24,15 @@ InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, bool * isMale)
 
   clearSelections();
 
-  // set up surface
-//  DDSURFACEDESC2 ddsd;
-//  memset(&ddsd,0,sizeof(ddsd));
-//  ddsd.dwSize = sizeof(ddsd);
-//  ddsd.dwFlags = DDSD_WIDTH | DDSD_HEIGHT | DDSD_CAPS;
-//  ddsd.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN | DDSCAPS_VIDEOMEMORY;
-
-//  ddsd.dwWidth = WIDTH;
-//  ddsd.dwHeight = HEIGHT;
-
-//  lpdd->CreateSurface(&ddsd, &m_surface, NULL);
-
-  m_surface = SDL_CreateRGBSurface(0, WIDTH, HEIGHT, backbuf->format->BitsPerPixel, backbuf->format->Rmask, backbuf->format->Gmask, backbuf->format->Bmask, 0);
+  m_surface = SDL_CreateRGBSurface(0, WIDTH, HEIGHT, backbuf->format->BitsPerPixel, backbuf->format->Rmask,
+      backbuf->format->Gmask, backbuf->format->Bmask, 0);
 
   // set up face surfaces
   for (int i = 0; i < 4; i++)
   {
     stringstream ss;
-    ss << "bitmaps/player" << (i + 1);
-    if (isMale[i])
+    ss << "assets/bitmaps/player" << (i + 1);
+    if (malePlayers->at(i) == true)
     {
       ss << "male";
     }
@@ -53,22 +42,14 @@ InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, bool * isMale)
     }
     ss << "face.bmp";
 
-    //m_faceSurfaces[i] = DDLoadBitmap(lpdd, ss.str().c_str(), 0, 0);
     m_faceSurfaces[i] = SDL_LoadBMP(ss.str().c_str());
-
-
   }
-
-  //DDCOLORKEY key;
-  //key.dwColorSpaceLowValue = TRANSPARENT_COLOR;
-  //key.dwColorSpaceHighValue = TRANSPARENT_COLOR;
 
   // change to team colours and apply color key
   for (int i = 0; i < 4; ++i)
   {
     SDL_SetColorKey( m_faceSurfaces[i], SDL_TRUE, SDL_MapRGB(m_faceSurfaces[i]->format, 0, 255, 255) );
   }
-
 }
 
 InfoPanel::~InfoPanel()
@@ -169,7 +150,7 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
 
     //ddbltfx.dwFillColor = ((255 - intensity) << 16) + (intensity << 8);
 
-    Uint32 fillColour = SDL_MapRGB(m_surface->format, (255-intensity), intensity ,0);
+    Uint32 fillColour = SDL_MapRGB(m_surface->format, (255-intensity), intensity,0);
     destRect.y = yOffset + Map::TILE_HEIGHT; // + (int)(1.25f * (float)Map::TILE_HEIGHT);
     /*destRect.h = yOffset + (int)(1.75f * (float)Map::TILE_HEIGHT);*/
     destRect.h = Map::TILE_HEIGHT;
@@ -293,7 +274,7 @@ void InfoPanel::drawTextGDI(const char * text, int x, int y,
   // release device context (or it'd be locked)
   dest->ReleaseDC(xdc);
   */
-  static TTF_Font* font = TTF_OpenFont( "bitmaps/FreeMono.ttf", 10 );
+  static TTF_Font* font = TTF_OpenFont( "assets/bitmaps/FreeMono.ttf", 10 );
   if(!font)
   {
     SDL_Colour colour;
@@ -325,7 +306,7 @@ void InfoPanel::drawTextGDI(const char * text, int x, int y,
 
 void InfoPanel::drawBGTiles()
 {
-  for (int y = 0; y < Map::MAP_HEIGHT; y++)
+  for (int y = 0; y < GameSettings::getInstance()->getMapHeight(); y++)
   {
     for (int x = 0; x < InfoPanel::PANEL_TILE_WIDTH; x++)
     {

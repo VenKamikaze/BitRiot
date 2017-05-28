@@ -32,9 +32,21 @@
 #include "GameEngine.h"
 
 
+#include <GL/glew.h>
+
 #ifndef NULL
 #define NULL 0
 #endif
+
+#include "MenuRenderer.h"
+
+#include <Rocket/Core.h>
+#include <Rocket/Core/Input.h>
+#include <Rocket/Debugger/Debugger.h>
+
+#include "rocket/glue/SystemInterfaceSDL2.h"
+#include "rocket/glue/RenderInterfaceSDL2.h"
+#include "rocket/glue/ShellFileInterface.h"
 
 // DEFINES ////////////////////////////////////////////////
 
@@ -70,7 +82,7 @@ static const unsigned int ASK_FULLSCREEN  = (1 << 1);
 // game console
 //int consoleInit();
 //int consoleShutdown();
-int consoleMain();
+bool consoleMain();
 
 // GLOBALS ////////////////////////////////////////////////
 
@@ -79,11 +91,17 @@ SDL_Renderer* sdl_renderer = NULL;
 SDL_Texture* sdl_primary_texture = NULL;
 SDL_Surface* sdl_primary = NULL;
 
+MenuRenderer* rocketMenu = NULL;
+
 // game object globals
 GameEngine* engine = NULL;
 
-
 // FUNCTIONS //////////////////////////////////////////////
+
+#if !(SDL_VIDEO_RENDER_OGL)
+#error "Only the opengl sdl backend is supported. To add support for others, see http://mdqinc.com/blog/2013/01/integrating-librocket-with-sdl-2/"
+#endif
+
 
 int consoleInit()
 {
@@ -115,6 +133,10 @@ int consoleInit()
   }
   SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
   SDL_RenderSetLogicalSize(sdl_renderer, WINDOW_WIDTH, WINDOW_HEIGHT);
+
+  //SDL_RendererInfo rendererInfo;
+  //SDL_GetRendererInfo(sdl_renderer, &rendererInfo);
+  //std::cout << "Renderer: " << rendererInfo.name << std::endl;
 
   Uint32 pixel_format = SDL_GetWindowPixelFormat(sdl_window);
 
@@ -189,13 +211,13 @@ int consoleInit()
 
 } // end Game_Init
 
-int consoleMain()
+bool consoleMain()
 {
   SDL_FillRect(sdl_primary, NULL, SDL_MapRGB(sdl_primary->format, 200, 200, 100)); // as per ddbltfxClear
 
   Uint32 startTime = SDL_GetTicks();
 
-  engine->runEngine();
+  bool keepRunning = engine->runEngine();
 
   while ((SDL_GetTicks() - startTime) < 33)
   {
@@ -204,7 +226,7 @@ int consoleMain()
     SDL_Delay(1);
   }
 
-  return 0;
+  return keepRunning;
 
 } // end Game_Main
 
@@ -253,13 +275,30 @@ int main(int argc, char* argv[])
   try
   {
     quitkey = consoleInit();
+    rocketMenu = new MenuRenderer(sdl_renderer, sdl_window);
+    engine->setMenuSystem(rocketMenu);
   }
   catch(exception &e)
   {
-    cerr << e.what();
+    fprintf(stderr, "Exception occurred in initialisation code(): %s\n", e.what());
     quitkey = -1;
   }
 
+  /*#ifdef LIBROCKET_TEST
+    try
+    {
+      while(!menuDone)
+      {
+        menuDone = rocketMenu->showMenu();
+      }
+    }
+    catch(exception &e)
+    {
+      fprintf(stderr, "Caught exception when rendering menu.");
+      cerr << e.what();
+    }
+  #endif
+  */
   // Do game loop
   try
   {
@@ -283,7 +322,10 @@ int main(int argc, char* argv[])
       try
       {
         // main game processing goes here
-        consoleMain();
+        if(! consoleMain())
+        {
+          quitkey = 1;
+        }
       }
       catch(InputException& e)
       {
@@ -328,7 +370,7 @@ int main(int argc, char* argv[])
   }
   catch(exception& e)
   {
-    printf("Caught exception in main game loop.");
+    fprintf(stderr, "Caught exception in main game loop.");
     cerr << "Caught exception! ";
     cerr << e.what();
   }
@@ -377,6 +419,11 @@ int main(int argc, char* argv[])
   }
 
   delete MickSDLSound::getInstance(); // hmm...
+
+  if (rocketMenu)
+  {
+    delete rocketMenu;
+  }
 
   cout << "Exiting.. " << endl;
   return 0;

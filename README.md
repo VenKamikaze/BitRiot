@@ -62,11 +62,27 @@ sudo apt-get install cmake libsdl2-dev libsdl2-ttf-dev libsdl2-mixer-dev
 
 ## CMake
 
+Get and build libRocket first, as we use it for our menuing system.
+
+```
+git clone https://github.com/libRocket/libRocket.git
+cd libRocket
+mkdir target
+cd target
+cmake ../Build -DCMAKE_INSTALL_PREFIX:PATH=/usr
+make
+sudo make install #optional
+```
+
+Now get the BitRiot code and build it, link to the menu assets, and run BitRiot
 ```
 git clone https://github.com/VenKamikaze/BitRiot.git
 cd BitRiot/target
+# If you did not do a make install for libRocket, set the path to your libRocket source using: 
+#export LIBROCKET=/path/to/cloned/libRocket
 cmake ../
 make
+ln -s ../assets
 ./BitRiot
 ```
 
@@ -80,9 +96,11 @@ target/mingw32-make
 
 Steps shown above:
 
-1. Clone the repository:
-2. Change into the target directory inside your cloned BitRiot repository
-3. Generate a Makefile with CMake
-4. Build it
-5. Run the game - you should now have a 'BitRiot' executable in your current directory:
+1. Clone the libRocket repository
+2. Build the libRocket libraries
+3. Clone the BitRiot repository
+4. Change into the target directory inside your cloned BitRiot repository
+5. Generate a Makefile with CMake
+6. Build it
+7. Run the game - you should now have a 'BitRiot' executable in your current directory:
 

@@ -50,8 +50,8 @@ class DataReader
   private:
     DataReader();
 
-    map<string , map<string, int> > * m_pIntFilemap;
-    map<string , map<string, string> > * m_pStrFilemap;
+    map<string, map<string, int> > * m_pIntFilemap;
+    map<string, map<string, string> > * m_pStrFilemap;
 
     bool readTextFile(const string & filename);
     inline bool isWhitespace(char c);
