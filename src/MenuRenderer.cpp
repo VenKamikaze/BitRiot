@@ -41,6 +41,7 @@ void MenuRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
     throw std::runtime_error(std::string("Unable to init libRocket."));
   }
 
+  Rocket::Core::FontDatabase::LoadFontFace("assets/fonts/FreeMono.ttf");
   // These appear to be non-free
   //Rocket::Core::FontDatabase::LoadFontFace("assets/fonts/Delicious-Bold.otf");
   //Rocket::Core::FontDatabase::LoadFontFace("assets/fonts/Delicious-BoldItalic.otf");
