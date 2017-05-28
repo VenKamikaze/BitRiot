@@ -38,11 +38,11 @@ The 'develop' branch should contain the latest development code for BitRiot, sta
 Things that I'd like to do, but likely won't ever find time for (in order of personal interest). Note if the top two items are completed I'll remove the 'Beta' tag from the game title:
 
 * ~~Create a basic menu selection screen on startup to configure game parameters~~ (partly done, can be improved further)
-** When all human players have been eliminated, wait for a few moments then re-display the main menu (until we have a concept of a scoreboard)
-** Hitting escape in menu should quit game
-** Add variable to toggle hot joining and taking over existing AI players
-** Change menu font
-** Allow toggle of map height/width in menu options
+    * When all human players have been eliminated, wait for a few moments then re-display the main menu (until we have a concept of a scoreboard)
+    * Hitting escape in menu should quit game
+    * Add variable to toggle hot joining and taking over existing AI players
+    * Change menu font
+    * Allow toggle of map height/width in menu options
 * Allow players to restart the game
 * ~~Fix up the input code~~ (done!)
 * ~~Port this to SDL2~~ (done! work may or may not continue to switch a lot of surfaces into textures)
