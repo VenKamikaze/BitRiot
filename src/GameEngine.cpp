@@ -99,12 +99,19 @@ bool GameEngine::runEngine()
       }
       if(m_pEntityManager->allPlayersDead())
       {
-        // If every player is dead, set game over state
-        // TODO look into a timed delay (maybe 5 seconds?) before setting GAME_OVER,
-        //   during which we continue to update and runFrame for a few seconds.
-        // This would be useful when all human players are dead but AI is still alive, incase
-        //   a human player wants to take over the AI.
-        GameSettings::getInstance()->setGameState(GameSettings::GAME_OVER);
+        GameTimer* timer = GameOverTimer::getInstance();
+        if(! timer->isTimerTriggered())
+        {
+          // If every player is dead, set game over state
+          timer->setTimerTriggered();
+        }
+        else if(timer->getTimerCompleted())
+        {
+          // Timed delay during which we continue to update and runFrame for a few seconds.
+          // This is useful when all human players are dead but AI is still alive, incase
+          //   a human player wants to take over the AI.
+          GameSettings::getInstance()->setGameState(GameSettings::GAME_OVER);
+        }
       }
       m_pInputHandler->processKeyboardInput();
 
@@ -121,9 +128,22 @@ bool GameEngine::runEngine()
     }
     case GameSettings::GAME_OVER:
     {
-      // TODO show a score ? maybe number of seconds alive, number of bombs/eggs spawned etc?
-      // show for 10 seconds then set back to MENU_RUNNING?
-      return false;
+      // TODO show a score for 10 seconds then set back to MENU_RUNNING ?
+      // maybe number of seconds alive, number of bombs/eggs spawned etc?
+      GameTimer* timer = GameScoreBoardTimer::getInstance();
+      if(! timer->isTimerTriggered())
+      {
+        // If every player is dead, set game over state
+        timer->setTimerTriggered();
+      }
+      else if(timer->getTimerCompleted())
+      {
+        // Timed delay during which we continue to update and runFrame for a few seconds.
+        // This is useful when all human players are dead but AI is still alive, incase
+        //   a human player wants to take over the AI.
+        GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
+      }
+
       break;
     }
   }

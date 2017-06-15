@@ -10,6 +10,15 @@ MenuRenderer::MenuRenderer(SDL_Renderer* renderer, SDL_Window* screen)
   init(renderer, screen);
 }
 
+void MenuRenderer::loadMenu(std::string menuRmlFile)
+{
+  if (! EventManager::getInstance()->LoadWindow(Rocket::Core::String(menuRmlFile.c_str())))
+  {
+    fprintf(stdout, "\nDocument is NULL");
+    throw std::runtime_error(std::string("Menu RML was not found"));
+  }
+}
+
 void MenuRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
 {
   GLenum err = glewInit();
@@ -57,18 +66,10 @@ void MenuRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
   EventInstancer* event_instancer = new EventInstancer();
   Rocket::Core::Factory::RegisterEventListenerInstancer(event_instancer);
   event_instancer->RemoveReference();
-
   EventManager::getInstance()->RegisterEventHandler("gameoptions.rml", new EventHandlerOptions());
 
-  if(EventManager::getInstance()->LoadWindow("mainmenu.rml"))
-  {
-    m_context = Context;
-  }
-  else
-  {
-    fprintf(stdout, "\nDocument is NULL");
-    throw std::runtime_error(std::string("Menu RML was not found"));
-  }
+  loadMenu("mainmenu.rml");
+  m_context = Context;
 }
 
 bool MenuRenderer::showMenu()

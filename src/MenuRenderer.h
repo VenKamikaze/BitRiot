@@ -40,6 +40,7 @@ class MenuRenderer
     void init(SDL_Renderer* renderer, SDL_Window *screen);
     int getTabIndex(Rocket::Core::Element* node);
     Rocket::Core::Element* getChildElementWithTabIndex(Rocket::Core::Element* parentNode, int tabIndex);
+    void loadMenu(std::string menuRmlFile);
 
     Rocket::Core::Context* m_context = NULL;
 };

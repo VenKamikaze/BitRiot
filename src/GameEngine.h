@@ -17,6 +17,8 @@
 
 #include "MenuRenderer.h"
 #include "GameSettings.h"
+#include "GameOverTimer.h"
+#include "GameScoreBoardTimer.h"
 
 class GameEngine
 {

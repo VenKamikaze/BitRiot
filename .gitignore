@@ -1,4 +1,6 @@
 .settings/
+target/
+ignored/
 Bit Riot.exe
 Bit Riot.ncb
 Bit Riot.sln
