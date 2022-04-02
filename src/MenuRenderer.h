@@ -8,6 +8,7 @@
 #ifndef MICKRENDERER_H_
 #define MICKRENDERER_H_
 
+#include <stdexcept>
 #include <string>
 #include "RuntimeException.h"
 
