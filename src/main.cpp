@@ -283,32 +283,11 @@ int main(int argc, char* argv[])
     quitkey = -1;
   }
 
-  /*#ifdef LIBROCKET_TEST
-    try
-    {
-      while(!menuDone)
-      {
-        menuDone = menu->showMenu();
-      }
-    }
-    catch(exception &e)
-    {
-      fprintf(stderr, "Caught exception when rendering menu.");
-      cerr << e.what();
-    }
-  #endif
-  */
   // Do game loop
   try
   {
     while(!quitkey)
     {
-
-      //The frame rate regulator
-      //Timer fps;
-
-      //Start the frame timer
-      //fps.start();
 
       if(SDL_MUSTLOCK(sdl_primary))
       {
@@ -358,12 +337,6 @@ int main(int argc, char* argv[])
         SDL_UnlockSurface(sdl_primary);
       }
 
-      //Cap the frame rate
-      //if( fps.get_ticks() < 1000 / FRAMES_PER_SECOND )
-      //{
-      //     SDL_Delay( ( 1000 / FRAMES_PER_SECOND ) - fps.get_ticks() );
-      //}
-      //SDL_Delay(20);
     }
 
   }

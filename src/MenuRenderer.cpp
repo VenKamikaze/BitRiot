@@ -11,6 +11,15 @@ MenuRenderer::MenuRenderer(SDL_Renderer* renderer, SDL_Window* screen)
   init(renderer, screen);
 }
 
+void MenuRenderer::loadMenu(std::string menuRmlFile)
+{
+  if (! EventManager::getInstance()->LoadWindow(menuRmlFile.c_str()))
+  {
+    fprintf(stdout, "\nDocument is NULL");
+    throw std::runtime_error(std::string("Menu RML was not found"));
+  }
+}
+
 void MenuRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
 {
   int window_width, window_height;
@@ -45,11 +54,7 @@ void MenuRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
   Rml::Factory::RegisterEventListenerInstancer(event_instancer);
 
   EventManager::getInstance()->RegisterEventHandler("gameoptions.rml", new EventHandlerOptions());
-  if(! EventManager::getInstance()->LoadWindow("mainmenu.rml"))
-  {
-    fprintf(stdout, "\nDocument is NULL");
-    throw std::runtime_error(std::string("Menu RML was not found"));
-  }
+  loadMenu("mainmenu.rml");
   m_renderer = renderer;
 }
 

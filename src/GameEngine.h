@@ -17,6 +17,8 @@
 
 #include "MenuRenderer.h"
 #include "GameSettings.h"
+#include "GameOverTimer.h"
+#include "GameScoreBoardTimer.h"
 
 class GameEngine
 {
@@ -39,11 +41,10 @@ class GameEngine
     InputHandler* m_pInputHandler = NULL;
     SpawningPool* m_pSpawningPool = NULL;
     PlayerCharacterEntity* m_pPlayers[NUM_TEAMS];
-    int m_numHumanPlayers;
     void resetGame();
     void initHumanPlayers(int numPlayers, std::vector<bool>* malePlayers, std::vector<bool>* playerAIs);
     void seedBlocksOnMap(int blockPercentage);
-
+    void uninitialise();
 };
 
 #endif

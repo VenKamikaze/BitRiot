@@ -6,15 +6,14 @@ EntityManager::EntityManager()
   // set dynamicMap vector sizes to map width and height
   m_pDynamicMap = new DynamicMap(GameSettings::getInstance()->getMapWidth(), GameSettings::getInstance()->getMapHeight());
 
-  for (int i = 0; i < 4; i++)
-  {
-    m_playerDead[i] = true;
-  }
+  m_playerDead = new std::vector<bool>(GameSettings::getInstance()->getNumberOfPlayers(), true);
 }
 
 EntityManager::~EntityManager()
 {
   delete m_pDynamicMap;
+  delete m_playerDead;
+  m_playerDead = NULL;
 }
 
 
@@ -112,7 +111,7 @@ void EntityManager::processMessageQueue()
           // check for player character creation for setting dead flag
           if (typeToCreate == PLAYER_CHARACTER)
           {
-            m_playerDead[message->getTeamToCreate() - 1] = false;
+            m_playerDead->at(message->getTeamToCreate() - 1) = false;
           }
 
           // also add to AIGameView
@@ -143,7 +142,7 @@ void EntityManager::processMessageQueue()
           // check for setting player dead flag
           if (m_pDynamicMap->entityIterator->second->getType() == PLAYER_CHARACTER)
           {
-            m_playerDead[m_pDynamicMap->entityIterator->second->getTeam() - 1] = true;
+            m_playerDead->at(m_pDynamicMap->entityIterator->second->getTeam() - 1) = true;
           }
 
           // remove from map

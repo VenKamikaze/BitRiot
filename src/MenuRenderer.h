@@ -42,6 +42,7 @@ class MenuRenderer
     int getTabIndex(Rml::Element* node);
     Rml::Element* getChildElementWithTabIndex(Rml::Element* parentNode, int tabIndex);
     Rml::Context* m_context;
+    void loadMenu(std::string menuRmlFile);
     SDL_Renderer *m_renderer;
 };
 
