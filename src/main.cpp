@@ -40,13 +40,13 @@
 
 #include "MenuRenderer.h"
 
-#include <Rocket/Core.h>
-#include <Rocket/Core/Input.h>
-#include <Rocket/Debugger/Debugger.h>
+#include <RmlUI/Core.h>
+#include <RmlUI/Core/Input.h>
+#include <RmlUI/Debugger/Debugger.h>
 
-#include "rocket/glue/SystemInterfaceSDL2.h"
-#include "rocket/glue/RenderInterfaceSDL2.h"
-#include "rocket/glue/ShellFileInterface.h"
+#include "RmlUI/glue/SystemInterfaceSDL2.h"
+#include "RmlUI/glue/RenderInterfaceSDL2.h"
+#include "RmlUI/glue/ShellFileInterface.h"
 
 // DEFINES ////////////////////////////////////////////////
 
@@ -91,7 +91,7 @@ SDL_Renderer* sdl_renderer = NULL;
 SDL_Texture* sdl_primary_texture = NULL;
 SDL_Surface* sdl_primary = NULL;
 
-MenuRenderer* rocketMenu = NULL;
+MenuRenderer* menu = NULL;
 
 // game object globals
 GameEngine* engine = NULL;
@@ -275,8 +275,8 @@ int main(int argc, char* argv[])
   try
   {
     quitkey = consoleInit();
-    rocketMenu = new MenuRenderer(sdl_renderer, sdl_window);
-    engine->setMenuSystem(rocketMenu);
+    menu = new MenuRenderer(sdl_renderer, sdl_window);
+    engine->setMenuSystem(menu);
   }
   catch(exception &e)
   {
@@ -289,7 +289,7 @@ int main(int argc, char* argv[])
     {
       while(!menuDone)
       {
-        menuDone = rocketMenu->showMenu();
+        menuDone = menu->showMenu();
       }
     }
     catch(exception &e)
@@ -420,9 +420,9 @@ int main(int argc, char* argv[])
 
   delete MickSDLSound::getInstance(); // hmm...
 
-  if (rocketMenu)
+  if (menu)
   {
-    delete rocketMenu;
+    delete menu;
   }
 
   cout << "Exiting.. " << endl;

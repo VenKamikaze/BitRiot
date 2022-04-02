@@ -28,34 +28,34 @@ void MenuRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
   glLoadIdentity();
   glOrtho(0, window_width, window_height, 0, 0, 1);
 
-  RocketSDL2Renderer* rocketRenderGlue = new RocketSDL2Renderer(renderer, screen);
-  RocketSDL2SystemInterface* rocketSystemGlue = new RocketSDL2SystemInterface();
-  ShellFileInterface* rocketFileGlue = new ShellFileInterface("assets/menu/");
+  RmlUiSDL2Renderer* rmluiRenderGlue = new RmlUiSDL2Renderer(renderer, screen);
+  RmlUiSDL2SystemInterface* rmluiSystemGlue = new RmlUiSDL2SystemInterface();
+  ShellFileInterface* rmluiFileGlue = new ShellFileInterface("assets/menu/");
 
-  Rocket::Core::SetFileInterface(rocketFileGlue);
-  Rocket::Core::SetRenderInterface(rocketRenderGlue);
-  Rocket::Core::SetSystemInterface(rocketSystemGlue);
+  Rml::SetFileInterface(rmluiFileGlue);
+  Rml::SetRenderInterface(rmluiRenderGlue);
+  Rml::SetSystemInterface(rmluiSystemGlue);
 
-  if(!Rocket::Core::Initialise())
+  if(!Rml::Initialise())
   {
-    throw std::runtime_error(std::string("Unable to init libRocket."));
+    throw std::runtime_error(std::string("Unable to init libRmlUi."));
   }
 
-  Rocket::Core::FontDatabase::LoadFontFace("assets/fonts/FreeMono.ttf");
+  Rml::LoadFontFace("assets/fonts/FreeMono.ttf");
   // These appear to be non-free
-  //Rocket::Core::FontDatabase::LoadFontFace("assets/fonts/Delicious-Bold.otf");
-  //Rocket::Core::FontDatabase::LoadFontFace("assets/fonts/Delicious-BoldItalic.otf");
-  //Rocket::Core::FontDatabase::LoadFontFace("assets/fonts/Delicious-Italic.otf");
-  //Rocket::Core::FontDatabase::LoadFontFace("assets/fonts/Delicious-Roman.otf");
+  //Rml::LoadFontFace("assets/fonts/Delicious-Bold.otf");
+  //Rml::LoadFontFace("assets/fonts/Delicious-BoldItalic.otf");
+  //Rml::LoadFontFace("assets/fonts/Delicious-Italic.otf");
+  //Rml::LoadFontFace("assets/fonts/Delicious-Roman.otf");
 
-  Rocket::Core::Context *Context = Rocket::Core::CreateContext("default",
-                                   Rocket::Core::Vector2i(window_width, window_height));
+  Rml::Context *Context = Rml::CreateContext("default",
+                                   Rml::Vector2i(window_width, window_height));
 
-  Rocket::Debugger::Initialise(Context);
+  Rml::Debugger::Initialise(Context);
 
   // Initialise the event instancer and handlers.
   EventInstancer* event_instancer = new EventInstancer();
-  Rocket::Core::Factory::RegisterEventListenerInstancer(event_instancer);
+  Rml::Factory::RegisterEventListenerInstancer(event_instancer);
   event_instancer->RemoveReference();
 
   EventManager::getInstance()->RegisterEventHandler("gameoptions.rml", new EventHandlerOptions());
@@ -77,14 +77,14 @@ bool MenuRenderer::showMenu()
 
   bool continueRenderingMenu = true;
 
-  SDL_Renderer* renderer = ((RocketSDL2Renderer*) m_context->GetRenderInterface())->GetSDLRenderer();
+  SDL_Renderer* renderer = ((RmlUiSDL2Renderer*) m_context->GetRenderInterface())->GetSDLRenderer();
 
   SDL_SetRenderDrawColor(renderer, 0, 0, 255, 255);
   SDL_RenderClear(renderer);
   m_context->Render();
   SDL_RenderPresent(renderer);
 
-  RocketSDL2SystemInterface* systemInterface = (RocketSDL2SystemInterface*) Rocket::Core::GetSystemInterface();
+  RmlUiSDL2SystemInterface* systemInterface = (RmlUiSDL2SystemInterface*) Rml::GetSystemInterface();
 
   while(SDL_PollEvent(&event))
   {
@@ -112,12 +112,12 @@ bool MenuRenderer::showMenu()
       case SDL_KEYDOWN:
         {
           //printf("keydown: %d, sdl: %d\n", event.key, event.key.keysym.sym);
-          // Intercept SHIFT + ~ key stroke to toggle libRocket's
+          // Intercept SHIFT + ~ key stroke to toggle libRmlUi's
           // visual debugger tool
           if( event.key.keysym.sym == SDLK_BACKQUOTE &&
               event.key.keysym.mod == KMOD_LSHIFT )
           {
-            Rocket::Debugger::SetVisible( ! Rocket::Debugger::IsVisible() );
+            Rml::Debugger::SetVisible( ! Rml::Debugger::IsVisible() );
             break;
           }
           else if(event.key.keysym.sym == SDLK_ESCAPE)
@@ -129,9 +129,9 @@ bool MenuRenderer::showMenu()
           else if(event.key.keysym.sym == SDLK_DOWN
                   || event.key.keysym.sym == SDLK_UP)
           {
-            Rocket::Core::Element* focussedElement = m_context->GetFocusElement();
-            int currentTabIndex = MickRocketElementUtil::getTabIndex(focussedElement);
-            Rocket::Core::Element* nextElement = MickRocketElementUtil::getChildElementWithTabIndex(focussedElement->GetParentNode(), (event.key.keysym.sym == SDLK_DOWN) ? ++currentTabIndex : --currentTabIndex);
+            Rml::Element* focussedElement = m_context->GetFocusElement();
+            int currentTabIndex = MickRmlUIElementUtil::getTabIndex(focussedElement);
+            Rml::Element* nextElement = MickRmlUIElementUtil::getChildElementWithTabIndex(focussedElement->GetParentNode(), (event.key.keysym.sym == SDLK_DOWN) ? ++currentTabIndex : --currentTabIndex);
             if(nextElement)
             {
               nextElement->Focus();
@@ -159,6 +159,6 @@ MenuRenderer::~MenuRenderer()
     m_context->RemoveReference();
     m_context = NULL;
   }
-  Rocket::Core::Shutdown();
+  Rml::Shutdown();
 }
 

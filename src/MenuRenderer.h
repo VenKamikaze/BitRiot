@@ -1,7 +1,7 @@
 /*
  * MenuRenderer.h
  *
- *  Created on: Nov 18, 2016
+ *  Created on: Apr 2, 2022
  *      Author: msaun
  */
 
@@ -15,20 +15,20 @@
 #include <SDL2/SDL.h>
 #include <GL/glew.h>
 
-#include <Rocket/Core.h>
-#include <Rocket/Core/Input.h>
-#include <Rocket/Debugger/Debugger.h>
+#include <RmlUi/Core.h>
+#include <RmlUi/Core/Input.h>
+#include <RmlUi/Debugger/Debugger.h>
 
-#include "rocket/glue/SystemInterfaceSDL2.h"
-#include "rocket/glue/RenderInterfaceSDL2.h"
-#include "rocket/glue/ShellFileInterface.h"
+#include "RmlUI/glue/SystemInterfaceSDL2.h"
+#include "RmlUI/glue/RenderInterfaceSDL2.h"
+#include "RmlUI/glue/ShellFileInterface.h"
 
-#include "rocket/MickRocketElementUtil.h"
+#include "RmlUI/MickRmlUIElementUtil.h"
 
 #include "GameSettings.h"
-#include "rocket/events/EventInstancer.h"
-#include "rocket/events/EventManager.h"
-#include "rocket/events/EventHandlerOptions.h"
+#include "RmlUI/events/EventInstancer.h"
+#include "RmlUI/events/EventManager.h"
+#include "RmlUI/events/EventHandlerOptions.h"
 
 class MenuRenderer
 {
@@ -39,10 +39,10 @@ class MenuRenderer
 
   private:
     void init(SDL_Renderer* renderer, SDL_Window *screen);
-    int getTabIndex(Rocket::Core::Element* node);
-    Rocket::Core::Element* getChildElementWithTabIndex(Rocket::Core::Element* parentNode, int tabIndex);
+    int getTabIndex(Rml::Element* node);
+    Rml::Element* getChildElementWithTabIndex(Rml::Element* parentNode, int tabIndex);
 
-    Rocket::Core::Context* m_context = NULL;
+    Rml::Context* m_context = NULL;
 };
 
 #endif /* MICKRENDERER_H_ */
