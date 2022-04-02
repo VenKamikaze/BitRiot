@@ -204,6 +204,31 @@ PlayerCharacterEntity * EntityManager::getPlayerPointer(int team)
   return NULL;
 }
 
+bool EntityManager::oneOrZeroPlayersRemain()
+{
+  unsigned int remainingPlayers = 0;
+  for(unsigned int i = 0; i < m_playerDead->size(); i++)
+  {
+    if(! m_playerDead->at(i))
+    {
+      remainingPlayers++;
+    }
+  }
+  return remainingPlayers <= 1;
+}
+
+bool EntityManager::allPlayersDead()
+{
+  for(unsigned int i = 0; i < m_playerDead->size(); i++)
+  {
+    if(! m_playerDead->at(i))
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
 void EntityManager::runCollisions()
 {
   // sends collision data between colliding entities

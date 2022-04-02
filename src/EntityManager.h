@@ -30,17 +30,8 @@ class EntityManager
       return m_playerDead->at(playerIndex);
     }
 
-    bool allPlayersDead()
-    {
-      for(unsigned int i = 0; i < m_playerDead->size(); i++)
-      {
-        if(! m_playerDead->at(i))
-        {
-          return false;
-        }
-      }
-      return true;
-    }
+    bool oneOrZeroPlayersRemain();
+    bool allPlayersDead();
 
     DynamicMap * getDynamicMap()
     {

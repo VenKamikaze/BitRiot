@@ -97,12 +97,12 @@ bool GameEngine::runEngine()
         m_pInputHandler->setPlayerDead(i, m_pEntityManager->getPlayerDead(i));
         m_pPanel->setPlayerDead(i, m_pEntityManager->getPlayerDead(i));
       }
-      if(m_pEntityManager->allPlayersDead())
+      if(m_pEntityManager->oneOrZeroPlayersRemain())
       {
         GameTimer* timer = GameOverTimer::getInstance();
         if(! timer->isTimerTriggered())
         {
-          // If every player is dead, set game over state
+          // If competitor players are dead, set game over state
           timer->setTimerTriggered();
         }
         else if(timer->getTimerCompleted())
