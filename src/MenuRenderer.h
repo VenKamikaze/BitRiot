@@ -8,6 +8,7 @@
 #ifndef MICKRENDERER_H_
 #define MICKRENDERER_H_
 
+#include <SDL2/SDL_render.h>
 #include <stdexcept>
 #include <string>
 #include "RuntimeException.h"
@@ -41,8 +42,8 @@ class MenuRenderer
     void init(SDL_Renderer* renderer, SDL_Window *screen);
     int getTabIndex(Rml::Element* node);
     Rml::Element* getChildElementWithTabIndex(Rml::Element* parentNode, int tabIndex);
-
-    Rml::Context* m_context = NULL;
+    Rml::Context* m_context = nullptr;
+    SDL_Renderer *m_renderer;
 };
 
 #endif /* MICKRENDERER_H_ */

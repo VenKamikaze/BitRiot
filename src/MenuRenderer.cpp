@@ -1,6 +1,7 @@
 // implementation of Map.h
 
 #include "MenuRenderer.h"
+#include <iostream>
 
 
 using namespace std;
@@ -56,11 +57,10 @@ void MenuRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
   // Initialise the event instancer and handlers.
   EventInstancer* event_instancer = new EventInstancer();
   Rml::Factory::RegisterEventListenerInstancer(event_instancer);
-  event_instancer->RemoveReference();
+  //event_instancer->RemoveReference();
 
-  EventManager::getInstance()->RegisterEventHandler("gameoptions.rml", new EventHandlerOptions());
-
-  if(EventManager::getInstance()->LoadWindow("mainmenu.rml"))
+  EventManager::RegisterEventHandler("gameoptions.rml", new EventHandlerOptions());
+  if(EventManager::LoadWindow("mainmenu.rml"))
   {
     m_context = Context;
   }
@@ -69,6 +69,7 @@ void MenuRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
     fprintf(stdout, "\nDocument is NULL");
     throw std::runtime_error(std::string("Menu RML was not found"));
   }
+  m_renderer = renderer;
 }
 
 bool MenuRenderer::showMenu()
@@ -77,12 +78,16 @@ bool MenuRenderer::showMenu()
 
   bool continueRenderingMenu = true;
 
-  SDL_Renderer* renderer = ((RmlUiSDL2Renderer*) m_context->GetRenderInterface())->GetSDLRenderer();
+  if(m_renderer == nullptr)
+  {
+    cerr << "MenuRenderer::showMenu has nullptr for m_renderer!" << endl;
+    return false;
+  }
 
-  SDL_SetRenderDrawColor(renderer, 0, 0, 255, 255);
-  SDL_RenderClear(renderer);
+  SDL_SetRenderDrawColor(m_renderer, 0, 0, 255, 255);
+  SDL_RenderClear(m_renderer);
   m_context->Render();
-  SDL_RenderPresent(renderer);
+  SDL_RenderPresent(m_renderer);
 
   RmlUiSDL2SystemInterface* systemInterface = (RmlUiSDL2SystemInterface*) Rml::GetSystemInterface();
 
@@ -154,11 +159,11 @@ bool MenuRenderer::showMenu()
 
 MenuRenderer::~MenuRenderer()
 {
+  Rml::Shutdown();
   if(m_context)
   {
-    m_context->RemoveReference();
-    m_context = NULL;
+    delete m_context;
+    m_context = nullptr;
   }
-  Rml::Shutdown();
 }
 

@@ -31,18 +31,17 @@
 // game object includes
 #include "GameEngine.h"
 
-
 #include <GL/glew.h>
 
 #ifndef NULL
-#define NULL 0
+#define NULL nullptr;
 #endif
 
 #include "MenuRenderer.h"
 
-#include <RmlUI/Core.h>
-#include <RmlUI/Core/Input.h>
-#include <RmlUI/Debugger/Debugger.h>
+#include <RmlUi/Core.h>
+#include <RmlUi/Core/Input.h>
+#include <RmlUi/Debugger/Debugger.h>
 
 #include "RmlUI/glue/SystemInterfaceSDL2.h"
 #include "RmlUI/glue/RenderInterfaceSDL2.h"
@@ -86,15 +85,15 @@ bool consoleMain();
 
 // GLOBALS ////////////////////////////////////////////////
 
-SDL_Window* sdl_window = NULL;
-SDL_Renderer* sdl_renderer = NULL;
-SDL_Texture* sdl_primary_texture = NULL;
-SDL_Surface* sdl_primary = NULL;
+SDL_Window* sdl_window = nullptr;
+SDL_Renderer* sdl_renderer = nullptr;
+SDL_Texture* sdl_primary_texture = nullptr;
+SDL_Surface* sdl_primary = nullptr;
 
-MenuRenderer* menu = NULL;
+MenuRenderer* menu = nullptr;
 
 // game object globals
-GameEngine* engine = NULL;
+GameEngine* engine = nullptr;
 
 // FUNCTIONS //////////////////////////////////////////////
 
@@ -116,7 +115,7 @@ int consoleInit()
 
   sdl_window = SDL_CreateWindow(WINDOW_TITLE, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
                                 WINDOW_WIDTH, WINDOW_HEIGHT, (initFlags & ASK_FULLSCREEN) ? SDL_WINDOW_FULLSCREEN_DESKTOP : SDL_WINDOW_SHOWN );
-  if (sdl_window == NULL)
+  if (sdl_window == nullptr)
   {
     cerr << "Failed to create sdl_window!";
     return 1;
@@ -126,7 +125,7 @@ int consoleInit()
 
 
   sdl_renderer = SDL_CreateRenderer(sdl_window, -1, 0);
-  if (sdl_renderer == NULL)
+  if (sdl_renderer == nullptr)
   {
     cerr << "Failed to create sdl_renderer!";
     return 1;
@@ -142,7 +141,7 @@ int consoleInit()
 
   sdl_primary_texture = SDL_CreateTexture(sdl_renderer, pixel_format, SDL_TEXTUREACCESS_STREAMING,
                                           WINDOW_WIDTH, WINDOW_HEIGHT);
-  if (sdl_primary_texture == NULL)
+  if (sdl_primary_texture == nullptr)
   {
     cerr << "Failed to create sdl_primary_texture!";
     return 1;
@@ -159,7 +158,7 @@ int consoleInit()
                                      rmask, gmask, bmask, amask);
 
 
-  if (sdl_primary == NULL)
+  if (sdl_primary == nullptr)
   {
     cerr << "Failed to create sdl_primary!";
     return 1;
@@ -213,7 +212,7 @@ int consoleInit()
 
 bool consoleMain()
 {
-  SDL_FillRect(sdl_primary, NULL, SDL_MapRGB(sdl_primary->format, 200, 200, 100)); // as per ddbltfxClear
+  SDL_FillRect(sdl_primary, nullptr, SDL_MapRGB(sdl_primary->format, 200, 200, 100)); // as per ddbltfxClear
 
   Uint32 startTime = SDL_GetTicks();
 
@@ -341,11 +340,11 @@ int main(int argc, char* argv[])
         }
       }
 
-      if(sdl_primary != NULL)
+      if(sdl_primary != nullptr)
       {
-        SDL_UpdateTexture(sdl_primary_texture, NULL, sdl_primary->pixels, sdl_primary->pitch);
+        SDL_UpdateTexture(sdl_primary_texture, nullptr, sdl_primary->pixels, sdl_primary->pitch);
         SDL_RenderClear(sdl_renderer);
-        SDL_RenderCopy(sdl_renderer, sdl_primary_texture, NULL, NULL);
+        SDL_RenderCopy(sdl_renderer, sdl_primary_texture, nullptr, nullptr);
         SDL_RenderPresent(sdl_renderer);
       }
       else
@@ -385,23 +384,23 @@ int main(int argc, char* argv[])
 
     if(SDL_WasInit(SDL_INIT_EVERYTHING))
     {
-      if(sdl_primary != NULL)
+      if(sdl_primary != nullptr)
       {
         SDL_FreeSurface(sdl_primary);
-        sdl_primary = NULL;
+        sdl_primary = nullptr;
       }
 
-      if(sdl_renderer != NULL)
+      if(sdl_renderer != nullptr)
       {
         SDL_DestroyRenderer(sdl_renderer); // also frees sdl_primary_texture
-        sdl_primary_texture = NULL;
-        sdl_renderer = NULL;
+        sdl_primary_texture = nullptr;
+        sdl_renderer = nullptr;
       }
 
-      if(sdl_window != NULL)
+      if(sdl_window != nullptr)
       {
         SDL_DestroyWindow(sdl_window);
-        sdl_window = NULL;
+        sdl_window = nullptr;
       }
 
       SDL_Quit();

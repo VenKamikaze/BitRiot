@@ -26,7 +26,7 @@
  *
  */
 
-#include <ShellFileInterface.h>
+#include "ShellFileInterface.h"
 #include <stdio.h>
 
 ShellFileInterface::ShellFileInterface(const Rml::String& root) : root(root)
