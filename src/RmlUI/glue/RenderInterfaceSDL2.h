@@ -31,7 +31,6 @@
 #include <RmlUi/Core/RenderInterface.h>
 
 #include <SDL.h>
-#include <GL/glew.h>
 
 #if !(SDL_VIDEO_RENDER_OGL)
     #error "Only the opengl sdl backend is supported."
@@ -60,7 +59,10 @@ public:
 
 private:
     SDL_Renderer* mRenderer;
+    int mRenderer_w;
+    int mRenderer_h;
     SDL_Window* mScreen;
+    SDL_Rect mRectScisor;
 };
 
 #endif

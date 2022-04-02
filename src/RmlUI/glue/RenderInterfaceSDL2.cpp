@@ -31,82 +31,56 @@
 
 #include "RenderInterfaceSDL2.h"
 
-#if !(SDL_VIDEO_RENDER_OGL)
-    #error "Only the opengl sdl backend is supported."
-#endif
-
 RmlUiSDL2Renderer::RmlUiSDL2Renderer(SDL_Renderer* renderer, SDL_Window* screen)
 {
     mRenderer = renderer;
     mScreen = screen;
+
+    SDL_GetRendererOutputSize(renderer, &mRenderer_w, &mRenderer_h);
+
+    mRectScisor.x = 0;
+    mRectScisor.y = 0;
+    mRectScisor.w = mRenderer_w;
+    mRectScisor.h = mRenderer_h;
 }
 
 // Called by RmlUi when it wants to render geometry that it does not wish to optimise.
 void RmlUiSDL2Renderer::RenderGeometry(Rml::Vertex* vertices, int num_vertices, int* indices, int num_indices, const Rml::TextureHandle texture, const Rml::Vector2f& translation)
 {
-    // SDL uses shaders that we need to disable here  
-    glUseProgramObjectARB(0);
-    glPushMatrix();
-    glTranslatef(translation.x, translation.y, 0);
- 
-    Rml::Vector<Rml::Vector2f> Positions(num_vertices);
-    Rml::Vector<Rml::Colourb> Colors(num_vertices);
-    Rml::Vector<Rml::Vector2f> TexCoords(num_vertices);
-    float texw = 0.0f;
-    float texh = 0.0f;
- 
-    SDL_Texture* sdl_texture = nullptr;
-    if(texture)
-    {
-        glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-        sdl_texture = (SDL_Texture *) texture;
-        SDL_GL_BindTexture(sdl_texture, &texw, &texh);
-    }
- 
-    for(int  i = 0; i < num_vertices; i++) {
-        Positions[i] = vertices[i].position;
-        Colors[i] = vertices[i].colour;
-        if (sdl_texture) {
-            TexCoords[i].x = vertices[i].tex_coord.x * texw;
-            TexCoords[i].y = vertices[i].tex_coord.y * texh;
-        }
-        else TexCoords[i] = vertices[i].tex_coord;
-    };
- 
-    glEnableClientState(GL_VERTEX_ARRAY);
-    glEnableClientState(GL_COLOR_ARRAY);
-    glVertexPointer(2, GL_FLOAT, 0, &Positions[0]);
-    glColorPointer(4, GL_UNSIGNED_BYTE, 0, &Colors[0]);
-    glTexCoordPointer(2, GL_FLOAT, 0, &TexCoords[0]);
- 
-    glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDrawElements(GL_TRIANGLES, num_indices, GL_UNSIGNED_INT, indices);
-    glDisableClientState(GL_VERTEX_ARRAY);
-    glDisableClientState(GL_COLOR_ARRAY);
- 
-    if (sdl_texture) {
-        SDL_GL_UnbindTexture(sdl_texture);
-        glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-    }
- 
-    glColor4f(1.0, 1.0, 1.0, 1.0);
-    glPopMatrix();
-    /* Reset blending and draw a fake point just outside the screen to let SDL know that it needs to reset its state in case it wants to render a texture */
-    glDisable(GL_BLEND);
-    SDL_SetRenderDrawBlendMode(mRenderer, SDL_BLENDMODE_NONE);
-    SDL_RenderDrawPoint(mRenderer, -1, -1);
-}
+    SDL_Texture *sdl_texture = (SDL_Texture *) texture;
 
+    SDL_Rect r;
+    r.x = (int)translation.x;
+    r.y = (int)translation.y;
+    r.w = mRenderer_w - r.x;
+    r.h = mRenderer_h - r.y;
+    
+    SDL_RenderSetViewport(mRenderer, &r);
+
+    if (sdl_texture) {
+        SDL_SetTextureBlendMode(sdl_texture, SDL_BLENDMODE_BLEND);
+    }
+
+    int sz = sizeof(vertices[0]);
+    int off1 = offsetof(Rml::Vertex, position);
+    int off2 = offsetof(Rml::Vertex, colour);
+    int off3 = offsetof(Rml::Vertex, tex_coord);
+    SDL_RenderGeometryRaw(mRenderer, sdl_texture, 
+            (float *)((Uint8 *) vertices + off1), sz,
+            (SDL_Color *)((Uint8 *) vertices + off2), sz,
+            (float *)((Uint8 *) vertices + off3), sz,
+            num_vertices, indices, num_indices, 4);
+
+}
 
 // Called by RmlUi when it wants to enable or disable scissoring to clip content.		
 void RmlUiSDL2Renderer::EnableScissorRegion(bool enable)
 {
-    if (enable)
-        glEnable(GL_SCISSOR_TEST);
-    else
-        glDisable(GL_SCISSOR_TEST);
+    if (enable) {
+        SDL_RenderSetClipRect(mRenderer, &mRectScisor);
+    } else {
+        SDL_RenderSetClipRect(mRenderer, NULL);
+    }
 }
 
 // Called by RmlUi when it wants to change the scissor region.		
@@ -114,7 +88,10 @@ void RmlUiSDL2Renderer::SetScissorRegion(int x, int y, int width, int height)
 {
     int w_width, w_height;
     SDL_GetWindowSize(mScreen, &w_width, &w_height);
-    glScissor(x, w_height - (y + height), width, height);
+    mRectScisor.x = x;
+    mRectScisor.y = w_height - (y + height);
+    mRectScisor.w = width;
+    mRectScisor.h = height;
 }
 
 // Called by RmlUi when a texture is required by the library.		
