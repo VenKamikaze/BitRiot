@@ -32,7 +32,7 @@
 #include <RmlUi/Core/ElementUtilities.h>
 #include "EventHandler.h"
 
-// The game's element context (declared in main.cpp).
+// The game's element context (declared in MenuRenderer.h).
 extern Rml::Context* context;
 
 // The event handler for the current screen. This may be nullptr if the current screen has no specific functionality.
@@ -42,8 +42,20 @@ static EventHandler* event_handler = nullptr;
 typedef Rml::SmallUnorderedMap< Rml::String, EventHandler* > EventHandlerMap;
 EventHandlerMap event_handlers;
 
-EventManager::EventManager()
+static EventManager* managerInstance = nullptr;
+
+EventManager::EventManager(Rml::Context* rmlContext)
 {
+	m_context = rmlContext;
+}
+
+EventManager* EventManager::getInstance()
+{
+  if (!managerInstance)
+  {
+	managerInstance = new EventManager(Rml::GetContext("default"));
+  }
+  return managerInstance;
 }
 
 EventManager::~EventManager()
@@ -127,12 +139,12 @@ bool EventManager::LoadWindow(const Rml::String& window_name)
 
 	// Attempt to load the referenced RML document.
 	Rml::String document_path = window_name; //  Rml::String("invaders/data/") + window_name + Rml::String(".rml");
-	Rml::ElementDocument* document = context->LoadDocument(document_path.c_str());
+	Rml::ElementDocument* document = m_context->LoadDocument(document_path.c_str());
 	if (document == nullptr)
 	{
 		event_handler = old_event_handler;
 		// M2S return nullptr;
-                return false;
+		return false;
 	}
 
 	// Set the element's title on the title; IDd 'title' in the RML.
@@ -141,11 +153,9 @@ bool EventManager::LoadWindow(const Rml::String& window_name)
 		title->SetInnerRML(document->GetTitle());
 
 	// M2S
-        document->Focus();
+	document->Focus();
 	document->Show();	
-        // Remove the caller's reference. // M2S
-	//document->RemoveReference();
 
 	// M2S return document;
-        return true;
+	return true;
 }

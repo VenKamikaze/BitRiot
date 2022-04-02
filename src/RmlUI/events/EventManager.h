@@ -29,6 +29,7 @@
 #ifndef RMLUI_INVADERS_EVENTMANAGER_H
 #define RMLUI_INVADERS_EVENTMANAGER_H
 
+#include <RmlUi/Core.h>
 #include <RmlUi/Core/Event.h>
 #include <RmlUi/Core/ElementDocument.h>
 #include "../../GameSettings.h"
@@ -42,26 +43,30 @@ class EventHandler;
 class EventManager
 {
 public:
+	EventManager(Rml::Context* rmlContext);
+
+	static EventManager* getInstance();
 	/// Releases all event handlers registered with the manager.
-	static void Shutdown();
+	void Shutdown();
 
 	/// Registers a new event handler with the manager.
 	/// @param[in] handler_name The name of the handler; this must be the same as the window it is handling events for.
 	/// @param[in] handler The event handler.
-	static void RegisterEventHandler(const Rml::String& handler_name, EventHandler* handler);
+	void RegisterEventHandler(const Rml::String& handler_name, EventHandler* handler);
 
 	/// Processes an event coming through from RmlUi.
 	/// @param[in] event The RmlUi event that spawned the application event.
 	/// @param[in] value The application-specific event value.
-	static void ProcessEvent(Rml::Event& event, const Rml::String& value);
+	void ProcessEvent(Rml::Event& event, const Rml::String& value);
 	/// Loads a window and binds the event handler for it.
 	/// @param[in] window_name The name of the window to load.
 	// M2S static Rml::ElementDocument* LoadWindow(const Rml::String& window_name);
-        static bool LoadWindow(const Rml::String& window_name);
+	bool LoadWindow(const Rml::String& window_name);
 
 private:
-	EventManager();
 	~EventManager();
+	// The game's element context (declared in main.cpp).
+	Rml::Context* m_context = nullptr;
 };
 
 

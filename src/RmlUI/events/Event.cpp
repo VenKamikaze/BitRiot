@@ -40,7 +40,7 @@ Event::~Event()
 // Sends the event value through to Invader's event processing system.
 void Event::ProcessEvent(Rml::Event& event)
 {
-	EventManager::ProcessEvent(event, value);
+	EventManager::getInstance()->ProcessEvent(event, value);
 }
 
 // Destroys the event.

@@ -42,7 +42,7 @@ class MenuRenderer
     void init(SDL_Renderer* renderer, SDL_Window *screen);
     int getTabIndex(Rml::Element* node);
     Rml::Element* getChildElementWithTabIndex(Rml::Element* parentNode, int tabIndex);
-    Rml::Context* m_context = nullptr;
+    Rml::Context* m_context;
     SDL_Renderer *m_renderer;
 };
 

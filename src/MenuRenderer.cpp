@@ -49,22 +49,18 @@ void MenuRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
   //Rml::LoadFontFace("assets/fonts/Delicious-Italic.otf");
   //Rml::LoadFontFace("assets/fonts/Delicious-Roman.otf");
 
-  Rml::Context *Context = Rml::CreateContext("default",
+  m_context = Rml::CreateContext("default",
                                    Rml::Vector2i(window_width, window_height));
 
-  Rml::Debugger::Initialise(Context);
+  Rml::Debugger::Initialise(m_context);
 
   // Initialise the event instancer and handlers.
   EventInstancer* event_instancer = new EventInstancer();
   Rml::Factory::RegisterEventListenerInstancer(event_instancer);
   //event_instancer->RemoveReference();
 
-  EventManager::RegisterEventHandler("gameoptions.rml", new EventHandlerOptions());
-  if(EventManager::LoadWindow("mainmenu.rml"))
-  {
-    m_context = Context;
-  }
-  else
+  EventManager::getInstance()->RegisterEventHandler("gameoptions.rml", new EventHandlerOptions());
+  if(! EventManager::getInstance()->LoadWindow("mainmenu.rml"))
   {
     fprintf(stdout, "\nDocument is NULL");
     throw std::runtime_error(std::string("Menu RML was not found"));
