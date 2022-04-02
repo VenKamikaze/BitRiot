@@ -14,7 +14,6 @@
 #include "RuntimeException.h"
 
 #include <SDL2/SDL.h>
-#include <GL/glew.h>
 
 #include <RmlUi/Core.h>
 #include <RmlUi/Core/Input.h>

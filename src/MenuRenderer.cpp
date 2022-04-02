@@ -13,22 +13,8 @@ MenuRenderer::MenuRenderer(SDL_Renderer* renderer, SDL_Window* screen)
 
 void MenuRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
 {
-  GLenum err = glewInit();
-
-  if(err != GLEW_OK)
-  {
-    fprintf(stderr, "GLEW ERROR: %s\n", glewGetErrorString(err));
-    throw std::runtime_error("GLEW ERROR");
-  }
-
   int window_width, window_height;
   SDL_GetWindowSize(screen, &window_width, &window_height);
-
-  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-  glMatrixMode(GL_PROJECTION|GL_MODELVIEW);
-  glLoadIdentity();
-  glOrtho(0, window_width, window_height, 0, 0, 1);
-
   RmlUiSDL2Renderer* rmluiRenderGlue = new RmlUiSDL2Renderer(renderer, screen);
   RmlUiSDL2SystemInterface* rmluiSystemGlue = new RmlUiSDL2SystemInterface();
   ShellFileInterface* rmluiFileGlue = new ShellFileInterface("assets/menu/");
@@ -57,7 +43,6 @@ void MenuRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
   // Initialise the event instancer and handlers.
   EventInstancer* event_instancer = new EventInstancer();
   Rml::Factory::RegisterEventListenerInstancer(event_instancer);
-  //event_instancer->RemoveReference();
 
   EventManager::getInstance()->RegisterEventHandler("gameoptions.rml", new EventHandlerOptions());
   if(! EventManager::getInstance()->LoadWindow("mainmenu.rml"))
