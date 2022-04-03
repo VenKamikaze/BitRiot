@@ -218,7 +218,7 @@ bool consoleMain()
 
   bool keepRunning = engine->runEngine();
 
-  while ((SDL_GetTicks() - startTime) < 33)
+  while ((SDL_GetTicks() - startTime) < GameSettings::NORMAL_TICKS_SPEED)
   {
     //wait a bit to sync to 30fps
     //Sleep(1);
@@ -389,8 +389,6 @@ int main(int argc, char* argv[])
   {
     delete engine;
   }
-
-  delete MickSDLSound::getInstance(); // hmm...
 
   if (menu)
   {

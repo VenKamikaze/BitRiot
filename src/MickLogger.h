@@ -16,7 +16,6 @@
 
 namespace std
 {
-  static bool DEBUG_ENABLED = true;
 
   class MickLogger : public Logger
   {

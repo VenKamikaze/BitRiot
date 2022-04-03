@@ -1,6 +1,8 @@
 // implementation of Map.h
 
 #include "MenuRenderer.h"
+#include "PlayerCharacterEntity.h"
+#include "RmlUI/ScoreBoardBinder.h"
 #include <string>
 
 
@@ -58,13 +60,27 @@ void MenuRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
   m_renderer = renderer;
 }
 
+void MenuRenderer::loadScoreBoard(PlayerCharacterEntity *winner, int gameTotalLength)
+{
+  m_scoreBinder = new ScoreBoardBinder(m_context, winner, gameTotalLength);
+  loadMenu("scoreboard.rml");
+}
+
+void MenuRenderer::clearScoreBoard()
+{
+  if(m_scoreBinder && m_context)
+  {
+    m_scoreBinder->RemoveDataBinding(m_context);
+  }
+}
+
 bool MenuRenderer::showMenu()
 {
   SDL_Event event;
 
   bool continueRenderingMenu = true;
 
-  if(m_renderer == nullptr)
+  if(! m_renderer)
   {
     cerr << "MenuRenderer::showMenu has nullptr for m_renderer!" << endl;
     return false;
@@ -152,6 +168,11 @@ MenuRenderer::~MenuRenderer()
   {
     delete m_context;
     m_context = nullptr;
+  }
+  if(m_scoreBinder)
+  {
+    delete m_scoreBinder;
+    m_scoreBinder = nullptr;
   }
 }
 

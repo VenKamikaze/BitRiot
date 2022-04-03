@@ -1,4 +1,4 @@
-<html>
+<rml>
 	<head>
 		<title>Main Menu</title>
 		<link rel="stylesheet" type="text/css" href="rkt.rcss"/>
@@ -17,4 +17,4 @@
 		
 	</body>
 
-</html>
+</rml>

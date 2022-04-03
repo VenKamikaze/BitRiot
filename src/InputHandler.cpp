@@ -1,4 +1,5 @@
 #include "InputHandler.h"
+#include "EntityEnum.h"
 
 
 InputHandler::InputHandler()
@@ -227,7 +228,10 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
             if (p_dynamicMap->tileHasStaticEntity(p_players[i]->getTileX(), p_players[i]->getTileY()) == false)
             {
               // TO DO - if trying to place block, check there is an exit
-              p_players[i]->createEntity(selection[i]);
+              if(p_players[i]->createEntity(selection[i]) && BOMB == selection[i])
+              {
+                p_players[i]->incNumberBombsPlaced();
+              }
             }
 
             action1Down[i] = false;
@@ -265,7 +269,10 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
             // action2 released this frame, try to place egg
             if (p_dynamicMap->tileHasStaticEntity(p_players[i]->getTileX(), p_players[i]->getTileY()) == false)
             {
-              p_players[i]->createEntity(selection[i]);
+              if(p_players[i]->createEntity(selection[i]))
+              {
+                p_players[i]->incNumberEggsPlaced();
+              }
             }
 
             action2Down[i] = false;

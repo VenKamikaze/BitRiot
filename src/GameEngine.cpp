@@ -1,4 +1,5 @@
 #include "GameEngine.h"
+#include "SDL_timer.h"
 
 GameEngine::GameEngine(SDL_Surface* back)
 {
@@ -87,6 +88,7 @@ bool GameEngine::runEngine()
     {
       resetGame();
       GameSettings::getInstance()->setGameState(GameSettings::GAME_RUNNING);
+      m_gameStartedAtTicks = SDL_GetTicks();
       break;
     }
     case GameSettings::GAME_RUNNING:
@@ -111,6 +113,7 @@ bool GameEngine::runEngine()
           // This is useful when all human players are dead but AI is still alive, incase
           //   a human player wants to take over the AI.
           GameSettings::getInstance()->setGameState(GameSettings::GAME_OVER);
+          menuSystem->loadScoreBoard(m_pEntityManager->getWinningPlayer(), (SDL_GetTicks() - m_gameStartedAtTicks) / 1000);
         }
       }
       m_pInputHandler->processKeyboardInput();
@@ -128,20 +131,15 @@ bool GameEngine::runEngine()
     }
     case GameSettings::GAME_OVER:
     {
-      // TODO show a score for 10 seconds then set back to MENU_RUNNING ?
-      // maybe number of seconds alive, number of bombs/eggs spawned etc?
-      GameTimer* timer = GameScoreBoardTimer::getInstance();
-      if(! timer->isTimerTriggered())
+      if (menuSystem == NULL)
       {
-        // If every player is dead, set game over state
-        timer->setTimerTriggered();
+        throw std::runtime_error(std::string("About to render menu, but no menu rendering system found!"));
       }
-      else if(timer->getTimerCompleted())
+
+      if(!menuSystem->showMenu())
       {
-        // Timed delay during which we continue to update and runFrame for a few seconds.
-        // This is useful when all human players are dead but AI is still alive, incase
-        //   a human player wants to take over the AI.
         GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
+        menuSystem->clearScoreBoard();
       }
 
       break;

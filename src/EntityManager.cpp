@@ -1,5 +1,7 @@
 
 #include "EntityManager.h"
+#include "MickLogger.h"
+#include <string>
 
 EntityManager::EntityManager()
 {
@@ -202,6 +204,22 @@ PlayerCharacterEntity * EntityManager::getPlayerPointer(int team)
   }
 
   return NULL;
+}
+
+PlayerCharacterEntity * EntityManager::getWinningPlayer()
+{
+  if(oneOrZeroPlayersRemain())
+  {
+    for(unsigned int i = 0; i < m_playerDead->size(); i++)
+    {
+      if(! m_playerDead->at(i))
+      {
+        MickLogger::getInstance()->debug(this, string("Player " + to_string(i) + " is the winning player").c_str());
+        return getPlayerPointer(i+1); // team is 
+      }
+    }
+  }
+  return nullptr;
 }
 
 bool EntityManager::oneOrZeroPlayersRemain()

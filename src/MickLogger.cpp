@@ -13,13 +13,13 @@
 namespace std
 {
   // super basic logging.
-  // toggle DEBUG_ENABLED in MickLogger.h
+  // toggle DEBUG_ENABLED in ctor
 
   static Logger* loggerInstance = nullptr;
+  static bool DEBUG_ENABLED = true;
 
   MickLogger::MickLogger()
   {
-    
   }
 
   Logger* MickLogger::getInstance()

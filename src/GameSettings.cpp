@@ -22,7 +22,7 @@ GameSettings::GameSettings()
       genders.push_back(false);
     }
     genders.push_back(true);
-    playerAIs.push_back(true); // set all as AI first
+    playerAIs.push_back(i != 0); // leave one as human by default
   }
   genders.push_back(true); // additional gender for purple (non character player).
 }

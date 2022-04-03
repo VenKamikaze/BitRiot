@@ -38,10 +38,7 @@ class InputHandler
 
   public:
     int m_numPlayers;
-
     bool usingControllers=false;
-
-
     KEY m_keyMap[4][NUM_ACTION_BUTTONS]; // keymap of 6 action buttons for the 4 max players
 
   protected:

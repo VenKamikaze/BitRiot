@@ -9,6 +9,7 @@
 #include "PlayerCharacterEntity.h"
 #include "EntityFactory.h"
 #include "GameSettings.h"
+#include "MickLogger.h"
 
 using namespace std;
 
@@ -29,7 +30,7 @@ class EntityManager
     {
       return m_playerDead->at(playerIndex);
     }
-
+    PlayerCharacterEntity *getWinningPlayer(); // returns winning player or nullptr if a draw.
     bool oneOrZeroPlayersRemain();
     bool allPlayersDead();
 

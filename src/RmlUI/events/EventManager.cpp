@@ -53,7 +53,7 @@ EventManager* EventManager::getInstance()
 {
   if (!managerInstance)
   {
-	managerInstance = new EventManager(Rml::GetContext("default"));
+	  managerInstance = new EventManager(Rml::GetContext("default"));
   }
   return managerInstance;
 }

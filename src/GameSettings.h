@@ -97,10 +97,13 @@ class GameSettings
     }
 
     static const int MAX_PLAYERS = 4; // TODO 6;
-    static const int MIN_PLAYERS = 1; // a player vs the default purple non player PC.
+    static const int MIN_PLAYERS = 2; // 2 players plus the default purple non player PC.
 
     static const int MAX_BLOCK_PCT = 75;
     static const int MIN_BLOCK_PCT = 20;
+
+    static const int NORMAL_TICKS_SPEED = 33;
+    static const int FAST_TICKS_SPEED = 5; // quick games for debugging purposes
 
   private:
     ~GameSettings();
@@ -115,6 +118,7 @@ class GameSettings
     int mapHeight = Map::MAP_HEIGHT; // not changeable outside of runtime flags for now
 
     float mapRatio = 1.3077;
+    
 
 };
 

@@ -29,6 +29,7 @@
 #include "RmlUI/events/EventInstancer.h"
 #include "RmlUI/events/EventManager.h"
 #include "RmlUI/events/EventHandlerOptions.h"
+#include "RmlUI/ScoreBoardBinder.h"
 #include <iostream>
 #include "MickLogger.h"
 
@@ -36,6 +37,8 @@ class MenuRenderer
 {
   public:
     MenuRenderer(SDL_Renderer *renderer, SDL_Window *screen);
+    void loadScoreBoard(PlayerCharacterEntity *winner, int gameTotalLength);
+    void clearScoreBoard();
     bool showMenu();
     virtual ~MenuRenderer();
 
@@ -46,6 +49,7 @@ class MenuRenderer
     Rml::Context* m_context;
     void loadMenu(std::string menuRmlFile);
     SDL_Renderer *m_renderer;
+    ScoreBoardBinder *m_scoreBinder = nullptr;
 };
 
 #endif /* MICKRENDERER_H_ */
