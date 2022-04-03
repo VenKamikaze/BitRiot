@@ -29,6 +29,8 @@
 #include "RmlUI/events/EventInstancer.h"
 #include "RmlUI/events/EventManager.h"
 #include "RmlUI/events/EventHandlerOptions.h"
+#include <iostream>
+#include "MickLogger.h"
 
 class MenuRenderer
 {

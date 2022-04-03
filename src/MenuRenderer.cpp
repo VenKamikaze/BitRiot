@@ -1,7 +1,7 @@
 // implementation of Map.h
 
 #include "MenuRenderer.h"
-#include <iostream>
+#include <string>
 
 
 using namespace std;
@@ -83,6 +83,7 @@ bool MenuRenderer::showMenu()
     {
       case SDL_QUIT:
         continueRenderingMenu = false;
+        MickLogger::getInstance()->debug(this, "SDL_QUIT");
         break;
 
       case SDL_MOUSEMOTION:
@@ -105,6 +106,7 @@ bool MenuRenderer::showMenu()
           //printf("keydown: %d, sdl: %d\n", event.key, event.key.keysym.sym);
           // Intercept SHIFT + ~ key stroke to toggle libRmlUi's
           // visual debugger tool
+          MickLogger::getInstance()->debug(this, std::string("SDL_KEYDOWN, sym:").append(std::to_string(event.key.keysym.sym)));
           if( event.key.keysym.sym == SDLK_BACKQUOTE &&
               event.key.keysym.mod == KMOD_LSHIFT )
           {

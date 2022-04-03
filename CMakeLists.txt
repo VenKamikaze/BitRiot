@@ -90,6 +90,7 @@ set(SOURCES ./src/AIGameView.cpp
 ./src/MickAssets.cpp
 ./src/MickBaseInput.cpp
 ./src/MickBaseSound.cpp
+./src/MickLogger.cpp
 ./src/RmlUI/MickRmlUIElementUtil.cpp
 ./src/MickSDLAssets.cpp
 ./src/MickSDLInput.cpp
