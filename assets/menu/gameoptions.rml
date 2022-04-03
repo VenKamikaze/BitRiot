@@ -9,7 +9,7 @@
 		
     <div class="menu-container">
       <div class="menu">
-	      <button id="totalplayers" tabindex="1" onclick="totalplayers">Total Players: </button><br />
+	      <button id="totalplayers" autofocus tabindex="1" onclick="totalplayers">Total Players: </button><br />
 	      <button id="humanplayers" tabindex="2" onclick="humanplayers">Human Players: </button><br />
 	      <button id="genderplayer1" tabindex="3" onclick="genderplayer1">Player 1 Gender: </button><br />
 	      <button id="genderplayer2" tabindex="4" onclick="genderplayer2">Player 2 Gender: </button><br />
