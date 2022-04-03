@@ -57,7 +57,7 @@ Please note: If you'd found the original BitRiot release anywhere, you might not
 # Build
 
 To build the game, first make sure you have the necessary dependencies installed on your system. The main master branch is now using SDL2 and RmlUI. Assuming you are compiling this branch, you will need:
-CMake 3.4.3, SDL 2.0.x, SDL2_mixer and SDL2_ttf, SDL2_image, RmlUI v1.3+.
+CMake 3.4.3, SDL 2.0.x, SDL2_mixer and SDL2_ttf, SDL2_image, RmlUI v4.0+.
 
 on ubuntu/debian:
 ```
