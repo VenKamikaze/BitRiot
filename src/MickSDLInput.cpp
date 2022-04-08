@@ -33,12 +33,11 @@ MickSDLInput::MickSDLInput(InputHandler *inputHandler) : MickBaseInput()
 
 MickBaseInput* MickSDLInput::getInstance(InputHandler *inputHandler)
 {
-
-
   if (!s_instance)
   {
     s_instance = new MickSDLInput(inputHandler); //TODO: need to handle inputHandler better or refactor to support inputHandler changing
   }
+  s_instance->quitEvent = false;
   return s_instance;
 }
 /*

@@ -101,7 +101,7 @@ void EventManager::ProcessEvent(Rml::Event& event, const Rml::String& value)
 			// Start the game with the current settings.
 			std::GameSettings::getInstance()->setGameState(std::GameSettings::GAME_INIT);
 
-			// Close the rocket menu.
+			// Close the menu.
 			event.GetTargetElement()->GetOwnerDocument()->Close();
 		}
 		else if (values[0] == "open" &&
@@ -113,7 +113,7 @@ void EventManager::ProcessEvent(Rml::Event& event, const Rml::String& value)
 		}
 		else if (values[0] == "exit")
 		{
-		  std::GameSettings::getInstance()->setGameState(std::GameSettings::GAME_OVER);
+		  std::GameSettings::getInstance()->setGameState(std::GameSettings::GAME_QUIT);
 		  event.GetTargetElement()->GetOwnerDocument()->Close();
 		}
 		else

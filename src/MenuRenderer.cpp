@@ -100,6 +100,7 @@ bool MenuRenderer::showMenu()
       case SDL_QUIT:
         continueRenderingMenu = false;
         MickLogger::getInstance()->debug(this, "SDL_QUIT");
+        GameSettings::getInstance()->setGameState(GameSettings::GAME_QUIT);
         break;
 
       case SDL_MOUSEMOTION:
@@ -132,7 +133,7 @@ bool MenuRenderer::showMenu()
           else if(event.key.keysym.sym == SDLK_ESCAPE)
           {
             continueRenderingMenu = false;
-            GameSettings::getInstance()->setGameState(GameSettings::GAME_OVER);
+            GameSettings::getInstance()->setGameState(GameSettings::GAME_QUIT);
             break;
           }
           else if(event.key.keysym.sym == SDLK_DOWN

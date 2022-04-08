@@ -55,6 +55,27 @@ void GameEngine::resetGame()
     playerAIs->at(player) = false;
   }
 
+  if (m_pEntityManager)
+  {
+    delete m_pEntityManager;
+    m_pEntityManager = nullptr;
+  }
+  if (m_pPanel)
+  {
+    delete m_pPanel;
+    m_pPanel = nullptr;
+  }
+  if (m_pInputHandler)
+  {
+    delete m_pInputHandler;
+    m_pInputHandler = nullptr;
+  }
+  if (m_pSpawningPool)
+  {
+    delete m_pSpawningPool;
+    m_pSpawningPool = nullptr;
+  }
+
   // after setting initialisation parameters
   m_pEntityManager = new EntityManager();
   m_pPanel = new InfoPanel(lpddsback, numPlayers, genders);
@@ -116,7 +137,18 @@ bool GameEngine::runEngine()
           menuSystem->loadScoreBoard(m_pEntityManager->getWinningPlayer(), (SDL_GetTicks() - m_gameStartedAtTicks) / 1000);
         }
       }
-      m_pInputHandler->processKeyboardInput();
+      try
+      {
+        m_pInputHandler->processKeyboardInput();
+      }
+      catch(const InputException &e)
+      {
+        if(e.gotQuit())
+	{
+          GameSettings::getInstance()->setGameState(GameSettings::GAME_OVER);
+          menuSystem->loadScoreBoard(m_pEntityManager->getWinningPlayer(), (SDL_GetTicks() - m_gameStartedAtTicks) / 1000);
+	}
+      }
 
       // game logic here...
 
@@ -142,6 +174,11 @@ bool GameEngine::runEngine()
         menuSystem->clearScoreBoard();
       }
 
+      break;
+    }
+    case GameSettings::GAME_QUIT:
+    {
+      return false;
       break;
     }
   }

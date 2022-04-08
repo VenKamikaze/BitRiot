@@ -132,9 +132,9 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
   if(input->doQuit())
   {
     cout << "Got QUIT!\n";
-    InputException e;
-    e.setType(GOT_QUIT);
-    throw e;
+    //InputException e;
+    //e.setType(GOT_QUIT);
+    throw InputException("Escape pressed", GOT_QUIT);
   }
   else if(input->isAKeyDown() || input->isAKeyReleased())
   {

@@ -21,7 +21,7 @@ class GameOverTimer: public std::GameTimer
     GameOverTimer(std::string name, int* seconds);
     static GameTimer* getInstance();
     static GameTimer* getInstance(std::string name, int* seconds);
-    static const int GAME_OVER_COUNTDOWN = 5; // 5 seconds till we end the game completely;
+    static const int GAME_OVER_COUNTDOWN = 2; // x seconds till we end the game completely;
 
 
   protected:

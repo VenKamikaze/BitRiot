@@ -84,7 +84,6 @@ set(SOURCES ./src/AIGameView.cpp
 ./src/GameOverTimer.cpp
 ./src/IQPowerupEntity.cpp
 ./src/InfoPanel.cpp
-./src/InputException.cpp
 ./src/InputHandler.cpp
 ./src/Map.cpp
 ./src/MenuRenderer.cpp

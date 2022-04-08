@@ -21,7 +21,7 @@ class GameSettings
   public:
     GameSettings();
     static GameSettings* getInstance();
-    enum GAME_STATE { GAME_INIT, MENU_RUNNING, GAME_RUNNING, GAME_OVER };
+    enum GAME_STATE { GAME_INIT, MENU_RUNNING, GAME_RUNNING, GAME_OVER, GAME_QUIT };
 
     inline int getNumberOfHumanPlayers()
     {

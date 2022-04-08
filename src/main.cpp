@@ -174,7 +174,7 @@ int consoleInit()
   {
     MickSDLSound::getInstance()->initAudio();
   }
-  catch(exception &e)
+  catch(const exception &e)
   {
     cerr << "Could not init audio!";
     return 1;
@@ -277,7 +277,7 @@ int main(int argc, char* argv[])
     menu = new MenuRenderer(sdl_renderer, sdl_window);
     engine->setMenuSystem(menu);
   }
-  catch(exception &e)
+  catch(const exception &e)
   {
     fprintf(stderr, "Exception occurred in initialisation code(): %s\n", e.what());
     quitkey = -1;
@@ -305,7 +305,7 @@ int main(int argc, char* argv[])
           quitkey = 1;
         }
       }
-      catch(InputException& e)
+      catch(const InputException& e)
       {
         if(e.gotQuit())
         {
@@ -340,7 +340,7 @@ int main(int argc, char* argv[])
     }
 
   }
-  catch(exception& e)
+  catch(const exception& e)
   {
     fprintf(stderr, "Caught exception in main game loop.");
     cerr << "Caught exception! ";
@@ -379,7 +379,7 @@ int main(int argc, char* argv[])
       SDL_Quit();
     }
   }
-  catch(exception &e)
+  catch(const exception &e)
   {
     cerr << "Caught exception when de-initializing subsystems!" << endl;
     cerr << e.what();
@@ -388,12 +388,14 @@ int main(int argc, char* argv[])
   if (engine)
   {
     delete engine;
+    engine = nullptr;
   }
-
-  if (menu)
-  {
-    delete menu;
-  }
+  
+//  if (menu)
+//  {
+//    delete menu;
+//    menu = nullptr;
+//  }
 
   cout << "Exiting.. " << endl;
   return 0;
