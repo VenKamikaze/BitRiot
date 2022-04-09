@@ -18,7 +18,7 @@
 	      <button id="blocktilepercent" tabindex="7" onclick="blocktilepercent">Block Coverage (%): </button><br />
 	      <button id="mapwidth" tabindex="8" onclick="mapwidth">Map Width: </button><br />
 	      <button id="mapheight" tabindex="9" onclick="mapheight">Map Height: </button><br />
-	      <button id="back" tabindex="10" onclick="open mainmenu.rml">Back</button><br />
+	      <button id="back" tabindex="10" escapeAction="1" onclick="open mainmenu.rml">Back</button><br />
       </div>
     </div>
 		

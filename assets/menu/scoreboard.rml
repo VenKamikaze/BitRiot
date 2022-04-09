@@ -15,7 +15,7 @@
           <p>You made {{numberEggsPlaced}} eggs.</p>
           <p>You placed {{numberBombsPlaced}} explosives</p>
 	  <button id="quickstart" autofocus tabindex="1" onclick="start">Play Again</button><br />
-	  <button id="options" tabindex="2" onclick="open mainmenu.rml">Main Menu</button><br />
+	  <button id="options" tabindex="2" escapeAction="1" onclick="open mainmenu.rml">Main Menu</button><br />
       </div>
     </div>
   </body>

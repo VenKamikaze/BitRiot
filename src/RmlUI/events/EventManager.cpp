@@ -31,6 +31,7 @@
 #include <RmlUi/Core/ElementDocument.h>
 #include <RmlUi/Core/ElementUtilities.h>
 #include "EventHandler.h"
+#include "MickLogger.h"
 
 // The game's element context (declared in MenuRenderer.h).
 extern Rml::Context* context;
@@ -118,6 +119,7 @@ void EventManager::ProcessEvent(Rml::Event& event, const Rml::String& value)
 		}
 		else
 		{
+			std::MickLogger::getInstance()->debug(this, std::string("Got other event with value: ").append(values[0]));
 			if (event_handler != nullptr)
 				event_handler->ProcessEvent(event, commands[i]);
 		}
@@ -126,8 +128,7 @@ void EventManager::ProcessEvent(Rml::Event& event, const Rml::String& value)
 
 
 // Loads a window and binds the event handler for it.
-/*Rml::ElementDocument* */
-bool EventManager::LoadWindow(const Rml::String& window_name)
+Rml::ElementDocument* EventManager::LoadWindow(const Rml::String& window_name)
 {
 	// Set the event handler for the new screen, if one has been registered.
 	EventHandler* old_event_handler = event_handler;
@@ -143,8 +144,7 @@ bool EventManager::LoadWindow(const Rml::String& window_name)
 	if (document == nullptr)
 	{
 		event_handler = old_event_handler;
-		// M2S return nullptr;
-		return false;
+		return nullptr;
 	}
 
 	// Set the element's title on the title; IDd 'title' in the RML.
@@ -157,5 +157,5 @@ bool EventManager::LoadWindow(const Rml::String& window_name)
 	document->Show();	
 
 	// M2S return document;
-	return true;
+	return document;
 }

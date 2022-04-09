@@ -1,8 +1,11 @@
 // implementation of Map.h
 
 #include "MenuRenderer.h"
+#include "MickLogger.h"
 #include "PlayerCharacterEntity.h"
+#include "RmlUI/MickRmlUIElementUtil.h"
 #include "RmlUI/ScoreBoardBinder.h"
+#include "SDL_keycode.h"
 #include <string>
 
 
@@ -36,7 +39,7 @@ void MenuRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
 
   if(!Rml::Initialise())
   {
-    throw std::runtime_error(std::string("Unable to init libRmlUi."));
+    throw std::runtime_error(std::string("Unable to init RmlUi."));
   }
 
   Rml::LoadFontFace("assets/fonts/FreeMono.ttf");
@@ -132,8 +135,19 @@ bool MenuRenderer::showMenu()
           }
           else if(event.key.keysym.sym == SDLK_ESCAPE)
           {
-            continueRenderingMenu = false;
-            GameSettings::getInstance()->setGameState(GameSettings::GAME_QUIT);
+            Rml::ElementDocument *document = m_context->GetFocusElement()->GetOwnerDocument();
+            if(document)
+            {
+              MickLogger::getInstance()->debug(nullptr, std::string("current document id: ").append(document ? document->GetId() : "null") );
+              Rml::Element* escapeActionElement = MickRmlUIElementUtil::getFirstElementWithAttribute(document, "escapeAction");
+              if(escapeActionElement)
+              {
+                MickLogger::getInstance()->debug(nullptr, std::string("escapeActionElement element id: ").append(escapeActionElement->GetId()) );
+                // process the element with the attribute 'escapeAction'
+                escapeActionElement->Focus();
+                m_context->ProcessKeyDown(systemInterface->TranslateKey(SDLK_RETURN), 0);
+              }
+            }
             break;
           }
           else if(event.key.keysym.sym == SDLK_DOWN

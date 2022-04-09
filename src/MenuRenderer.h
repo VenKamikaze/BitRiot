@@ -8,6 +8,7 @@
 #ifndef MICKRENDERER_H_
 #define MICKRENDERER_H_
 
+#include <RmlUi/Core/ElementDocument.h>
 #include <SDL2/SDL_render.h>
 #include <stdexcept>
 #include <string>

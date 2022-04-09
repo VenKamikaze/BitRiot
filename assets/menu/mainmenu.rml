@@ -11,7 +11,7 @@
       <div class="menu">
 	      <button id="quickstart" autofocus tabindex="1" onclick="start">Start</button><br />
 	      <button id="options" tabindex="2" onclick="open gameoptions.rml">Game Options</button><br />
-	      <button id="exit" tabindex="3" onclick="exit">Exit</button><br />
+	      <button id="exit" tabindex="3" escapeAction="1" onclick="exit">Exit</button><br />
       </div>
     </div>
 		
