@@ -29,6 +29,7 @@ void MenuRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
 {
   int window_width, window_height;
   SDL_GetWindowSize(screen, &window_width, &window_height);
+  MickLogger::getInstance()->debug(this, std::string("MenuRenderer::init window wxh: ").append(std::to_string(window_width)).append("x").append(std::to_string(window_height)) );
   RmlUiSDL2Renderer* rmluiRenderGlue = new RmlUiSDL2Renderer(renderer, screen);
   RmlUiSDL2SystemInterface* rmluiSystemGlue = new RmlUiSDL2SystemInterface();
   ShellFileInterface* rmluiFileGlue = new ShellFileInterface("assets/menu/");
@@ -61,6 +62,7 @@ void MenuRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
   EventManager::getInstance()->RegisterEventHandler("gameoptions.rml", new EventHandlerOptions());
   loadMenu("mainmenu.rml");
   m_renderer = renderer;
+  m_screen = screen;
 }
 
 void MenuRenderer::loadScoreBoard(PlayerCharacterEntity *winner, int gameTotalLength)
@@ -89,8 +91,18 @@ bool MenuRenderer::showMenu()
     return false;
   }
 
-  SDL_SetRenderDrawColor(m_renderer, 0, 0, 255, 255);
+  SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, 255);
   SDL_RenderClear(m_renderer);
+
+  int windowWidth, windowHeight;
+  SDL_GetWindowSize(m_screen, &windowWidth, &windowHeight);
+
+  if (windowWidth != m_context->GetDimensions().x || windowHeight != m_context->GetDimensions().y)
+	{
+    MickLogger::getInstance()->debug(this, std::string("MenuRenderer::showMenu new wxh: ").append(std::to_string(windowWidth)).append("x").append(std::to_string(windowHeight)) );
+		m_context->SetDimensions(Rml::Vector2i(windowWidth, windowHeight));
+	}
+  
   m_context->Render();
   SDL_RenderPresent(m_renderer);
 
@@ -179,11 +191,6 @@ bool MenuRenderer::showMenu()
 MenuRenderer::~MenuRenderer()
 {
   Rml::Shutdown();
-  if(m_context)
-  {
-    delete m_context;
-    m_context = nullptr;
-  }
   if(m_scoreBinder)
   {
     delete m_scoreBinder;

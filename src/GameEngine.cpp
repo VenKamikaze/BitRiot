@@ -6,8 +6,7 @@ GameEngine::GameEngine(SDL_Surface* back)
   m_pEntityManager = NULL;
   m_pSpawningPool = NULL;
 
-  //lpdd = p_dd;
-  lpddsback = back;
+  m_surface = back;
 
   GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
 }
@@ -78,7 +77,7 @@ void GameEngine::resetGame()
 
   // after setting initialisation parameters
   m_pEntityManager = new EntityManager();
-  m_pPanel = new InfoPanel(lpddsback, numPlayers, genders);
+  m_pPanel = new InfoPanel(m_surface, numPlayers, genders);
   m_pInputHandler = new InputHandler();
   m_pSpawningPool = new SpawningPool(numPlayers * 100);
   initHumanPlayers(numPlayers, genders, playerAIs);
@@ -156,8 +155,8 @@ bool GameEngine::runEngine()
 
       m_pEntityManager->runFrame();
 
-      m_pEntityManager->renderEntities(lpddsback);
-      m_pPanel->renderSurfaceTo(lpddsback, (GameSettings::getInstance()->getMapWidth() * Map::TILE_WIDTH), 0); //Possible but very rare crash here, due to dangling pointers
+      m_pEntityManager->renderEntities(m_surface);
+      m_pPanel->renderSurfaceTo(m_surface, (GameSettings::getInstance()->getMapWidth() * Map::TILE_WIDTH), 0); //Possible but very rare crash here, due to dangling pointers
       //as m_pPanel->setPlayerDead being updated one frame late
       break;
     }
@@ -339,7 +338,7 @@ void GameEngine::initHumanPlayers(int numPlayers, std::vector<bool>* malePlayers
 
     // set animation image for male or female
     EntityRenderer * er = EntityRendererFactory::getInstance()->getEntityRenderer(PLAYER_CHARACTER);
-    er->replaceTeamSurfaceWithImage(lpddsback, ss.str().c_str(), i);
+    er->replaceTeamSurfaceWithImage(m_surface, ss.str().c_str(), i);
   }
 
 }

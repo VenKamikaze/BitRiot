@@ -34,7 +34,7 @@ class GameEngine
 
 
   private:
-    SDL_Surface* lpddsback = NULL;
+    SDL_Surface* m_surface = NULL;
     MenuRenderer* menuSystem = NULL;
     EntityManager* m_pEntityManager = NULL;
     InfoPanel* m_pPanel = NULL;

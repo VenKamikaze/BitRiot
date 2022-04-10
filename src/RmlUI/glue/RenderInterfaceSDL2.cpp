@@ -28,7 +28,9 @@
 
 #include <RmlUi/Core.h>
 #include <SDL_image.h>
+#include <string>
 
+#include "MickLogger.h"
 #include "RenderInterfaceSDL2.h"
 
 RmlUiSDL2Renderer::RmlUiSDL2Renderer(SDL_Renderer* renderer, SDL_Window* screen)
@@ -55,6 +57,8 @@ void RmlUiSDL2Renderer::RenderGeometry(Rml::Vertex* vertices, int num_vertices, 
     r.w = mRenderer_w - r.x;
     r.h = mRenderer_h - r.y;
     
+    std::MickLogger::getInstance()->debug(this, std::string("RenderGeometry: r.x,r.y,r.w,r.h").append(std::to_string(r.x)).append(",").append(std::to_string(r.y)).append(",").append(std::to_string(r.w)).append(",").append(std::to_string(r.h)) );
+
     SDL_RenderSetViewport(mRenderer, &r);
 
     if (sdl_texture) {
@@ -70,7 +74,6 @@ void RmlUiSDL2Renderer::RenderGeometry(Rml::Vertex* vertices, int num_vertices, 
             (SDL_Color *)((Uint8 *) vertices + off2), sz,
             (float *)((Uint8 *) vertices + off3), sz,
             num_vertices, indices, num_indices, 4);
-
 }
 
 // Called by RmlUi when it wants to enable or disable scissoring to clip content.		
