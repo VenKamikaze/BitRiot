@@ -18,16 +18,15 @@
 
 
 //class MickSDLSound: public std::MickBaseSound
-class MickSDLRenderer : MickBaseRenderer<SDL_Window, SDL_Renderer, SDL_Surface, SDL_Texture>
+class MickSDLRenderer : public MickBaseRenderer<SDL_Window, SDL_Renderer, SDL_Surface, SDL_Texture>
 {
   public:
-    MickSDLRenderer();
     MickSDLRenderer(WindowMetadata windowMetadata);
     virtual ~MickSDLRenderer();
     void init(WindowMetadata windowMetadata);
-    static MickBaseRenderer<SDL_Window, SDL_Renderer, SDL_Surface, SDL_Texture>* getInstance();
-    static MickBaseRenderer<SDL_Window, SDL_Renderer, SDL_Surface, SDL_Texture>* getInstance(WindowMetadata windowMetadata); // windowMetadata is ignored unless instance is being created
-
+    void pushCpuBufferToHardwareBuffer(); // copies the SDL_Surface to the SDL_Texture and then renders.
+    static MickSDLRenderer* getInstance();
+    
   protected:
     void destructVideo();
 

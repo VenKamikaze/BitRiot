@@ -16,15 +16,13 @@ using namespace std;
 
 static MickSDLRenderer *sInstance = nullptr;
 
-MickSDLRenderer::MickSDLRenderer() : MickBaseRenderer<SDL_Window, SDL_Renderer, SDL_Surface, SDL_Texture>()
-{
-  MickLogger::getInstance()->info(this, "Created instance of MickSDLRenderer but did not initialise.");
-}
 
 MickSDLRenderer::MickSDLRenderer(WindowMetadata windowMetadata) : MickBaseRenderer<SDL_Window, SDL_Renderer, SDL_Surface, SDL_Texture>()
 {
+  assert(sInstance == nullptr);
   init(windowMetadata);
   MickLogger::getInstance()->info(this, "Created and initialised instance of MickSDLRenderer.");
+  sInstance = this;
 }
 
 void MickSDLRenderer::init(WindowMetadata windowMetadata)
@@ -98,6 +96,13 @@ void MickSDLRenderer::init(WindowMetadata windowMetadata)
   initialised = true;
 }
 
+void MickSDLRenderer::pushCpuBufferToHardwareBuffer()
+{
+  SDL_UpdateTexture(getPrimaryTextureHandle(), nullptr, getSurfaceBackBufferHandle()->pixels, getSurfaceBackBufferHandle()->pitch);
+  SDL_RenderClear(getRendererHandle());
+  SDL_RenderCopy(getRendererHandle(), getPrimaryTextureHandle(), nullptr, nullptr);
+}
+
 void MickSDLRenderer::destructVideo()
 {
   if(initialised && SDL_WasInit(SDL_INIT_VIDEO))
@@ -131,20 +136,8 @@ MickSDLRenderer::~MickSDLRenderer()
   destructVideo();
 }
 
-MickBaseRenderer<SDL_Window, SDL_Renderer, SDL_Surface, SDL_Texture>* MickSDLRenderer::getInstance()
+MickSDLRenderer* MickSDLRenderer::getInstance()
 {
-  if (!sInstance)
-  {
-    sInstance = new MickSDLRenderer();
-  }
-  return sInstance;
-}
-
-MickBaseRenderer<SDL_Window, SDL_Renderer, SDL_Surface, SDL_Texture>* MickSDLRenderer::getInstance(WindowMetadata windowMetadata)
-{
-  if (!sInstance)
-  {
-    sInstance = new MickSDLRenderer(windowMetadata);
-  }
+  assert(sInstance);
   return sInstance;
 }

@@ -71,9 +71,6 @@ bool consoleMain();
 
 // GLOBALS ////////////////////////////////////////////////
 
-// Create an SDL renderer
-MickBaseRenderer<SDL_Window, SDL_Renderer, SDL_Surface, SDL_Texture> *m_renderer = nullptr;
-
 MenuSDLRenderer* menu = nullptr;
 
 // game object globals
@@ -94,7 +91,7 @@ int consoleInit()
   windowMetadata.windowBpp = WINDOW_BPP;
   windowMetadata.windowTitle = WINDOW_TITLE;
 
-  m_renderer = MickSDLRenderer::getInstance(windowMetadata); // performs initialisation
+  new MickSDLRenderer(windowMetadata); // performs initialisation
   SDL_JoystickEventState(SDL_ENABLE);
 
   if (TTF_Init() == -1)
@@ -115,19 +112,18 @@ int consoleInit()
     throw runtime_error(msg);
   }
 
+  MickSDLRenderer *renderer = MickSDLRenderer::getInstance();
   Map * staticMap = Map::getInstance();
-  staticMap->init(m_renderer->getSurfaceBackBufferHandle());
+  staticMap->init(renderer->getSurfaceBackBufferHandle());
   EntityRendererFactory * erf = EntityRendererFactory::getInstance();
-  erf->initSurfaces(m_renderer->getSurfaceBackBufferHandle());
-  engine = new GameEngine(m_renderer->getSurfaceBackBufferHandle());
+  erf->initSurfaces(renderer->getSurfaceBackBufferHandle());
+  engine = new GameEngine(renderer->getSurfaceBackBufferHandle());
 
   return 0;
 } // end Game_Init
 
 bool consoleMain()
 {
-  SDL_FillRect(m_renderer->getSurfaceBackBufferHandle(), nullptr, SDL_MapRGB(m_renderer->getSurfaceBackBufferHandle()->format, 200, 200, 100)); // as per ddbltfxClear
-
   Uint32 startTime = SDL_GetTicks();
 
   bool keepRunning = engine->runEngine();
@@ -188,7 +184,7 @@ int main(int argc, char* argv[])
   try
   {
     quitkey = consoleInit();
-    menu = new MenuSDLRenderer(m_renderer->getRendererHandle(), m_renderer->getWindowHandle());
+    menu = new MenuSDLRenderer(MickSDLRenderer::getInstance()->getRendererHandle(), MickSDLRenderer::getInstance()->getWindowHandle());
     engine->setMenuSystem(menu);
   }
   catch(const exception &e)
@@ -197,15 +193,17 @@ int main(int argc, char* argv[])
     quitkey = -1;
   }
 
+  MickSDLRenderer *renderer = MickSDLRenderer::getInstance();
+
   // Do game loop
   try
   {
     while(!quitkey)
     {
 
-      if(SDL_MUSTLOCK(m_renderer->getSurfaceBackBufferHandle()))
+      if(SDL_MUSTLOCK(renderer->getSurfaceBackBufferHandle()))
       {
-        if(SDL_LockSurface(m_renderer->getSurfaceBackBufferHandle()) < 0)
+        if(SDL_LockSurface(renderer->getSurfaceBackBufferHandle()) < 0)
         {
           break;
         }
@@ -233,12 +231,9 @@ int main(int argc, char* argv[])
         }
       }
 
-      if(m_renderer->getSurfaceBackBufferHandle() != nullptr)
+      if(renderer->getSurfaceBackBufferHandle() != nullptr)
       {
-        SDL_UpdateTexture(m_renderer->getPrimaryTextureHandle(), nullptr, m_renderer->getSurfaceBackBufferHandle()->pixels, m_renderer->getSurfaceBackBufferHandle()->pitch);
-        SDL_RenderClear(m_renderer->getRendererHandle());
-        SDL_RenderCopy(m_renderer->getRendererHandle(), m_renderer->getPrimaryTextureHandle(), nullptr, nullptr);
-        SDL_RenderPresent(m_renderer->getRendererHandle());
+        SDL_RenderPresent(renderer->getRendererHandle());
       }
       else
       {
@@ -246,9 +241,9 @@ int main(int argc, char* argv[])
         break;
       }
 
-      if(SDL_MUSTLOCK(m_renderer->getSurfaceBackBufferHandle()))
+      if(SDL_MUSTLOCK(renderer->getSurfaceBackBufferHandle()))
       {
-        SDL_UnlockSurface(m_renderer->getSurfaceBackBufferHandle());
+        SDL_UnlockSurface(renderer->getSurfaceBackBufferHandle());
       }
 
     }
@@ -269,8 +264,8 @@ int main(int argc, char* argv[])
       TTF_Quit(); //Quit SDL_ttf
     }
 
-    delete m_renderer;
-    m_renderer = nullptr;
+    delete renderer;
+    renderer = nullptr;
 
     delete MickSDLSound::getInstance();
   }

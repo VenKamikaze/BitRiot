@@ -19,6 +19,7 @@
 #include "GameSettings.h"
 #include "GameOverTimer.h"
 #include "GameScoreBoardTimer.h"
+#include "MickSDLRenderer.h"
 
 class GameEngine
 {

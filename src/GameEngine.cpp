@@ -1,4 +1,6 @@
 #include "GameEngine.h"
+#include "GameSettings.h"
+#include "MickSDLRenderer.h"
 #include "SDL_timer.h"
 
 GameEngine::GameEngine(SDL_Surface* back)
@@ -93,7 +95,7 @@ bool GameEngine::runEngine()
   {
     case GameSettings::MENU_RUNNING:
     {
-      if (menuSystem == NULL)
+      if (menuSystem == nullptr)
       {
         throw std::runtime_error(std::string("About to render menu, but no menu rendering system found!"));
       }
@@ -143,10 +145,10 @@ bool GameEngine::runEngine()
       catch(const InputException &e)
       {
         if(e.gotQuit())
-	{
+	      {
           GameSettings::getInstance()->setGameState(GameSettings::GAME_OVER);
           menuSystem->loadScoreBoard(m_pEntityManager->getWinningPlayer(), (SDL_GetTicks() - m_gameStartedAtTicks) / 1000);
-	}
+	      }
       }
 
       // game logic here...
@@ -157,6 +159,7 @@ bool GameEngine::runEngine()
 
       m_pEntityManager->renderEntities(m_surface);
       m_pPanel->renderSurfaceTo(m_surface, (GameSettings::getInstance()->getMapWidth() * Map::TILE_WIDTH), 0); //Possible but very rare crash here, due to dangling pointers
+      MickSDLRenderer::getInstance()->pushCpuBufferToHardwareBuffer();
       //as m_pPanel->setPlayerDead being updated one frame late
       break;
     }
@@ -181,6 +184,18 @@ bool GameEngine::runEngine()
       break;
     }
   }
+/*
+  if(GameSettings::getInstance()->getGameState() != GameSettings::MENU_RUNNING &&
+       GameSettings::getInstance()->getGameState() != GameSettings::GAME_OVER )
+  {
+
+    MickBaseRenderer<SDL_Window, SDL_Renderer, SDL_Surface, SDL_Texture> *m_renderer = MickSDLRenderer::getInstance();
+    SDL_UpdateTexture(m_renderer->getPrimaryTextureHandle(), nullptr, m_renderer->getSurfaceBackBufferHandle()->pixels, m_renderer->getSurfaceBackBufferHandle()->pitch);
+    SDL_RenderClear(m_renderer->getRendererHandle());
+    SDL_RenderCopy(m_renderer->getRendererHandle(), m_renderer->getPrimaryTextureHandle(), nullptr, nullptr);
+    
+  }
+  */
   return true;
 }
 

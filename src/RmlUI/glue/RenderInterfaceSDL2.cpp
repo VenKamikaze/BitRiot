@@ -56,8 +56,6 @@ void RmlUiSDL2Renderer::RenderGeometry(Rml::Vertex* vertices, int num_vertices, 
     r.y = (int)translation.y;
     r.w = mRenderer_w - r.x;
     r.h = mRenderer_h - r.y;
-    
-    std::MickLogger::getInstance()->debug(this, std::string("RenderGeometry: r.x,r.y,r.w,r.h").append(std::to_string(r.x)).append(",").append(std::to_string(r.y)).append(",").append(std::to_string(r.w)).append(",").append(std::to_string(r.h)) );
 
     SDL_RenderSetViewport(mRenderer, &r);
 
@@ -74,6 +72,8 @@ void RmlUiSDL2Renderer::RenderGeometry(Rml::Vertex* vertices, int num_vertices, 
             (SDL_Color *)((Uint8 *) vertices + off2), sz,
             (float *)((Uint8 *) vertices + off3), sz,
             num_vertices, indices, num_indices, 4);
+
+    SDL_RenderSetViewport(mRenderer, nullptr); // reset viewport
 }
 
 // Called by RmlUi when it wants to enable or disable scissoring to clip content.		
@@ -82,19 +82,22 @@ void RmlUiSDL2Renderer::EnableScissorRegion(bool enable)
     if (enable) {
         SDL_RenderSetClipRect(mRenderer, &mRectScisor);
     } else {
-        SDL_RenderSetClipRect(mRenderer, NULL);
+        SDL_RenderSetClipRect(mRenderer, nullptr);
     }
 }
 
 // Called by RmlUi when it wants to change the scissor region.		
 void RmlUiSDL2Renderer::SetScissorRegion(int x, int y, int width, int height)
 {
-    int w_width, w_height;
-    SDL_GetWindowSize(mScreen, &w_width, &w_height);
+    int rendererWidth, rendererHeight;
+    //SDL_GetWindowSize(mScreen, &w_width, &w_height);
+    SDL_GetRendererOutputSize(mRenderer, &rendererWidth, &rendererHeight);
     mRectScisor.x = x;
-    mRectScisor.y = w_height - (y + height);
+    mRectScisor.y = rendererHeight - (y + height);
     mRectScisor.w = width;
     mRectScisor.h = height;
+    //std::MickLogger::getInstance()->debug(this, std::string("mRectScisor: r.x,r.y,r.w,r.h").append(std::to_string(mRectScisor.x)).append(",").append(std::to_string(mRectScisor.y)).append(",").append(std::to_string(mRectScisor.w)).append(",").append(std::to_string(mRectScisor.h)) );
+
 }
 
 // Called by RmlUi when a texture is required by the library.		

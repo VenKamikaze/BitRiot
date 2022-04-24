@@ -6,6 +6,8 @@
 #include "RmlUI/MickRmlUIElementUtil.h"
 #include "RmlUI/ScoreBoardBinder.h"
 #include "SDL_keycode.h"
+#include "SDL_pixels.h"
+#include "SDL_render.h"
 #include <string>
 
 
@@ -27,9 +29,10 @@ void MenuSDLRenderer::loadMenu(std::string menuRmlFile)
 
 void MenuSDLRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
 {
-  int window_width, window_height;
-  SDL_GetWindowSize(screen, &window_width, &window_height);
-  MickLogger::getInstance()->debug(this, std::string("MenuRenderer::init window wxh: ").append(std::to_string(window_width)).append("x").append(std::to_string(window_height)) );
+  int windowWidth, windowHeight;
+  SDL_GetWindowSize(screen, &windowWidth, &windowHeight);
+  //not initialised on start: SDL_GetRendererOutputSize(m_renderer, &windowWidth, &windowHeight);
+  MickLogger::getInstance()->debug(this, std::string("MenuRenderer::init window wxh: ").append(std::to_string(windowWidth)).append("x").append(std::to_string(windowHeight)) );
   RmlUiSDL2Renderer* rmluiRenderGlue = new RmlUiSDL2Renderer(renderer, screen);
   RmlUiSDL2SystemInterface* rmluiSystemGlue = new RmlUiSDL2SystemInterface();
   ShellFileInterface* rmluiFileGlue = new ShellFileInterface("assets/menu/");
@@ -51,7 +54,7 @@ void MenuSDLRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
   //Rml::LoadFontFace("assets/fonts/Delicious-Roman.otf");
 
   m_context = Rml::CreateContext("default",
-                                   Rml::Vector2i(window_width, window_height));
+                                   Rml::Vector2i(windowWidth, windowHeight));
 
   Rml::Debugger::Initialise(m_context);
 
@@ -76,6 +79,8 @@ void MenuSDLRenderer::clearScoreBoard()
   if(m_scoreBinder && m_context)
   {
     m_scoreBinder->RemoveDataBinding(m_context);
+    delete m_scoreBinder;
+    m_scoreBinder = nullptr;
   }
 }
 
@@ -87,25 +92,11 @@ bool MenuSDLRenderer::showMenu()
 
   if(! m_renderer)
   {
-    cerr << "MenuRenderer::showMenu has nullptr for m_renderer!" << endl;
+    MickLogger::getInstance()->error(this, "MenuRenderer::showMenu has nullptr for m_renderer!");
     return false;
   }
-
-  SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, 255);
-  SDL_RenderClear(m_renderer);
-
-  int windowWidth, windowHeight;
-  SDL_GetWindowSize(m_screen, &windowWidth, &windowHeight);
-
-  if (windowWidth != m_context->GetDimensions().x || windowHeight != m_context->GetDimensions().y)
-	{
-    MickLogger::getInstance()->debug(this, std::string("MenuRenderer::showMenu new wxh: ").append(std::to_string(windowWidth)).append("x").append(std::to_string(windowHeight)) );
-		m_context->SetDimensions(Rml::Vector2i(windowWidth, windowHeight));
-	}
   
   m_context->Render();
-  SDL_RenderPresent(m_renderer);
-
   RmlUiSDL2SystemInterface* systemInterface = (RmlUiSDL2SystemInterface*) Rml::GetSystemInterface();
 
   while(SDL_PollEvent(&event))
@@ -150,11 +141,11 @@ bool MenuSDLRenderer::showMenu()
             Rml::ElementDocument *document = m_context->GetFocusElement()->GetOwnerDocument();
             if(document)
             {
-              MickLogger::getInstance()->debug(nullptr, std::string("current document id: ").append(document ? document->GetId() : "null") );
+              MickLogger::getInstance()->debug(this, std::string("current document id: ").append(document ? document->GetId() : "null") );
               Rml::Element* escapeActionElement = MickRmlUIElementUtil::getFirstElementWithAttribute(document, "escapeAction");
               if(escapeActionElement)
               {
-                MickLogger::getInstance()->debug(nullptr, std::string("escapeActionElement element id: ").append(escapeActionElement->GetId()) );
+                MickLogger::getInstance()->debug(this, std::string("escapeActionElement element id: ").append(escapeActionElement->GetId()) );
                 // process the element with the attribute 'escapeAction'
                 escapeActionElement->Focus();
                 m_context->ProcessKeyDown(systemInterface->TranslateKey(SDLK_RETURN), 0);
