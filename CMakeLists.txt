@@ -86,7 +86,8 @@ set(SOURCES ./src/AIGameView.cpp
 ./src/InfoPanel.cpp
 ./src/InputHandler.cpp
 ./src/Map.cpp
-./src/MenuRenderer.cpp
+./src/MickSDLRenderer.cpp
+./src/MenuSDLRenderer.cpp
 ./src/MickAssets.cpp
 ./src/MickBaseInput.cpp
 ./src/MickBaseSound.cpp

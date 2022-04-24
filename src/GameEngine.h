@@ -15,7 +15,7 @@
 //#include "DDraw.h"
 #include <SDL2/SDL.h>
 
-#include "MenuRenderer.h"
+#include "MenuSDLRenderer.h"
 #include "GameSettings.h"
 #include "GameOverTimer.h"
 #include "GameScoreBoardTimer.h"
@@ -24,7 +24,7 @@ class GameEngine
 {
   public:
     GameEngine(SDL_Surface* lpddsback);
-    void setMenuSystem(MenuRenderer* rocketMenu)
+    void setMenuSystem(MenuSDLRenderer* rocketMenu)
     {
       menuSystem = rocketMenu;
     }
@@ -35,7 +35,7 @@ class GameEngine
 
   private:
     SDL_Surface* m_surface = NULL;
-    MenuRenderer* menuSystem = NULL;
+    MenuSDLRenderer* menuSystem = NULL;
     EntityManager* m_pEntityManager = NULL;
     InfoPanel* m_pPanel = NULL;
     InputHandler* m_pInputHandler = NULL;

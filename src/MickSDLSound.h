@@ -33,6 +33,7 @@ class MickSDLSound : MickBaseSound
 
   protected:
     void loadSound(std::string fileName, MickSoundFile* sound);
+    void destructAudio();
 
   private:
     std::map<std::string, MickSoundFile> cachedSounds;

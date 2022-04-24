@@ -5,8 +5,8 @@
  *      Author: msaun
  */
 
-#ifndef MICKRENDERER_H_
-#define MICKRENDERER_H_
+#ifndef MENUSDLRENDERER_H_
+#define MENUSDLRENDERER_H_
 
 #include <RmlUi/Core/ElementDocument.h>
 #include <SDL2/SDL_render.h>
@@ -34,14 +34,14 @@
 #include <iostream>
 #include "MickLogger.h"
 
-class MenuRenderer
+class MenuSDLRenderer
 {
   public:
-    MenuRenderer(SDL_Renderer *renderer, SDL_Window *screen);
+    MenuSDLRenderer(SDL_Renderer *renderer, SDL_Window *screen);
     void loadScoreBoard(PlayerCharacterEntity *winner, int gameTotalLength);
     void clearScoreBoard();
     bool showMenu();
-    virtual ~MenuRenderer();
+    virtual ~MenuSDLRenderer();
 
   private:
     void init(SDL_Renderer* renderer, SDL_Window *screen);
@@ -54,4 +54,4 @@ class MenuRenderer
     ScoreBoardBinder *m_scoreBinder = nullptr;
 };
 
-#endif /* MICKRENDERER_H_ */
+#endif /* MENUSDLRENDERER_H_ */

@@ -1,6 +1,6 @@
 // implementation of Map.h
 
-#include "MenuRenderer.h"
+#include "MenuSDLRenderer.h"
 #include "MickLogger.h"
 #include "PlayerCharacterEntity.h"
 #include "RmlUI/MickRmlUIElementUtil.h"
@@ -11,12 +11,12 @@
 
 using namespace std;
 
-MenuRenderer::MenuRenderer(SDL_Renderer* renderer, SDL_Window* screen)
+MenuSDLRenderer::MenuSDLRenderer(SDL_Renderer* renderer, SDL_Window* screen)
 {
   init(renderer, screen);
 }
 
-void MenuRenderer::loadMenu(std::string menuRmlFile)
+void MenuSDLRenderer::loadMenu(std::string menuRmlFile)
 {
   if (! EventManager::getInstance()->LoadWindow(menuRmlFile.c_str()))
   {
@@ -25,7 +25,7 @@ void MenuRenderer::loadMenu(std::string menuRmlFile)
   }
 }
 
-void MenuRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
+void MenuSDLRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
 {
   int window_width, window_height;
   SDL_GetWindowSize(screen, &window_width, &window_height);
@@ -65,13 +65,13 @@ void MenuRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
   m_screen = screen;
 }
 
-void MenuRenderer::loadScoreBoard(PlayerCharacterEntity *winner, int gameTotalLength)
+void MenuSDLRenderer::loadScoreBoard(PlayerCharacterEntity *winner, int gameTotalLength)
 {
   m_scoreBinder = new ScoreBoardBinder(m_context, winner, gameTotalLength);
   loadMenu("scoreboard.rml");
 }
 
-void MenuRenderer::clearScoreBoard()
+void MenuSDLRenderer::clearScoreBoard()
 {
   if(m_scoreBinder && m_context)
   {
@@ -79,7 +79,7 @@ void MenuRenderer::clearScoreBoard()
   }
 }
 
-bool MenuRenderer::showMenu()
+bool MenuSDLRenderer::showMenu()
 {
   SDL_Event event;
 
@@ -188,7 +188,7 @@ bool MenuRenderer::showMenu()
   return continueRenderingMenu;
 }
 
-MenuRenderer::~MenuRenderer()
+MenuSDLRenderer::~MenuSDLRenderer()
 {
   Rml::Shutdown();
   if(m_scoreBinder)
