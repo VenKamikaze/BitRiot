@@ -12,6 +12,7 @@ namespace std
     int gameLengthSeconds = 0;
     int numberEggsPlaced = 0;
     int numberBombsPlaced = 0;
+    int playerWinNumber = 0;
   } m_scores;
 
   ScoreBoardBinder::ScoreBoardBinder(Rml::Context* rmlContext, PlayerCharacterEntity* winner, int gameTotalLength)
@@ -33,6 +34,7 @@ namespace std
     constructor.Bind("numberEggsPlaced", &m_scores.numberEggsPlaced);
     constructor.Bind("numberBombsPlaced", &m_scores.numberBombsPlaced);
     constructor.Bind("gameLengthSeconds", &m_scores.gameLengthSeconds);
+    constructor.Bind("playerWinNumber", &m_scores.playerWinNumber);
 
     m_dataModelHandle = constructor.GetModelHandle();
 
@@ -56,6 +58,7 @@ namespace std
       ss << "Player " << winner->getTeam() << " " << ScoreBoardBinder::randomWinText();
       m_scores.numberBombsPlaced = winner->getNumberBombsPlaced();
       m_scores.numberEggsPlaced = winner->getNumberEggsPlaced();
+      m_scores.playerWinNumber = winner->getTeam();
     }
     else
     {

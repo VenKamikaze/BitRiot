@@ -4,6 +4,11 @@
 
 
 /// UNIX INCLUDES
+#include "MickBaseRenderer.h"
+#include "MickSDLRenderer.h"
+#include "SDL_render.h"
+#include "SDL_surface.h"
+#include <stdexcept>
 #if defined (__GNUC__) && defined(__unix__)
 
 
@@ -31,66 +36,28 @@
 // game object includes
 #include "GameEngine.h"
 
-#include <GL/glew.h>
-
 #ifndef NULL
 #define NULL nullptr;
 #endif
 
-#include "MenuRenderer.h"
-
-#include <RmlUi/Core.h>
-#include <RmlUi/Core/Input.h>
-#include <RmlUi/Debugger/Debugger.h>
-
-#include "RmlUI/glue/SystemInterfaceSDL2.h"
-#include "RmlUI/glue/RenderInterfaceSDL2.h"
-#include "RmlUI/glue/ShellFileInterface.h"
+#include "MenuSDLRenderer.h"
 
 // DEFINES ////////////////////////////////////////////////
 
 // defines for windows interface
-#define WINDOW_TITLE      "Bit Riot Beta - SDL2 Port"
-
-
+#define WINDOW_TITLE      "Bit Riot Beta"
 #define WINDOW_BPP        32    // bitdepth of window (8,16,24 etc.)
-// note: if windowed and not
-// fullscreen then bitdepth must
-// be same as system bitdepth
-// also if 8-bit the a pallete
-// is created and attached
-
-// Ouestion: is the above comment still valid for SDL2 ?
-
-//const unsigned int COLORKEY_LOW = 0; // low and high values for source
-//const unsigned int COLORKEY_HIGH = 0; // color keying (transparency range)
-
-//const Uint8 COLORKEY_R = 0;
-//const Uint8 COLORKEY_G = 0;
-//const Uint8 COLORKEY_B = 0;
-//const Uint8 COLORKEY_A = 0;
 
 // Controls initialisation parameters, such as FULLSCREEN, etc
 unsigned int initFlags = 0; // start with all turned off
 
-// Initialisation parameters supported
-static const unsigned int ASK_FULLSCREEN  = (1 << 1);
 
 // PROTOTYPES /////////////////////////////////////////////
-
-// game console
-//int consoleInit();
-//int consoleShutdown();
 bool consoleMain();
 
 // GLOBALS ////////////////////////////////////////////////
 
-SDL_Window* sdl_window = nullptr;
-SDL_Renderer* sdl_renderer = nullptr;
-SDL_Texture* sdl_primary_texture = nullptr;
-SDL_Surface* sdl_primary = nullptr;
-
-MenuRenderer* menu = nullptr;
+MenuSDLRenderer* menu = nullptr;
 
 // game object globals
 GameEngine* engine = nullptr;
@@ -104,65 +71,14 @@ GameEngine* engine = nullptr;
 
 int consoleInit()
 {
-  if (SDL_Init(SDL_INIT_EVERYTHING) < 0 )
-  {
-    cerr << "Failed to SDL_Init video!";
-    return 1;
-  }
+  WindowMetadata windowMetadata;
+  windowMetadata.windowWidth = (Map::MAP_WIDTH * Map::TILE_WIDTH) + InfoPanel::WIDTH;   // size of window
+  windowMetadata.windowHeight = Map::MAP_HEIGHT * Map::TILE_HEIGHT;
+  windowMetadata.windowBpp = WINDOW_BPP;
+  windowMetadata.windowTitle = WINDOW_TITLE;
 
-  const int WINDOW_WIDTH = (Map::MAP_WIDTH * Map::TILE_WIDTH) + InfoPanel::WIDTH;   // size of window
-  const int WINDOW_HEIGHT = Map::MAP_HEIGHT * Map::TILE_HEIGHT;
-
-  sdl_window = SDL_CreateWindow(WINDOW_TITLE, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                                WINDOW_WIDTH, WINDOW_HEIGHT, (initFlags & ASK_FULLSCREEN) ? SDL_WINDOW_FULLSCREEN_DESKTOP : SDL_WINDOW_SHOWN );
-  if (sdl_window == nullptr)
-  {
-    cerr << "Failed to create sdl_window!";
-    return 1;
-  }
-
+  new MickSDLRenderer(windowMetadata); // performs initialisation
   SDL_JoystickEventState(SDL_ENABLE);
-
-
-  sdl_renderer = SDL_CreateRenderer(sdl_window, -1, 0);
-  if (sdl_renderer == nullptr)
-  {
-    cerr << "Failed to create sdl_renderer!";
-    return 1;
-  }
-  SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
-  SDL_RenderSetLogicalSize(sdl_renderer, WINDOW_WIDTH, WINDOW_HEIGHT);
-
-  //SDL_RendererInfo rendererInfo;
-  //SDL_GetRendererInfo(sdl_renderer, &rendererInfo);
-  //std::cout << "Renderer: " << rendererInfo.name << std::endl;
-
-  Uint32 pixel_format = SDL_GetWindowPixelFormat(sdl_window);
-
-  sdl_primary_texture = SDL_CreateTexture(sdl_renderer, pixel_format, SDL_TEXTUREACCESS_STREAMING,
-                                          WINDOW_WIDTH, WINDOW_HEIGHT);
-  if (sdl_primary_texture == nullptr)
-  {
-    cerr << "Failed to create sdl_primary_texture!";
-    return 1;
-  }
-
-  int depth = 0;
-  Uint32 rmask = 0;
-  Uint32 gmask = 0;
-  Uint32 bmask = 0;
-  Uint32 amask = 0;
-  SDL_PixelFormatEnumToMasks(pixel_format, &depth, &rmask, &gmask, &bmask, &amask);
-
-  sdl_primary = SDL_CreateRGBSurface(0, WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_BPP,
-                                     rmask, gmask, bmask, amask);
-
-
-  if (sdl_primary == nullptr)
-  {
-    cerr << "Failed to create sdl_primary!";
-    return 1;
-  }
 
   if (TTF_Init() == -1)
   {
@@ -176,44 +92,24 @@ int consoleInit()
   }
   catch(const exception &e)
   {
-    cerr << "Could not init audio!";
-    return 1;
+    std::string msg = "Could not initialise audio!";
+    MickLogger::getInstance()->error(nullptr, msg);
+    MickLogger::getInstance()->error(nullptr, e.what());
+    throw runtime_error(msg);
   }
 
-
-  // update blitting RECT
-  SDL_Rect clientArea;
-  clientArea.x = 0;
-  clientArea.y = 0;
-  clientArea.w = WINDOW_WIDTH -1 ;
-  clientArea.h = WINDOW_HEIGHT - 1;
-
-  SDL_SetClipRect(sdl_primary, &clientArea);
-
-  // set colour keying here */
-  //SDL_SetColorKey(sdl_back, SDL_SRCCOLORKEY, SDL_MapRGB(sdl_back->format, COLORKEY_R, COLORKEY_G, COLORKEY_B));
-
-  // seed random number generator
-  srand(SDL_GetTicks());
-
-  // all other initialization code goes here...
-
+  MickSDLRenderer *renderer = MickSDLRenderer::getInstance();
   Map * staticMap = Map::getInstance();
-  staticMap->init(sdl_primary);
-
+  staticMap->init(renderer->getSurfaceBackBufferHandle());
   EntityRendererFactory * erf = EntityRendererFactory::getInstance();
-  erf->initSurfaces(sdl_primary);
-
-  engine = new GameEngine(sdl_primary);
+  erf->initSurfaces(renderer->getSurfaceBackBufferHandle());
+  engine = new GameEngine(renderer->getSurfaceBackBufferHandle());
 
   return 0;
-
 } // end Game_Init
 
 bool consoleMain()
 {
-  SDL_FillRect(sdl_primary, nullptr, SDL_MapRGB(sdl_primary->format, 200, 200, 100)); // as per ddbltfxClear
-
   Uint32 startTime = SDL_GetTicks();
 
   bool keepRunning = engine->runEngine();
@@ -274,7 +170,7 @@ int main(int argc, char* argv[])
   try
   {
     quitkey = consoleInit();
-    menu = new MenuRenderer(sdl_renderer, sdl_window);
+    menu = new MenuSDLRenderer(MickSDLRenderer::getInstance()->getRendererHandle(), MickSDLRenderer::getInstance()->getWindowHandle());
     engine->setMenuSystem(menu);
   }
   catch(const exception &e)
@@ -283,15 +179,17 @@ int main(int argc, char* argv[])
     quitkey = -1;
   }
 
+  MickSDLRenderer *renderer = MickSDLRenderer::getInstance();
+
   // Do game loop
   try
   {
     while(!quitkey)
     {
 
-      if(SDL_MUSTLOCK(sdl_primary))
+      if(SDL_MUSTLOCK(renderer->getSurfaceBackBufferHandle()))
       {
-        if(SDL_LockSurface(sdl_primary) < 0)
+        if(SDL_LockSurface(renderer->getSurfaceBackBufferHandle()) < 0)
         {
           break;
         }
@@ -319,12 +217,9 @@ int main(int argc, char* argv[])
         }
       }
 
-      if(sdl_primary != nullptr)
+      if(renderer->getSurfaceBackBufferHandle() != nullptr)
       {
-        SDL_UpdateTexture(sdl_primary_texture, nullptr, sdl_primary->pixels, sdl_primary->pitch);
-        SDL_RenderClear(sdl_renderer);
-        SDL_RenderCopy(sdl_renderer, sdl_primary_texture, nullptr, nullptr);
-        SDL_RenderPresent(sdl_renderer);
+        SDL_RenderPresent(renderer->getRendererHandle());
       }
       else
       {
@@ -332,9 +227,9 @@ int main(int argc, char* argv[])
         break;
       }
 
-      if(SDL_MUSTLOCK(sdl_primary))
+      if(SDL_MUSTLOCK(renderer->getSurfaceBackBufferHandle()))
       {
-        SDL_UnlockSurface(sdl_primary);
+        SDL_UnlockSurface(renderer->getSurfaceBackBufferHandle());
       }
 
     }
@@ -355,29 +250,10 @@ int main(int argc, char* argv[])
       TTF_Quit(); //Quit SDL_ttf
     }
 
-    if(SDL_WasInit(SDL_INIT_EVERYTHING))
-    {
-      if(sdl_primary != nullptr)
-      {
-        SDL_FreeSurface(sdl_primary);
-        sdl_primary = nullptr;
-      }
+    delete renderer;
+    renderer = nullptr;
 
-      if(sdl_renderer != nullptr)
-      {
-        SDL_DestroyRenderer(sdl_renderer); // also frees sdl_primary_texture
-        sdl_primary_texture = nullptr;
-        sdl_renderer = nullptr;
-      }
-
-      if(sdl_window != nullptr)
-      {
-        SDL_DestroyWindow(sdl_window);
-        sdl_window = nullptr;
-      }
-
-      SDL_Quit();
-    }
+    delete MickSDLSound::getInstance();
   }
   catch(const exception &e)
   {

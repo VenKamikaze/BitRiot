@@ -25,6 +25,7 @@
  * THE SOFTWARE.
  *
  */
+
 #include <RmlUi/Core.h>
 #include "SystemInterfaceSDL2.h"
 

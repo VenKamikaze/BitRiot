@@ -2,6 +2,7 @@ project(BitRiot)
 cmake_minimum_required(VERSION 3.4.3)
 
 set(CMAKE_BUILD_TYPE Release)
+#set(CMAKE_BUILD_TYPE Debug)
 
 set(CMAKE_CXX_STANDARD 14)
 
@@ -13,6 +14,13 @@ set(CMAKE_CSS_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
 
 set(OpenGL_GL_PREFERENCE "GLVND")
 
+set(RMLUI_STATIC true)
+set(RMLUI_DIR ${BitRiot_SOURCE_DIR}/ext/RmlUi)
+
+if(RMLUI_STATIC)
+  set(RMLUI_STATIC_DIR ${BitRiot_SOURCE_DIR}/ext/RmlUi/lib)
+endif()
+
 if(CMAKE_BUILD_TYPE MATCHES "Release")
   SET (CMAKE_SHARED_LINKER_FLAGS ${CMAKE_SHARED_LINKER_FLAGS_INIT} -s)
 endif()
@@ -23,8 +31,8 @@ find_package(SDL2 REQUIRED)
 find_package(SDL2_mixer REQUIRED)
 find_package(SDL2_ttf REQUIRED)
 find_package(SDL2_image REQUIRED)
-find_package(RmlUi REQUIRED)
 find_package(OpenGL REQUIRED)
+find_package(RmlUi REQUIRED)
 find_package(PkgConfig)
 
 if(NOT SDL2_FOUND)
@@ -86,7 +94,8 @@ set(SOURCES ./src/AIGameView.cpp
 ./src/InfoPanel.cpp
 ./src/InputHandler.cpp
 ./src/Map.cpp
-./src/MenuRenderer.cpp
+./src/MickSDLRenderer.cpp
+./src/MenuSDLRenderer.cpp
 ./src/MickAssets.cpp
 ./src/MickBaseInput.cpp
 ./src/MickBaseSound.cpp
@@ -120,11 +129,15 @@ add_executable(BitRiot ${SOURCES})
 if(MINGW)
   target_link_libraries(BitRiot ${SDL2_LIBRARY} ${SDL2_MIXER_LIBRARY} ${SDL2_TTF_LIBRARY} ${SDL2IMAGE_LIBRARY} ${RMLUI_LIBRARIES} ${OPENGL_LIBRARIRES} shlwapi -mwindows)
 else()
-  target_link_libraries(BitRiot ${SDL2_LIBRARY} ${SDL2_MIXER_LIBRARY} ${SDL2_TTF_LIBRARY} ${SDL2IMAGE_LIBRARY} ${RMLUI_LIBRARIES} ${OPENGL_LIBRARIRES})
+  target_link_libraries(BitRiot ${SDL2_LIBRARY} ${SDL2_MIXER_LIBRARY} ${SDL2_TTF_LIBRARY} ${SDL2IMAGE_LIBRARY} ${RMLUI_LIBRARIES} freetype ${OPENGL_LIBRARIRES})
 
-    add_custom_command(
-        TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ln -sf ${PROJECT_SOURCE_DIR}/data ${PROJECT_BINARY_DIR}/
-        COMMAND ln -sf ${PROJECT_SOURCE_DIR}/assets ${PROJECT_BINARY_DIR}/
-    )
+  add_custom_command(
+    TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ln -sf ${PROJECT_SOURCE_DIR}/data ${PROJECT_BINARY_DIR}/
+    COMMAND ln -sf ${PROJECT_SOURCE_DIR}/assets ${PROJECT_BINARY_DIR}/
+  )
+endif()
+
+if(RMLUI_STATIC)
+  target_compile_definitions(BitRiot PRIVATE RMLUI_STATIC_LIB)
 endif()
