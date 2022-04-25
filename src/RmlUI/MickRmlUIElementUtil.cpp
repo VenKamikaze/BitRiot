@@ -5,8 +5,6 @@
  *      Author: msaun
  */
 
-#define RMLUI_STATIC_LIB
-
 #include "MickRmlUIElementUtil.h"
 #include "MickLogger.h"
 #include <RmlUi/Core/Element.h>

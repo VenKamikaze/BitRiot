@@ -1,8 +1,8 @@
 project(BitRiot)
 cmake_minimum_required(VERSION 3.4.3)
 
-#set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_BUILD_TYPE Release)
+#set(CMAKE_BUILD_TYPE Debug)
 
 set(CMAKE_CXX_STANDARD 14)
 
@@ -14,7 +14,12 @@ set(CMAKE_CSS_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
 
 set(OpenGL_GL_PREFERENCE "GLVND")
 
-set(RMLUI_STATIC false)
+set(RMLUI_STATIC true)
+set(RMLUI_DIR ${BitRiot_SOURCE_DIR}/ext/RmlUi)
+
+if(RMLUI_STATIC)
+  set(RMLUI_STATIC_DIR ${BitRiot_SOURCE_DIR}/ext/RmlUi/lib)
+endif()
 
 if(CMAKE_BUILD_TYPE MATCHES "Release")
   SET (CMAKE_SHARED_LINKER_FLAGS ${CMAKE_SHARED_LINKER_FLAGS_INIT} -s)
@@ -27,13 +32,8 @@ find_package(SDL2_mixer REQUIRED)
 find_package(SDL2_ttf REQUIRED)
 find_package(SDL2_image REQUIRED)
 find_package(OpenGL REQUIRED)
+find_package(RmlUi REQUIRED)
 find_package(PkgConfig)
-
-if(NOT RMLUI_STATIC)
-  find_package(RmlUi REQUIRED)
-else()
-  set(RMLUI_LIBRARIES "RmlCore RmlDebugger")
-endif()
 
 if(NOT SDL2_FOUND)
   message(SEND_ERROR "Failed to find SDL2.")
@@ -51,10 +51,8 @@ if(NOT SDL2IMAGE_FOUND)
   message(SEND_ERROR "Failed to find SDL2_image.")
 endif()
 
-if(NOT RMLUI_STATIC)
-  if(NOT RMLUI_FOUND)
-    message(SEND_ERROR "Failed to find RmlUi.")
-  endif()
+if(NOT RMLUI_FOUND)
+  message(SEND_ERROR "Failed to find RmlUi.")
 endif()
 
 
@@ -131,13 +129,13 @@ add_executable(BitRiot ${SOURCES})
 if(MINGW)
   target_link_libraries(BitRiot ${SDL2_LIBRARY} ${SDL2_MIXER_LIBRARY} ${SDL2_TTF_LIBRARY} ${SDL2IMAGE_LIBRARY} ${RMLUI_LIBRARIES} ${OPENGL_LIBRARIRES} shlwapi -mwindows)
 else()
-  target_link_libraries(BitRiot ${SDL2_LIBRARY} ${SDL2_MIXER_LIBRARY} ${SDL2_TTF_LIBRARY} ${SDL2IMAGE_LIBRARY} ${RMLUI_LIBRARIES} ${OPENGL_LIBRARIRES})
+  target_link_libraries(BitRiot ${SDL2_LIBRARY} ${SDL2_MIXER_LIBRARY} ${SDL2_TTF_LIBRARY} ${SDL2IMAGE_LIBRARY} ${RMLUI_LIBRARIES} freetype ${OPENGL_LIBRARIRES})
 
-    add_custom_command(
-        TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ln -sf ${PROJECT_SOURCE_DIR}/data ${PROJECT_BINARY_DIR}/
-        COMMAND ln -sf ${PROJECT_SOURCE_DIR}/assets ${PROJECT_BINARY_DIR}/
-    )
+  add_custom_command(
+    TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ln -sf ${PROJECT_SOURCE_DIR}/data ${PROJECT_BINARY_DIR}/
+    COMMAND ln -sf ${PROJECT_SOURCE_DIR}/assets ${PROJECT_BINARY_DIR}/
+  )
 endif()
 
 if(RMLUI_STATIC)

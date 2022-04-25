@@ -26,7 +26,6 @@
  *
  */
 
-#define RMLUI_STATIC_LIB
 
 #include "EventInstancer.h"
 #include "Event.h"

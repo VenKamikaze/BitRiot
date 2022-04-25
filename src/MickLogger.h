@@ -12,7 +12,7 @@
 #include <exception>
 #include <string>
 #include <iostream>
-
+#include <typeinfo>
 
 namespace std
 {

@@ -21,7 +21,7 @@ MickSDLRenderer::MickSDLRenderer(WindowMetadata windowMetadata) : MickBaseRender
 {
   assert(sInstance == nullptr);
   init(windowMetadata);
-  MickLogger::getInstance()->info(this, "Created and initialised instance of MickSDLRenderer.");
+  MickLogger::getInstance()->debug(this, "Created and initialised instance of MickSDLRenderer.");
   sInstance = this;
 }
 

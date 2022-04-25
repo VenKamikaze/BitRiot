@@ -1,14 +1,6 @@
 // implementation of Map.h
 
 #include "MenuSDLRenderer.h"
-#include "MickLogger.h"
-#include "PlayerCharacterEntity.h"
-#include "RmlUI/MickRmlUIElementUtil.h"
-#include "RmlUI/ScoreBoardBinder.h"
-#include "SDL_keycode.h"
-#include "SDL_pixels.h"
-#include "SDL_render.h"
-#include <string>
 
 
 using namespace std;
@@ -56,7 +48,9 @@ void MenuSDLRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
   m_context = Rml::CreateContext("default",
                                    Rml::Vector2i(windowWidth, windowHeight));
 
+#ifndef NDEBUG
   Rml::Debugger::Initialise(m_context);
+#endif
 
   // Initialise the event instancer and handlers.
   EventInstancer* event_instancer = new EventInstancer();
@@ -133,7 +127,9 @@ bool MenuSDLRenderer::showMenu()
           if( event.key.keysym.sym == SDLK_BACKQUOTE &&
               event.key.keysym.mod == KMOD_LSHIFT )
           {
+#ifndef NDEBUG
             Rml::Debugger::SetVisible( ! Rml::Debugger::IsVisible() );
+#endif
             break;
           }
           else if(event.key.keysym.sym == SDLK_ESCAPE)

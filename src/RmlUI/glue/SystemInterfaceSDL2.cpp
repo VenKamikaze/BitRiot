@@ -25,7 +25,6 @@
  * THE SOFTWARE.
  *
  */
-#define RMLUI_STATIC_LIB
 
 #include <RmlUi/Core.h>
 #include "SystemInterfaceSDL2.h"

@@ -26,7 +26,6 @@
  *
  */
 
-#define RMLUI_STATIC_LIB
 
 #include "EventManager.h"
 #include <RmlUi/Core/Context.h>

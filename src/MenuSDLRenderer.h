@@ -10,29 +10,35 @@
 
 #include <RmlUi/Core/ElementDocument.h>
 #include <SDL2/SDL_render.h>
-#include <stdexcept>
-#include <string>
+#include "SDL_keycode.h"
+#include "SDL_pixels.h"
 #include "RuntimeException.h"
 
 #include <SDL2/SDL.h>
 
 #include <RmlUi/Core.h>
 #include <RmlUi/Core/Input.h>
+#ifndef NDEBUG
 #include <RmlUi/Debugger/Debugger.h>
+#endif
 
 #include "RmlUI/glue/SystemInterfaceSDL2.h"
 #include "RmlUI/glue/RenderInterfaceSDL2.h"
 #include "RmlUI/glue/ShellFileInterface.h"
 
-#include "RmlUI/MickRmlUIElementUtil.h"
 
+#include "MickLogger.h"
+#include "PlayerCharacterEntity.h"
 #include "GameSettings.h"
+#include "RmlUI/MickRmlUIElementUtil.h"
 #include "RmlUI/events/EventInstancer.h"
 #include "RmlUI/events/EventManager.h"
 #include "RmlUI/events/EventHandlerOptions.h"
 #include "RmlUI/ScoreBoardBinder.h"
 #include <iostream>
-#include "MickLogger.h"
+#include <stdexcept>
+#include <string>
+
 
 class MenuSDLRenderer
 {
