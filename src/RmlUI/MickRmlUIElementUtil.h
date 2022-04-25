@@ -14,7 +14,7 @@
 #include "RuntimeException.h"
 
 #include <SDL2/SDL.h>
-#include <GL/glew.h>
+//#include <GL/glew.h>
 
 #include <stdio.h>
 #include <stdlib.h>

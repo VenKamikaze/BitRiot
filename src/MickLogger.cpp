@@ -16,7 +16,12 @@ namespace std
   // toggle DEBUG_ENABLED in ctor
 
   static Logger* loggerInstance = nullptr;
+
+#ifdef NDEBUG
+  static bool DEBUG_ENABLED = false;
+#else
   static bool DEBUG_ENABLED = true;
+#endif
 
   MickLogger::MickLogger()
   {

@@ -14,6 +14,8 @@ set(CMAKE_CSS_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
 
 set(OpenGL_GL_PREFERENCE "GLVND")
 
+set(RMLUI_STATIC false)
+
 if(CMAKE_BUILD_TYPE MATCHES "Release")
   SET (CMAKE_SHARED_LINKER_FLAGS ${CMAKE_SHARED_LINKER_FLAGS_INIT} -s)
 endif()
@@ -24,9 +26,14 @@ find_package(SDL2 REQUIRED)
 find_package(SDL2_mixer REQUIRED)
 find_package(SDL2_ttf REQUIRED)
 find_package(SDL2_image REQUIRED)
-find_package(RmlUi REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(PkgConfig)
+
+if(NOT RMLUI_STATIC)
+  find_package(RmlUi REQUIRED)
+else()
+  set(RMLUI_LIBRARIES "RmlCore RmlDebugger")
+endif()
 
 if(NOT SDL2_FOUND)
   message(SEND_ERROR "Failed to find SDL2.")
@@ -44,8 +51,10 @@ if(NOT SDL2IMAGE_FOUND)
   message(SEND_ERROR "Failed to find SDL2_image.")
 endif()
 
-if(NOT RMLUI_FOUND)
-  message(SEND_ERROR "Failed to find RmlUi.")
+if(NOT RMLUI_STATIC)
+  if(NOT RMLUI_FOUND)
+    message(SEND_ERROR "Failed to find RmlUi.")
+  endif()
 endif()
 
 
@@ -129,4 +138,8 @@ else()
         COMMAND ln -sf ${PROJECT_SOURCE_DIR}/data ${PROJECT_BINARY_DIR}/
         COMMAND ln -sf ${PROJECT_SOURCE_DIR}/assets ${PROJECT_BINARY_DIR}/
     )
+endif()
+
+if(RMLUI_STATIC)
+  target_compile_definitions(BitRiot PRIVATE RMLUI_STATIC_LIB)
 endif()

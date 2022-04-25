@@ -36,23 +36,11 @@
 // game object includes
 #include "GameEngine.h"
 
-#include <GL/glew.h>
-
 #ifndef NULL
 #define NULL nullptr;
 #endif
 
 #include "MenuSDLRenderer.h"
-
-/*
-#include <RmlUi/Core.h>
-#include <RmlUi/Core/Input.h>
-#include <RmlUi/Debugger/Debugger.h>
-
-#include "RmlUI/glue/SystemInterfaceSDL2.h"
-#include "RmlUI/glue/RenderInterfaceSDL2.h"
-#include "RmlUI/glue/ShellFileInterface.h"
-*/
 
 // DEFINES ////////////////////////////////////////////////
 
@@ -65,10 +53,6 @@ unsigned int initFlags = 0; // start with all turned off
 
 
 // PROTOTYPES /////////////////////////////////////////////
-
-// game console
-//int consoleInit();
-//int consoleShutdown();
 bool consoleMain();
 
 // GLOBALS ////////////////////////////////////////////////
