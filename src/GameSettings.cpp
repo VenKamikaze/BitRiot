@@ -9,7 +9,7 @@
 
 using namespace std;
 
-static GameSettings *s_instance = NULL;
+static GameSettings *s_instance = nullptr;
 
 GameSettings::GameSettings()
 {
@@ -22,14 +22,14 @@ GameSettings::GameSettings()
       genders.push_back(false);
     }
     genders.push_back(true);
-    playerAIs.push_back(i != 0); // leave one as human by default
+    playerAIs.push_back(true);
   }
   genders.push_back(true); // additional gender for purple (non character player).
 }
 
 GameSettings* GameSettings::getInstance()
 {
-  if(s_instance == NULL)
+  if(s_instance == nullptr)
   {
     s_instance = new GameSettings();
   }
@@ -38,9 +38,9 @@ GameSettings* GameSettings::getInstance()
 
 GameSettings::~GameSettings()
 {
-  if(s_instance != NULL)
+  if(s_instance != nullptr)
   {
     delete s_instance;
-    s_instance = NULL;
+    s_instance = nullptr;
   }
 }
