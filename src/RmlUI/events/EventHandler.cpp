@@ -25,6 +25,7 @@
  * THE SOFTWARE.
  *
  */
+#define RMLUI_STATIC_LIB
 
 #include "EventHandler.h"
 

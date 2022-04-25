@@ -26,6 +26,8 @@
  *
  */
 
+#define RMLUI_STATIC_LIB
+
 #include <RmlUi/Core.h>
 #include <SDL_image.h>
 #include <string>

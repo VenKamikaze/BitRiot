@@ -26,6 +26,8 @@
  *
  */
 
+#define RMLUI_STATIC_LIB
+
 #include "ShellFileInterface.h"
 #include <stdio.h>
 

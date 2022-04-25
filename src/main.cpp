@@ -44,6 +44,7 @@
 
 #include "MenuSDLRenderer.h"
 
+/*
 #include <RmlUi/Core.h>
 #include <RmlUi/Core/Input.h>
 #include <RmlUi/Debugger/Debugger.h>
@@ -51,6 +52,7 @@
 #include "RmlUI/glue/SystemInterfaceSDL2.h"
 #include "RmlUI/glue/RenderInterfaceSDL2.h"
 #include "RmlUI/glue/ShellFileInterface.h"
+*/
 
 // DEFINES ////////////////////////////////////////////////
 

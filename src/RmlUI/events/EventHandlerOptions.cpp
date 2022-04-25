@@ -28,6 +28,8 @@
 // Note: This class no longer resembles the sample file from libRocket at all, sans the ProcessEvent method definition.
 //       I've kept the MIT license as part of this anyway.
 
+#define RMLUI_STATIC_LIB
+
 #include "EventHandlerOptions.h"
 #include <RmlUi/Core/ElementDocument.h>
 #include <RmlUi/Core/ElementUtilities.h>

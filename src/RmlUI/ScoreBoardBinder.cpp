@@ -3,6 +3,8 @@
 #include "MickLogger.h"
 #include <cstddef>
 
+#define RMLUI_STATIC_LIB
+
 namespace std
 {
 
