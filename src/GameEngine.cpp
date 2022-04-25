@@ -2,6 +2,7 @@
 #include "GameSettings.h"
 #include "MickSDLRenderer.h"
 #include "SDL_timer.h"
+#include <string>
 
 GameEngine::GameEngine(SDL_Surface* back)
 {
@@ -49,12 +50,7 @@ void GameEngine::resetGame()
   int blockPercentage =  GameSettings::getInstance()->getBlockSpawnPercentage();
   std::vector<bool>* genders = GameSettings::getInstance()->getPlayerGenders();
   std::vector<bool>* playerAIs = GameSettings::getInstance()->getPlayerAIs();
-
-  for (int player = numPlayers-1; player >= (numPlayers - numHumanPlayers) ; player--)
-  {
-    // reverse iterate, player one is actually botAI[3]
-    playerAIs->at(player) = false;
-  }
+  std::MickLogger::getInstance()->debug(this, std::string("numHumanPlayers=").append(std::to_string(numHumanPlayers)).append(",numPlayers=").append(std::to_string(numPlayers)));
 
   if (m_pEntityManager)
   {
@@ -158,9 +154,12 @@ bool GameEngine::runEngine()
       m_pEntityManager->runFrame();
 
       m_pEntityManager->renderEntities(m_surface);
-      m_pPanel->renderSurfaceTo(m_surface, (GameSettings::getInstance()->getMapWidth() * Map::TILE_WIDTH), 0); //Possible but very rare crash here, due to dangling pointers
-      MickSDLRenderer::getInstance()->pushCpuBufferToHardwareBuffer();
+      
+      //Possible but very rare crash here, due to dangling pointers
       //as m_pPanel->setPlayerDead being updated one frame late
+      m_pPanel->renderSurfaceTo(m_surface, (GameSettings::getInstance()->getMapWidth() * Map::TILE_WIDTH), 0); 
+      
+      MickSDLRenderer::getInstance()->pushCpuBufferToHardwareBuffer();
       break;
     }
     case GameSettings::GAME_OVER:
@@ -295,6 +294,8 @@ void GameEngine::initHumanPlayers(int numPlayers, std::vector<bool>* malePlayers
 
   for (int i = 1; i <= numPlayers; i++)
   {
+    std::MickLogger::getInstance()->debug(this, std::string("initHumanPlayers, i=").append(std::to_string(i)));
+
     int atX = 0, atY = 0;
     // set x and y co-ords
     switch (i)
@@ -330,6 +331,7 @@ void GameEngine::initHumanPlayers(int numPlayers, std::vector<bool>* malePlayers
 
     if (playerAIs->at(i - 1) == true)
     {
+      std::MickLogger::getInstance()->debug(this, std::string("player ").append(std::to_string(i)).append(" is AI controlled"));
       flags |= GameEntity::AI_CONTROLLED_BOT_FLAG;
     }
 

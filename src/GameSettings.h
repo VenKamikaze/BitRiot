@@ -12,6 +12,7 @@
 #include "RuntimeException.h"
 #include <vector>
 #include "Map.h"
+#include "MickLogger.h"
 
 namespace std
 {
@@ -84,6 +85,7 @@ class GameSettings
     }
     inline void setPlayerAI(int playerIndex, bool isAI)
     {
+      std::MickLogger::getInstance()->debug(this, std::string("setPlayerAI(").append(std::to_string(playerIndex)).append(",").append(std::to_string(isAI)).append(")"));
       playerAIs.at(playerIndex) = isAI;
     }
 
@@ -97,7 +99,7 @@ class GameSettings
     }
 
     static const int MAX_PLAYERS = 4; // TODO 6;
-    static const int MIN_PLAYERS = 2; // 2 players plus the default purple non player PC.
+    static const int MIN_PLAYERS = 1; // 1 player plus the default purple non player PC.
 
     static const int MAX_BLOCK_PCT = 75;
     static const int MIN_BLOCK_PCT = 20;
