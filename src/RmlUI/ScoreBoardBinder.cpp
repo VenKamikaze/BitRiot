@@ -45,6 +45,7 @@ namespace std
   {
     if(context->GetDataModel(m_modelName))
     {
+      MickLogger::getInstance()->debug(this, string("Removing data binding for ").append(m_modelName) );
       context->RemoveDataModel(m_modelName);
     }
   }

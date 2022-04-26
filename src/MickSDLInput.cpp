@@ -252,11 +252,11 @@ void MickSDLInput::setControllerInput(SDL_JoystickID joystickID, Uint8 button, U
     attachedPlayer = m_pInputHandler->attachNewControllerToPlayer(joystickID);
     if (attachedPlayer)
     {
-      MickLogger::getInstance()->info(this, std::string("Attached controller: %i to player: %i\n", joystickID, attachedPlayer->getTeam()).c_str() );
+      MickLogger::getInstance()->info(this, std::string("Attached controller: ").append(to_string(joystickID)).append(" to player: ").append(to_string(attachedPlayer->getTeam())));
     }
     else
     {
-      MickLogger::getInstance()->warn(this, std::string("No free players to attach controller: %i",joystickID).c_str() );
+      MickLogger::getInstance()->warn(this, std::string("No free players to attach controller: ").append(to_string(joystickID)) );
     }
     return; //eat attaching button press
   }

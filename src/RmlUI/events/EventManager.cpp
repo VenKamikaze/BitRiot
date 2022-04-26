@@ -129,7 +129,7 @@ void EventManager::ProcessEvent(Rml::Event& event, const Rml::String& value)
 
 
 // Loads a window and binds the event handler for it.
-Rml::ElementDocument* EventManager::LoadWindow(const Rml::String& window_name)
+Rml::ElementDocument* EventManager::LoadWindow(const Rml::String& window_name, bool loadAndShow)
 {
 	// Set the event handler for the new screen, if one has been registered.
 	EventHandler* old_event_handler = event_handler;
@@ -154,8 +154,11 @@ Rml::ElementDocument* EventManager::LoadWindow(const Rml::String& window_name)
 		title->SetInnerRML(document->GetTitle());
 
 	// M2S
-	document->Focus();
-	document->Show();	
+	if(loadAndShow)
+	{
+	  document->Focus();
+	  document->Show();	
+	}
 
 	// M2S return document;
 	return document;

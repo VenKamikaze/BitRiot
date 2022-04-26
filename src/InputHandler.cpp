@@ -216,10 +216,7 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
             if (p_dynamicMap->tileHasStaticEntity(player->getTileX(), player->getTileY()) == false)
             {
               // TO DO - if trying to place block, check there is an exit
-              if(player->createEntity(m_spawnSelection[i]) && BOMB == m_spawnSelection[i])
-              {
-                player->incNumberBombsPlaced();
-              }
+              player->createEntity(m_spawnSelection[i]);
             }
 
             m_action1Down[i] = false;
@@ -257,10 +254,7 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
             // action2 released this frame, try to place egg
             if (p_dynamicMap->tileHasStaticEntity(player->getTileX(), player->getTileY()) == false)
             {
-              if(player->createEntity(m_spawnSelection[i]))
-              {
-                player->incNumberEggsPlaced();
-              }
+              player->createEntity(m_spawnSelection[i]);
             }
 
             m_action2Down[i] = false;

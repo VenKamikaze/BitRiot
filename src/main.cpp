@@ -58,7 +58,7 @@ bool consoleMain();
 // GLOBALS ////////////////////////////////////////////////
 
 // game object globals
-GameEngine* engine = nullptr;
+unique_ptr<GameEngine> engine = nullptr;
 
 // FUNCTIONS //////////////////////////////////////////////
 
@@ -101,7 +101,7 @@ int consoleInit()
   staticMap->init(renderer->getSurfaceBackBufferHandle());
   EntityRendererFactory * erf = EntityRendererFactory::getInstance();
   erf->initSurfaces(renderer->getSurfaceBackBufferHandle());
-  engine = new GameEngine(renderer->getSurfaceBackBufferHandle());
+  engine = make_unique<GameEngine>(renderer->getSurfaceBackBufferHandle());
 
   return 0;
 } // end Game_Init
@@ -256,12 +256,6 @@ int main(int argc, char* argv[])
   {
     cerr << "Caught exception when de-initializing subsystems!" << endl;
     cerr << e.what();
-  }
-
-  if (engine)
-  {
-    delete engine;
-    engine = nullptr;
   }
 
   cout << "Exiting.. " << endl;

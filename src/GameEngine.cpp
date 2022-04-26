@@ -94,19 +94,20 @@ bool GameEngine::runEngine()
   {
     case GameSettings::MENU_RUNNING:
     {
-      if (menuSystem == nullptr)
+      if (! menuSystem)
       {
         throw std::runtime_error(std::string("About to render menu, but no menu rendering system found!"));
       }
 
       if (!menuSystem->showMenu())
       {
-        GameSettings::getInstance()->setGameState(GameSettings::GAME_INIT);
+        GameSettings::getInstance()->setGameState(GameSettings::GAME_QUIT); // ALT+F4?
       }
       break;
     }
     case GameSettings::GAME_INIT:
     {
+      menuSystem->clearScoreBoard(); // does nothing if scoreboard does not exist.
       resetGame();
       GameSettings::getInstance()->setGameState(GameSettings::GAME_RUNNING);
       m_gameStartedAtTicks = SDL_GetTicks();
@@ -134,7 +135,7 @@ bool GameEngine::runEngine()
           // Timed delay during which we continue to update and runFrame for a few seconds.
           // This is useful when all human players are dead but AI is still alive, incase
           //   a human player wants to take over the AI.
-          GameSettings::getInstance()->setGameState(GameSettings::GAME_OVER);
+          GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
           menuSystem->loadScoreBoard(m_pEntityManager->getWinningPlayer(), (SDL_GetTicks() - m_gameStartedAtTicks) / 1000);
         }
       }
@@ -146,7 +147,7 @@ bool GameEngine::runEngine()
       {
         if(e.gotQuit())
 	      {
-          GameSettings::getInstance()->setGameState(GameSettings::GAME_OVER);
+          GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
           menuSystem->loadScoreBoard(m_pEntityManager->getWinningPlayer(), (SDL_GetTicks() - m_gameStartedAtTicks) / 1000);
 	      }
       }
@@ -158,27 +159,10 @@ bool GameEngine::runEngine()
       m_pEntityManager->runFrame();
 
       m_pEntityManager->renderEntities(m_surface);
-      
-      //Possible but very rare crash here, due to dangling pointers
-      //as m_pPanel->setPlayerDead being updated one frame late
+
       m_pPanel->renderSurfaceTo(m_surface, (GameSettings::getInstance()->getMapWidth() * Map::TILE_WIDTH), 0); 
       
       MickSDLRenderer::getInstance()->pushCpuBufferToHardwareBuffer();
-      break;
-    }
-    case GameSettings::GAME_OVER:
-    {
-      if (menuSystem == NULL)
-      {
-        throw std::runtime_error(std::string("About to render menu, but no menu rendering system found!"));
-      }
-
-      if(!menuSystem->showMenu())
-      {
-        GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
-        menuSystem->clearScoreBoard();
-      }
-
       break;
     }
     case GameSettings::GAME_QUIT:
@@ -187,18 +171,7 @@ bool GameEngine::runEngine()
       break;
     }
   }
-/*
-  if(GameSettings::getInstance()->getGameState() != GameSettings::MENU_RUNNING &&
-       GameSettings::getInstance()->getGameState() != GameSettings::GAME_OVER )
-  {
 
-    MickBaseRenderer<SDL_Window, SDL_Renderer, SDL_Surface, SDL_Texture> *m_renderer = MickSDLRenderer::getInstance();
-    SDL_UpdateTexture(m_renderer->getPrimaryTextureHandle(), nullptr, m_renderer->getSurfaceBackBufferHandle()->pixels, m_renderer->getSurfaceBackBufferHandle()->pitch);
-    SDL_RenderClear(m_renderer->getRendererHandle());
-    SDL_RenderCopy(m_renderer->getRendererHandle(), m_renderer->getPrimaryTextureHandle(), nullptr, nullptr);
-    
-  }
-  */
   return true;
 }
 
