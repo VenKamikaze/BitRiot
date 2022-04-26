@@ -52,7 +52,7 @@ void MickSDLRenderer::init(WindowMetadata windowMetadata)
   }
 
   SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
-  SDL_RenderSetLogicalSize(m_rendererHandle, windowMetadata.windowWidth, windowMetadata.windowHeight);
+  //SDL_RenderSetLogicalSize(m_rendererHandle, windowMetadata.windowWidth, windowMetadata.windowHeight);
 
   Uint32 pixel_format = SDL_GetWindowPixelFormat(m_windowHandle);
 

@@ -32,6 +32,7 @@
 
 #include "MickLogger.h"
 #include "RenderInterfaceSDL2.h"
+#include "SDL_render.h"
 
 RmlUiSDL2Renderer::RmlUiSDL2Renderer(SDL_Renderer* renderer, SDL_Window* screen)
 {
@@ -39,11 +40,13 @@ RmlUiSDL2Renderer::RmlUiSDL2Renderer(SDL_Renderer* renderer, SDL_Window* screen)
     mScreen = screen;
 
     SDL_GetRendererOutputSize(renderer, &mRenderer_w, &mRenderer_h);
+    //SDL_RenderGetLogicalSize(renderer, &mRenderer_w, &mRenderer_h);
 
     mRectScisor.x = 0;
     mRectScisor.y = 0;
     mRectScisor.w = mRenderer_w;
     mRectScisor.h = mRenderer_h;
+    //std::MickLogger::getInstance()->debug(this, std::string("INIT mRectScisor: r.x,r.y,r.w,r.h").append(std::to_string(mRectScisor.x)).append(",").append(std::to_string(mRectScisor.y)).append(",").append(std::to_string(mRectScisor.w)).append(",").append(std::to_string(mRectScisor.h)) );
 }
 
 // Called by RmlUi when it wants to render geometry that it does not wish to optimise.
@@ -56,6 +59,7 @@ void RmlUiSDL2Renderer::RenderGeometry(Rml::Vertex* vertices, int num_vertices, 
     r.y = (int)translation.y;
     r.w = mRenderer_w - r.x;
     r.h = mRenderer_h - r.y;
+    //std::MickLogger::getInstance()->debug(this, std::string("rect: r.x,r.y,r.w,r.h").append(std::to_string(r.x)).append(",").append(std::to_string(r.y)).append(",").append(std::to_string(r.w)).append(",").append(std::to_string(r.h)) );
 
     SDL_RenderSetViewport(mRenderer, &r);
 
@@ -90,8 +94,9 @@ void RmlUiSDL2Renderer::EnableScissorRegion(bool enable)
 void RmlUiSDL2Renderer::SetScissorRegion(int x, int y, int width, int height)
 {
     int rendererWidth, rendererHeight;
-    //SDL_GetWindowSize(mScreen, &w_width, &w_height);
+    //SDL_GetWindowSize(mScreen, &rendererWidth, &rendererHeight);
     SDL_GetRendererOutputSize(mRenderer, &rendererWidth, &rendererHeight);
+    //SDL_RenderGetLogicalSize(mRenderer, &rendererWidth, &rendererHeight);
     mRectScisor.x = x;
     mRectScisor.y = rendererHeight - (y + height);
     mRectScisor.w = width;
