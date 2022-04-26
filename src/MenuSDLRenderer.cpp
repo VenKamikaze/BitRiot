@@ -1,6 +1,8 @@
 // implementation of Map.h
 
 #include "MenuSDLRenderer.h"
+#include "RmlUI/MickRmlUIElementUtil.h"
+#include <RmlUi/Core/ElementDocument.h>
 
 
 using namespace std;
@@ -10,13 +12,15 @@ MenuSDLRenderer::MenuSDLRenderer(SDL_Renderer* renderer, SDL_Window* screen)
   init(renderer, screen);
 }
 
-void MenuSDLRenderer::loadMenu(std::string menuRmlFile)
+Rml::ElementDocument* MenuSDLRenderer::loadMenu(std::string menuRmlFile, bool loadAndShow)
 {
-  if (! EventManager::getInstance()->LoadWindow(menuRmlFile.c_str()))
+  Rml::ElementDocument *doc = EventManager::getInstance()->LoadWindow(menuRmlFile.c_str(), loadAndShow);
+  if (! doc)
   {
-    fprintf(stdout, "\nDocument is NULL");
+    MickLogger::getInstance()->error(this, string("Error loading ").append(menuRmlFile));
     throw std::runtime_error(std::string("Menu RML was not found"));
   }
+  return doc;
 }
 
 void MenuSDLRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
@@ -62,10 +66,17 @@ void MenuSDLRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
   m_screen = screen;
 }
 
-void MenuSDLRenderer::loadScoreBoard(PlayerCharacterEntity *winner, int gameTotalLength)
+void MenuSDLRenderer::loadScoreBoard(shared_ptr<PlayerCharacterEntity> winner, int gameTotalLength)
 {
   m_scoreBinder = new ScoreBoardBinder(m_context, winner, gameTotalLength);
-  loadMenu("scoreboard.rml");
+  Rml::ElementDocument *doc = loadMenu("scoreboard.rml", (winner != nullptr));
+  if(! winner)
+  {
+    MickLogger::getInstance()->debug(this, "No winner - hiding winner stats");
+    doc->GetElementById("winnerStats")->SetClass("invisible", true);
+    doc->Focus();
+    doc->Show();
+  }
 }
 
 void MenuSDLRenderer::clearScoreBoard()

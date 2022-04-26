@@ -56,6 +56,14 @@ class PlayerCharacterEntity : public GameEntity
     {
       return m_numberEggsPlaced;
     }
+    bool isAlive()
+    {
+      return alive;
+    }
+    void setAlive(bool alive)
+    {
+      this->alive = alive;
+    }
 
     int attachedController=-1;
     bool m_controlledByAI;
@@ -97,6 +105,9 @@ class PlayerCharacterEntity : public GameEntity
     void checkEnvironment(); // checks surrounding environment for anything we should react to
     int m_checkTimer; // timer variable for the above function
     void clearGoalsAndInstructions(); // wipes m_insList and m_goalList
+
+  private:
+    bool alive;
 };
 
 #endif

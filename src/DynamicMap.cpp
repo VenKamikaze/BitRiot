@@ -15,12 +15,12 @@ DynamicMap::DynamicMap(int width, int height)
 DynamicMap::~DynamicMap()
 {
   // delete any entities in entityList map
-  for (entityIterator = entityList.begin(); entityIterator != entityList.end(); entityIterator++)
+  /*for (entityIterator = entityList.begin(); entityIterator != entityList.end(); entityIterator++)
   {
     GameEntity * e = entityIterator->second;
     delete e;
     entityIterator->second = NULL;
-  }
+  }*/
 }
 
 bool DynamicMap::moveEntityOnMap(int id, int oldX, int oldY, int newX, int newY)

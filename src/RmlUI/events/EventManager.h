@@ -60,7 +60,7 @@ public:
 	void ProcessEvent(Rml::Event& event, const Rml::String& value);
 	/// Loads a window and binds the event handler for it.
 	/// @param[in] window_name The name of the window to load.
-	Rml::ElementDocument* LoadWindow(const Rml::String& window_name);
+	Rml::ElementDocument* LoadWindow(const Rml::String& window_name, bool loadAndShow = true);
 
 private:
 	~EventManager();

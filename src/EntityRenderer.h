@@ -12,8 +12,9 @@
 #include "Map.h"
 #include "DataReader.h"
 #include "SDLHelper.h"
+#include "GameSettings.h"
 
-const int NUM_TEAMS = 5;
+const int NUM_TEAMS = std::GameSettings::MAX_PLAYERS + 1;
 
 class EntityRenderer
 {

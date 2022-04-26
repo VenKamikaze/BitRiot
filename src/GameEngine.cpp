@@ -1,6 +1,7 @@
 #include "GameEngine.h"
 #include "GameSettings.h"
 #include "MickSDLRenderer.h"
+#include "PlayerCharacterEntity.h"
 #include "SDL_timer.h"
 #include <string>
 
@@ -50,6 +51,7 @@ void GameEngine::resetGame()
   int blockPercentage =  GameSettings::getInstance()->getBlockSpawnPercentage();
   std::vector<bool>* genders = GameSettings::getInstance()->getPlayerGenders();
   std::vector<bool>* playerAIs = GameSettings::getInstance()->getPlayerAIs();
+
   std::MickLogger::getInstance()->debug(this, std::string("numHumanPlayers=").append(std::to_string(numHumanPlayers)).append(",numPlayers=").append(std::to_string(numPlayers)));
 
   if (m_pEntityManager)
@@ -74,14 +76,15 @@ void GameEngine::resetGame()
   }
 
   // after setting initialisation parameters
+  m_pPlayers.resize(numPlayers);
+  
   m_pEntityManager = new EntityManager();
   m_pPanel = new InfoPanel(m_surface, numPlayers, genders);
   m_pInputHandler = new InputHandler();
   m_pSpawningPool = new SpawningPool(numPlayers * 100);
-  initHumanPlayers(numPlayers, genders, playerAIs);
-  m_pInputHandler->setPointers(numPlayers, m_pPlayers[1], m_pPlayers[2], m_pPlayers[3], m_pPlayers[4],
-      m_pEntityManager->getDynamicMap(), m_pPanel);
-  m_pPanel->setPlayerPointers(numPlayers, m_pPlayers[1], m_pPlayers[2], m_pPlayers[3], m_pPlayers[4]);
+  initPlayerCharacters(numPlayers, genders, playerAIs);
+  m_pInputHandler->setPointers(m_pPlayers, m_pEntityManager->getDynamicMap(), m_pPanel);
+  m_pPanel->setPlayerPointers(m_pPlayers);
   seedBlocksOnMap(blockPercentage);
 }
 
@@ -91,19 +94,20 @@ bool GameEngine::runEngine()
   {
     case GameSettings::MENU_RUNNING:
     {
-      if (menuSystem == nullptr)
+      if (! menuSystem)
       {
         throw std::runtime_error(std::string("About to render menu, but no menu rendering system found!"));
       }
 
       if (!menuSystem->showMenu())
       {
-        GameSettings::getInstance()->setGameState(GameSettings::GAME_INIT);
+        GameSettings::getInstance()->setGameState(GameSettings::GAME_QUIT); // ALT+F4?
       }
       break;
     }
     case GameSettings::GAME_INIT:
     {
+      menuSystem->clearScoreBoard(); // does nothing if scoreboard does not exist.
       resetGame();
       GameSettings::getInstance()->setGameState(GameSettings::GAME_RUNNING);
       m_gameStartedAtTicks = SDL_GetTicks();
@@ -111,12 +115,13 @@ bool GameEngine::runEngine()
     }
     case GameSettings::GAME_RUNNING:
     {
+      // PlayerCharacterEntity knows if it is alive, so we don't need to synchronise with input or panel now.
+      //for (int i = 0; i < GameSettings::getInstance()->getNumberOfPlayers(); i++)
+      //{
+        //m_pInputHandler->setPlayerDead(i, m_pEntityManager->getPlayerDead(i)); // TODO check isAlive on the PCE
+        //m_pPanel->setPlayerDead(i, m_pEntityManager->getPlayerDead(i));
+      //}
       // read keyboard and other devices here
-      for (int i = 0; i < GameSettings::getInstance()->getNumberOfPlayers(); i++)
-      {
-        m_pInputHandler->setPlayerDead(i, m_pEntityManager->getPlayerDead(i));
-        m_pPanel->setPlayerDead(i, m_pEntityManager->getPlayerDead(i));
-      }
       if(m_pEntityManager->oneOrZeroPlayersRemain())
       {
         GameTimer* timer = GameOverTimer::getInstance();
@@ -130,7 +135,7 @@ bool GameEngine::runEngine()
           // Timed delay during which we continue to update and runFrame for a few seconds.
           // This is useful when all human players are dead but AI is still alive, incase
           //   a human player wants to take over the AI.
-          GameSettings::getInstance()->setGameState(GameSettings::GAME_OVER);
+          GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
           menuSystem->loadScoreBoard(m_pEntityManager->getWinningPlayer(), (SDL_GetTicks() - m_gameStartedAtTicks) / 1000);
         }
       }
@@ -142,7 +147,7 @@ bool GameEngine::runEngine()
       {
         if(e.gotQuit())
 	      {
-          GameSettings::getInstance()->setGameState(GameSettings::GAME_OVER);
+          GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
           menuSystem->loadScoreBoard(m_pEntityManager->getWinningPlayer(), (SDL_GetTicks() - m_gameStartedAtTicks) / 1000);
 	      }
       }
@@ -154,27 +159,10 @@ bool GameEngine::runEngine()
       m_pEntityManager->runFrame();
 
       m_pEntityManager->renderEntities(m_surface);
-      
-      //Possible but very rare crash here, due to dangling pointers
-      //as m_pPanel->setPlayerDead being updated one frame late
+
       m_pPanel->renderSurfaceTo(m_surface, (GameSettings::getInstance()->getMapWidth() * Map::TILE_WIDTH), 0); 
       
       MickSDLRenderer::getInstance()->pushCpuBufferToHardwareBuffer();
-      break;
-    }
-    case GameSettings::GAME_OVER:
-    {
-      if (menuSystem == NULL)
-      {
-        throw std::runtime_error(std::string("About to render menu, but no menu rendering system found!"));
-      }
-
-      if(!menuSystem->showMenu())
-      {
-        GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
-        menuSystem->clearScoreBoard();
-      }
-
       break;
     }
     case GameSettings::GAME_QUIT:
@@ -183,18 +171,7 @@ bool GameEngine::runEngine()
       break;
     }
   }
-/*
-  if(GameSettings::getInstance()->getGameState() != GameSettings::MENU_RUNNING &&
-       GameSettings::getInstance()->getGameState() != GameSettings::GAME_OVER )
-  {
 
-    MickBaseRenderer<SDL_Window, SDL_Renderer, SDL_Surface, SDL_Texture> *m_renderer = MickSDLRenderer::getInstance();
-    SDL_UpdateTexture(m_renderer->getPrimaryTextureHandle(), nullptr, m_renderer->getSurfaceBackBufferHandle()->pixels, m_renderer->getSurfaceBackBufferHandle()->pitch);
-    SDL_RenderClear(m_renderer->getRendererHandle());
-    SDL_RenderCopy(m_renderer->getRendererHandle(), m_renderer->getPrimaryTextureHandle(), nullptr, nullptr);
-    
-  }
-  */
   return true;
 }
 
@@ -283,7 +260,7 @@ void GameEngine::seedBlocksOnMap(int blockPercentage)
 
 }
 
-void GameEngine::initHumanPlayers(int numPlayers, std::vector<bool>* malePlayers, std::vector<bool>* playerAIs)
+void GameEngine::initPlayerCharacters(unsigned int numPlayers, std::vector<bool>* malePlayers, std::vector<bool>* playerAIs)
 {
   if (numPlayers > NUM_TEAMS)
   {
@@ -292,9 +269,10 @@ void GameEngine::initHumanPlayers(int numPlayers, std::vector<bool>* malePlayers
 
   EntityMessageQueue * emq  = EntityMessageQueue::getInstance();
 
-  for (int i = 1; i <= numPlayers; i++)
+  // FIXME inconsistency between starting at '1' or '0' for player characters is really confusing.
+  for (unsigned int i = 1; i <= numPlayers; i++) 
   {
-    std::MickLogger::getInstance()->debug(this, std::string("initHumanPlayers, i=").append(std::to_string(i)));
+    std::MickLogger::getInstance()->debug(this, std::string("initPlayerCharacters, i=").append(std::to_string(i)));
 
     int atX = 0, atY = 0;
     // set x and y co-ords
@@ -339,7 +317,11 @@ void GameEngine::initHumanPlayers(int numPlayers, std::vector<bool>* malePlayers
 
     m_pEntityManager->processMessageQueue();
 
-    m_pPlayers[i] = m_pEntityManager->getPlayerPointer(i);
+    if(m_pPlayers.size() < i)
+    {
+      m_pPlayers.resize(i);
+    }
+    m_pPlayers.at(i - 1) = m_pEntityManager->getPlayerPointer(i);
 
     // set image filename with "extension"
     stringstream ss;

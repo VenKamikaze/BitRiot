@@ -44,7 +44,7 @@ class MenuSDLRenderer
 {
   public:
     MenuSDLRenderer(SDL_Renderer *renderer, SDL_Window *screen);
-    void loadScoreBoard(PlayerCharacterEntity *winner, int gameTotalLength);
+    void loadScoreBoard(shared_ptr<PlayerCharacterEntity> winner, int gameTotalLength);
     void clearScoreBoard();
     bool showMenu();
     virtual ~MenuSDLRenderer();
@@ -54,7 +54,7 @@ class MenuSDLRenderer
     int getTabIndex(Rml::Element* node);
     Rml::Element* getChildElementWithTabIndex(Rml::Element* parentNode, int tabIndex);
     Rml::Context* m_context;
-    void loadMenu(std::string menuRmlFile);
+    Rml::ElementDocument* loadMenu(std::string menuRmlFile, bool loadAndShow = true);
     SDL_Window *m_screen;
     SDL_Renderer *m_renderer;
     ScoreBoardBinder *m_scoreBinder = nullptr;
