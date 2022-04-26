@@ -1,8 +1,8 @@
 project(BitRiot)
 cmake_minimum_required(VERSION 3.4.3)
 
-set(CMAKE_BUILD_TYPE Release)
-#set(CMAKE_BUILD_TYPE Debug)
+#set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_BUILD_TYPE Debug)
 
 set(CMAKE_CXX_STANDARD 14)
 
@@ -14,7 +14,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
 
 set(OpenGL_GL_PREFERENCE "GLVND")
 
-set(RMLUI_STATIC true)
+set(RMLUI_STATIC false)
 set(RMLUI_DIR ${BitRiot_SOURCE_DIR}/ext/RmlUi)
 
 if(RMLUI_STATIC)
