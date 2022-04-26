@@ -21,12 +21,13 @@ Here's an example of the tagged releases:
 * sdl2-v1.2
 * sdl2-v1.3
 * sdl2-v1.39
+* sdl2-v1.40
 
-This indicates both the framework used underneath (win32, sdl, sdl2), plus the version of the game code, e.g. v1.1, v1.2. It means that the sdl2-v1.39 tag contains a lot of fixes and changes that are not within the sdl-v1.1 tag.
+This indicates both the framework used underneath (win32, sdl, sdl2), plus the version of the game code, e.g. v1.1, v1.2. It means that the sdl2-v1.40 tag contains a lot of fixes and changes that are not within the sdl-v1.1 tag.
 
 The master branch typically has the latest stable sdl2 code. It may or may not advance further as I don't have as much time to spend on this as I'd like. That being said, I'm very open to any contributions. Contributions to this code base are what enabled SDL2 support in the first place.
 
-The newest SDL2 version (v1.39) now supports a larger map option on startup (-b), fullscreen (-f), game controllers (plus rumble support) and hot joining (take over from CPU player), and an initial implementation of a main menu.
+The newest SDL2 version (v1.40) now supports a larger map option on startup (-b), fullscreen (-f), game controllers (plus rumble support) and hot joining (take over from CPU player), and a menu system.
 
 ![Larger map screenshot](https://raw.github.com/VenKamikaze/BitRiot/master/doco/screenshots/BitRiot-2.png)
 
