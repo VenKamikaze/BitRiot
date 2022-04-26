@@ -6,6 +6,10 @@
  */
 
 #include "MickSDLSound.h"
+#include "MickLogger.h"
+#include "SDL.h"
+#include "SDL_audio.h"
+#include <string>
 
 using namespace std;
 
@@ -26,7 +30,17 @@ MickSDLSound::~MickSDLSound()
   }
   cachedSounds.clear();
 
-  Mix_CloseAudio();
+  destructAudio();
+}
+
+void MickSDLSound::destructAudio()
+{
+  if(initialised && SDL_WasInit(SDL_INIT_AUDIO))
+  {
+    Mix_CloseAudio();
+    SDL_QuitSubSystem(SDL_INIT_AUDIO);
+    initialised = false;
+  }
 }
 
 MickSDLSound* MickSDLSound::getInstance()
@@ -41,6 +55,13 @@ MickSDLSound* MickSDLSound::getInstance()
 
 void MickSDLSound::initAudio()
 {
+  if(SDL_InitSubSystem(SDL_INIT_AUDIO) != 0)
+  {
+    std::string msg = "Failed to initialise SDL Audio subsystem!";
+    MickLogger::getInstance()->error(this, msg);
+    // we can continue without audio.
+    return;
+  };
   //Initialize SDL_mixer
   if( Mix_OpenAudio( 44100, MIX_DEFAULT_FORMAT, 2, 4096 ) == -1 )
   {

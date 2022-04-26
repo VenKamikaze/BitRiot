@@ -7,7 +7,7 @@ body
   
   font-weight: normal;
   font-style: normal;
-  font-size: 18;
+  font-size: 18pt;
 
   margin: 0;
 }
@@ -29,12 +29,13 @@ button:hover
 
 .background {   
   background:rgba(0,0,0,0);
-  background-decorator: image;
-  background-image: assets/menu/bgblurlens.png;
+  /*background-decorator: image;
+  background-image: assets/menu/bgblurlens.png; */
+  decorator: image ( assets/menu/bgblurlens.png );
 }   
 
 .menu {
   text-align: center;
-  font-size: 32;
+  font-size: 32pt;
   font-weight: bold;
 }

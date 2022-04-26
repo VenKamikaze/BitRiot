@@ -1,0 +1,3 @@
+[submodule "ext/RmlUi/RmlUi"]
+	path = ext/RmlUi/RmlUi
+	url = https://github.com/mikke89/RmlUi.git

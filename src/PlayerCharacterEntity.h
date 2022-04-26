@@ -40,17 +40,40 @@ class PlayerCharacterEntity : public GameEntity
 
     bool createEntity(EntityType type);
 
+    void incNumberBombsPlaced()
+    {
+      m_numberBombsPlaced++;
+    }
+    int getNumberBombsPlaced()
+    {
+      return m_numberBombsPlaced;
+    }
+    void incNumberEggsPlaced()
+    {
+      m_numberEggsPlaced++;
+    }
+    int getNumberEggsPlaced()
+    {
+      return m_numberEggsPlaced;
+    }
+    bool isAlive()
+    {
+      return alive;
+    }
+    void setAlive(bool alive)
+    {
+      this->alive = alive;
+    }
 
     int attachedController=-1;
     bool m_controlledByAI;
 
-
   protected:
     int m_animCounter;
     int m_animDelay;
-
     int m_velocityModifier;
-
+    int m_numberBombsPlaced = 0; // used for scoring
+    int m_numberEggsPlaced = 0;  // used for scoring
 
     int m_IQ; // used for egg intelligence chance
 
@@ -83,7 +106,8 @@ class PlayerCharacterEntity : public GameEntity
     int m_checkTimer; // timer variable for the above function
     void clearGoalsAndInstructions(); // wipes m_insList and m_goalList
 
-
+  private:
+    bool alive;
 };
 
 #endif

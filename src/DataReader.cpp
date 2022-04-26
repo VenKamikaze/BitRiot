@@ -1,4 +1,5 @@
 #include "DataReader.h"
+#include "MickLogger.h"
 
 DataReader::DataReader()
 {
@@ -127,8 +128,10 @@ const string DataReader::getStringFromFile(const string & constantName, const st
     }
     else
     {
+      string result = valuemapIterator->second;
+      MickLogger::getInstance()->debug(this, string("DataReader getString: " + result).c_str());
       // constant name was found, return the value :D
-      return valuemapIterator->second;
+      return result;
     }
   } // end if filename found
 }

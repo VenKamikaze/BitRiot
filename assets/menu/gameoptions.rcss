@@ -1,7 +1,7 @@
 .menu-container {
-  margin-top: 3%;  
+  margin-top: 20%;  
 }   
 
 .menu {
-  font-size: 28;
+  font-size: 18pt;
 }

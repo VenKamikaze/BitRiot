@@ -6,6 +6,7 @@
 #define _INPUTHANDLERCLASS
 
 #include "DynamicMap.h"
+#include "GameSettings.h"
 #include "PlayerCharacterEntity.h"
 #include "InfoPanel.h"
 #include <SDL2/SDL.h>
@@ -19,39 +20,40 @@ class InputHandler
     InputHandler();
     ~InputHandler();
 
-    void setPointers(int numPlayers, PlayerCharacterEntity * player1,
-                     PlayerCharacterEntity * player2, PlayerCharacterEntity * player3,
-                     PlayerCharacterEntity * player4, DynamicMap * dynamicMap, InfoPanel * panel);
+    void setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerCharacters, DynamicMap * dynamicMap, InfoPanel * panel);
 
-    void setKeys();
 
     void processKeyboardInput();
 
     void setPlayerDead(int player, bool flag);
 
-    PlayerCharacterEntity *getPlayerAttachedToController(int controllerId);
-    PlayerCharacterEntity *attachNewControllerToPlayer(int controllerId);
+    shared_ptr<PlayerCharacterEntity> getPlayerAttachedToController(int controllerId);
+    shared_ptr<PlayerCharacterEntity> attachNewControllerToPlayer(int controllerId);
     void detachController(int controllerId);
 
     static const int NUM_ACTION_BUTTONS = 6;
     enum ButtonName { UP_KEY, DOWN_KEY, LEFT_KEY, RIGHT_KEY, ACTION1_KEY, ACTION2_KEY };
 
   public:
-    int m_numPlayers;
-
+    //int m_numPlayers;
     bool usingControllers=false;
-
-
-    KEY m_keyMap[4][NUM_ACTION_BUTTONS]; // keymap of 6 action buttons for the 4 max players
+    //KEY m_keyMap[GameSettings::MAX_PLAYERS][NUM_ACTION_BUTTONS]; // keymap of 6 action buttons for the max players
+    map<int, array<KEY, NUM_ACTION_BUTTONS>> m_keyMap; // player ID, keys available to use
 
   protected:
 
-    PlayerCharacterEntity * p_players[4]; // pointers to player character entities
+    vector<shared_ptr<PlayerCharacterEntity>> p_players; // pointers to player character entities
     DynamicMap * p_dynamicMap;
     InfoPanel * p_infoPanel;
-    bool m_playerDead[4];
-
-
+    //vector<bool> m_playerDead;
+    // static vectors that determine the chosen spawn entity for each human character.
+    map<int, bool> m_action1Down; // player ID, action1Down
+    map<int, bool> m_action2Down; // player ID, action2Down
+    map<int, EntityType> m_spawnSelection; // player ID, Entity selected
+  
+  private:
+    void setAvailableKeys();
+    vector<array<KEY, NUM_ACTION_BUTTONS>> m_availableKeySets; // pop from here as we add human players, recreate on new InputHandler.
 };
 
 

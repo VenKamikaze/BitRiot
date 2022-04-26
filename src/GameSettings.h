@@ -12,6 +12,7 @@
 #include "RuntimeException.h"
 #include <vector>
 #include "Map.h"
+#include "MickLogger.h"
 
 namespace std
 {
@@ -21,7 +22,7 @@ class GameSettings
   public:
     GameSettings();
     static GameSettings* getInstance();
-    enum GAME_STATE { GAME_INIT, MENU_RUNNING, GAME_RUNNING, GAME_OVER };
+    enum GAME_STATE { GAME_INIT, MENU_RUNNING, GAME_RUNNING, GAME_QUIT };
 
     inline int getNumberOfHumanPlayers()
     {
@@ -67,7 +68,7 @@ class GameSettings
 
     inline void setNumberOfPlayers(int allPlayers)
     {
-      if(MAX_PLAYERS >= allPlayers && allPlayers > 0)
+      if(MIN_PLAYERS <= allPlayers && allPlayers <= MAX_PLAYERS)
       {
         numPlayers = allPlayers;
         genders.resize(allPlayers+1);
@@ -84,6 +85,7 @@ class GameSettings
     }
     inline void setPlayerAI(int playerIndex, bool isAI)
     {
+      std::MickLogger::getInstance()->debug(this, std::string("setPlayerAI(").append(std::to_string(playerIndex)).append(",").append(std::to_string(isAI)).append(")"));
       playerAIs.at(playerIndex) = isAI;
     }
 
@@ -97,10 +99,13 @@ class GameSettings
     }
 
     static const int MAX_PLAYERS = 4; // TODO 6;
-    static const int MIN_PLAYERS = 1; // a player vs the default purple non player PC.
+    static const int MIN_PLAYERS = 2; // 2 player characters minimum plus the default purple non player PC.
 
     static const int MAX_BLOCK_PCT = 75;
     static const int MIN_BLOCK_PCT = 20;
+
+    static const int NORMAL_TICKS_SPEED = 33;
+    static const int FAST_TICKS_SPEED = 5; // quick games for debugging purposes
 
   private:
     ~GameSettings();
@@ -115,6 +120,7 @@ class GameSettings
     int mapHeight = Map::MAP_HEIGHT; // not changeable outside of runtime flags for now
 
     float mapRatio = 1.3077;
+    
 
 };
 

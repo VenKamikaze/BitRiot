@@ -16,7 +16,8 @@ PlayerCharacterEntity::PlayerCharacterEntity(int uniqueID, int teamNumber, int a
   m_offsetX = 0.0F;
   m_offsetY = 0.0F;
   m_health = DataReader::getInstance()->getIntFromFile("PLAYER_INITIAL_HEALTH", "data/player.txt");
-
+  setAlive(m_health > 0);
+  
   m_velocityModifier = DataReader::getInstance()->getIntFromFile("PLAYER_VELOCITY_MODIFIER", "data/player.txt");
   m_velocity = ((float)m_health + 10)/m_velocityModifier;
 
@@ -173,6 +174,7 @@ bool PlayerCharacterEntity::createEntity(EntityType type)
       break;
     case BOMB:
       m_health -= DataReader::getInstance()->getIntFromFile("BOMB_COST", "data/player.txt");
+      incNumberBombsPlaced();
       break;
     case MINE:
       m_health -= DataReader::getInstance()->getIntFromFile("MINE_COST", "data/player.txt");
@@ -182,18 +184,23 @@ bool PlayerCharacterEntity::createEntity(EntityType type)
       break;
     case EGG1:
       m_health -= DataReader::getInstance()->getIntFromFile("EGG1_COST", "data/player.txt");
+      incNumberEggsPlaced();
       break;
     case EGG2:
       m_health -= DataReader::getInstance()->getIntFromFile("EGG2_COST", "data/player.txt");
+      incNumberEggsPlaced();
       break;
     case EGG3:
       m_health -= DataReader::getInstance()->getIntFromFile("EGG3_COST", "data/player.txt");
+      incNumberEggsPlaced();
       break;
     case EGG4:
       m_health -= DataReader::getInstance()->getIntFromFile("EGG4_COST", "data/player.txt");
+      incNumberEggsPlaced();
       break;
     case EGG5:
       m_health -= DataReader::getInstance()->getIntFromFile("EGG5_COST", "data/player.txt");
+      incNumberEggsPlaced();
       flags |= FIRE_ROCKETS;
       break;
     default:

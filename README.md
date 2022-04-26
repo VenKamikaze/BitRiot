@@ -35,24 +35,31 @@ The newest SDL2 version (v1.39) now supports a larger map option on startup (-b)
 
 The 'develop' branch should contain the latest development code for BitRiot, stability is not the primary concern of this branch. The 'master' branch should have somewhat stable / tested code within it. If you are looking to branch to add features, please fork and branch from 'develop' and file pull requests back to that branch, I'm thankful for any contributions you can make.
 
+## TODO
+
 Things that I'd like to do, but likely won't ever find time for (in order of personal interest). Note if the top two items are completed I'll remove the 'Beta' tag from the game title:
 
 * ~~Create a basic menu selection screen on startup to configure game parameters~~ (partly done, can be improved further)
-* Allow players to restart the game
+    * ~~When all human players have been eliminated, wait for a few moments then re-display the main menu~~ (partly done)
+    * ~~Hitting escape in menu should quit game~~
+    * ~~Change menu font~~
+    * Add variable to toggle hot joining and taking over existing AI players
+    * Allow toggle of map height/width in menu options
+* ~~Allow players to restart the game~~ (done!)
 * ~~Fix up the input code~~ (done!)
 * ~~Port this to SDL2~~ (done! work may or may not continue to switch a lot of surfaces into textures)
-* Cleanups (~~code formatting and style~~ (done), also some collections always grow e.g. in the input code)
-* Scaling / resolution options (Partly done - fullscreen option '-f' available).
+* Cleanups (code formatting and style, also some collections always grow e.g. in the input code)
+* Scaling / resolution options (Partly done - fullscreen option '-f' available, and resizing window works).
 * Write up some notes to explain the porting process to SDL2, as a quick 'n' dirty tutorial for others thinking of doing this for other games.
 * ~~Controller input~~ (done!)
-* Network play (honestly, unless someone else did this I highly doubt I'd get around to even attempting)
+* Network play (this will probably never get done)
 
 Please note: If you'd found the original BitRiot release anywhere, you might notice the artwork in this one was different. This was only done out of safety incase there were any concerns over the artwork included in the original release.
 
 # Build
 
-To build the game, first make sure you have the necessary dependencies installed on your system. The main master branch is now using SDL2 and libRocket. Assuming you are compiling this branch, you will need:
-CMake 3.4.3, SDL 2.0.x, SDL2_mixer and SDL2_ttf, SDL2_image, libRocket v1.3+.
+To build the game, first make sure you have the necessary dependencies installed on your system. The main master branch is now using SDL2 and RmlUI. Assuming you are compiling this branch, you will need:
+CMake 3.4.3, SDL 2.0.18+, SDL2_mixer and SDL2_ttf, SDL2_image, RmlUI v4.3+, FreeType.
 
 on ubuntu/debian:
 ```
@@ -61,27 +68,12 @@ sudo apt-get install cmake libsdl2-dev libsdl2-ttf-dev libsdl2-mixer-dev
 
 ## CMake
 
-Get and build libRocket first, as we use it for our menuing system.
-
+Get the BitRiot code and the RmlUi submodule. Build BitRiot and run it.
 ```
-git clone https://github.com/libRocket/libRocket.git
-cd libRocket
-mkdir target
-cd target
-cmake ../Build -DCMAKE_INSTALL_PREFIX:PATH=/usr
-make
-sudo make install #optional
-```
-
-Now get the BitRiot code and build it, link to the menu assets, and run BitRiot
-```
-git clone https://github.com/VenKamikaze/BitRiot.git
+git clone --recurse-submodules https://github.com/VenKamikaze/BitRiot.git
 cd BitRiot/target
-# If you did not do a make install for libRocket, set the path to your libRocket source using: 
-#export LIBROCKET=/path/to/cloned/libRocket
 cmake ../
 make
-ln -s ../assets
 ./BitRiot
 ```
 
@@ -95,11 +87,9 @@ target/mingw32-make
 
 Steps shown above:
 
-1. Clone the libRocket repository
-2. Build the libRocket libraries
-3. Clone the BitRiot repository
-4. Change into the target directory inside your cloned BitRiot repository
-5. Generate a Makefile with CMake
-6. Build it
-7. Run the game - you should now have a 'BitRiot' executable in your current directory:
+1. Clone the BitRiot repository and submodules (includes RmlUi)
+2. Change into the target directory inside your cloned BitRiot repository
+3. Generate a Makefile with CMake
+4. Build it
+5. Run the game - you should now have a 'BitRiot' executable in your current directory:
 

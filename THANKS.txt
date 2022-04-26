@@ -10,4 +10,7 @@ newbombfuse2.wav
 Conor for the following sounds:
 Flyby.wav
 
-Also thanks to Michael Straube!
+Thanks to Michael Straube!
+
+Thanks to Luke Hoschke for controller support!
+

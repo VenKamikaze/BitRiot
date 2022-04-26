@@ -8,37 +8,39 @@
 #ifndef INPUTEXCEPTION_H_
 #define INPUTEXCEPTION_H_
 
-#include <exception>
+#include <stdexcept>
 
 namespace std
 {
-typedef enum
-{
-  GOT_QUIT    = 1,
-  GOT_OTHER   = 2
-} eType;
+  typedef enum
+  {
+    GOT_QUIT    = 1,
+    GOT_OTHER   = 2
+  } eType;
 
-class InputException: public std::exception
-{
-  public:
-    InputException();
-    virtual ~InputException() throw ();
+  class InputException: virtual public std::runtime_error
+  {
+    protected:
+      eType type;
+    public:
+      explicit InputException(const std::string& msg, const eType& etype):
+        std::runtime_error(msg)
+        {
+          type = etype;
+        }
 
-    void setType(eType type)
-    {
-      this->type = type;
-    };
-    bool gotQuit()
-    {
-      return type == GOT_QUIT;
-    };
+      virtual ~InputException() throw () {}
 
-    virtual const char* what() const throw()
-    {
-      return "InputException occurred.";
-    }
-    eType type;
-};
+      virtual bool gotQuit() const throw()
+      {
+        if(type)
+	{
+          return GOT_QUIT == type;
+	}
+	return false;
+      };
+
+  };
 
 } /* namespace std */
 #endif /* INPUTEXCEPTION_H_ */

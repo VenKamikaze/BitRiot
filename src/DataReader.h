@@ -23,6 +23,8 @@ But maybe after BitRiot is mostly finished
 #ifndef _DATAREADER
 #define _DATAREADER
 
+#include "MickLogger.h"
+
 #include <string>
 #include <sstream>
 #include <map>
