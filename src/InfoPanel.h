@@ -10,6 +10,7 @@
 
 #include "EntityFactory.h"
 #include "GameSettings.h"
+#include "PlayerCharacterEntity.h"
 
 class InfoPanel
 {
@@ -26,31 +27,27 @@ class InfoPanel
 
     static bool DRAW_HEALTH_UNDER_PLAYERS;
 
-    void setPlayerPointers(int num, PlayerCharacterEntity * player1,
-                           PlayerCharacterEntity * player2,
-                           PlayerCharacterEntity * player3,
-                           PlayerCharacterEntity * player4);
+    // TODO change to vector
+    void setPlayerPointers(vector<shared_ptr<PlayerCharacterEntity>> playerCharacters);
 
     void clearSelections();
     void setSelection(EntityType type, int team);
 
-    void setPlayerDead(int player, bool flag);
-
     void renderSurfaceTo(SDL_Surface* dest, int x, int y);
 
+  // TODO change arrays to vectors and resize based on numPlayers
   private:
     SDL_Surface* m_surface;
-    SDL_Surface* m_faceSurfaces[4];
+    SDL_Surface* m_faceSurfaces[GameSettings::MAX_PLAYERS];
 
     void drawTextGDI(const char * text, int x, int y,
                      Uint32 color, SDL_Surface* dest);
 
     void drawBGTiles();
 
-    int m_players;
-    bool m_playerDead[4];
-    EntityType playerSelection[4];
-    PlayerCharacterEntity * playerPointer[4]; // pointers to player character entities
+    vector<shared_ptr<PlayerCharacterEntity>> m_playerPointers; // pointers to player character entities
+    EntityType playerSelection[GameSettings::MAX_PLAYERS];
+    
 
 };
 

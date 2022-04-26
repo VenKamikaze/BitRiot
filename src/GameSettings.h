@@ -68,7 +68,7 @@ class GameSettings
 
     inline void setNumberOfPlayers(int allPlayers)
     {
-      if(MAX_PLAYERS >= allPlayers && allPlayers > 0)
+      if(MIN_PLAYERS <= allPlayers && allPlayers <= MAX_PLAYERS)
       {
         numPlayers = allPlayers;
         genders.resize(allPlayers+1);
@@ -99,7 +99,7 @@ class GameSettings
     }
 
     static const int MAX_PLAYERS = 4; // TODO 6;
-    static const int MIN_PLAYERS = 1; // 1 player plus the default purple non player PC.
+    static const int MIN_PLAYERS = 2; // 2 player characters minimum plus the default purple non player PC.
 
     static const int MAX_BLOCK_PCT = 75;
     static const int MIN_BLOCK_PCT = 20;

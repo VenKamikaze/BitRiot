@@ -44,7 +44,7 @@ class MenuSDLRenderer
 {
   public:
     MenuSDLRenderer(SDL_Renderer *renderer, SDL_Window *screen);
-    void loadScoreBoard(PlayerCharacterEntity *winner, int gameTotalLength);
+    void loadScoreBoard(shared_ptr<PlayerCharacterEntity> winner, int gameTotalLength);
     void clearScoreBoard();
     bool showMenu();
     virtual ~MenuSDLRenderer();

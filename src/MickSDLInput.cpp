@@ -7,6 +7,8 @@
 
 #include "MickSDLInput.h"
 #include "InputHandler.h"
+#include "MickLogger.h"
+#include <string>
 
 
 using namespace std;
@@ -243,23 +245,23 @@ bool MickSDLInput::rumbleController(SDL_JoystickID joystickID, float strength, U
 void MickSDLInput::setControllerInput(SDL_JoystickID joystickID, Uint8 button, Uint8 state)
 {
 
-  PlayerCharacterEntity *attachedPlayer=m_pInputHandler->getPlayerAttachedToController(joystickID);
+  shared_ptr<PlayerCharacterEntity> attachedPlayer = m_pInputHandler->getPlayerAttachedToController(joystickID);
   if (!attachedPlayer)
   {
     MickSDLInput::rumbleController(joystickID, 0.75f, 300);
-    attachedPlayer=m_pInputHandler->attachNewControllerToPlayer(joystickID);
+    attachedPlayer = m_pInputHandler->attachNewControllerToPlayer(joystickID);
     if (attachedPlayer)
     {
-      printf("Attached controller: %i to player: %i\n", joystickID, attachedPlayer->getTeam() );
+      MickLogger::getInstance()->info(this, std::string("Attached controller: %i to player: %i\n", joystickID, attachedPlayer->getTeam()).c_str() );
     }
     else
     {
-      printf("No free players to attach controller: %i",joystickID);
+      MickLogger::getInstance()->warn(this, std::string("No free players to attach controller: %i",joystickID).c_str() );
     }
     return; //eat attaching button press
   }
 
-  int i=attachedPlayer->getTeam()-1;
+  int i = attachedPlayer->getID();
   bool pressed=state==SDL_PRESSED;
   KEY keyIndex=KEY_UNKNOWN;
 

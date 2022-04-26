@@ -62,7 +62,7 @@ void MenuSDLRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
   m_screen = screen;
 }
 
-void MenuSDLRenderer::loadScoreBoard(PlayerCharacterEntity *winner, int gameTotalLength)
+void MenuSDLRenderer::loadScoreBoard(shared_ptr<PlayerCharacterEntity> winner, int gameTotalLength)
 {
   m_scoreBinder = new ScoreBoardBinder(m_context, winner, gameTotalLength);
   loadMenu("scoreboard.rml");

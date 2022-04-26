@@ -29,11 +29,16 @@
 //       I've kept the MIT license as part of this anyway.
 
 #include "EventHandlerOptions.h"
+#include <RmlUi/Core/Element.h>
 #include <RmlUi/Core/ElementDocument.h>
 #include <RmlUi/Core/ElementUtilities.h>
 #include <RmlUi/Core/Event.h>
 #include <RmlUi/Core/Elements/ElementFormControlInput.h>
+#include <string>
 #include "EventManager.h"
+#include "GameSettings.h"
+#include "MickLogger.h"
+#include "RmlUI/MickRmlUIElementUtil.h"
 
 EventHandlerOptions::EventHandlerOptions()
 {
@@ -45,19 +50,17 @@ EventHandlerOptions::~EventHandlerOptions()
 
 void EventHandlerOptions::changeHumanPlayers(Rml::Event* event)
 {
-  int humans = std::GameSettings::getInstance()->getNumberOfHumanPlayers();
-  if (humans >= std::GameSettings::getInstance()->getNumberOfPlayers())
+  int humans = std::GameSettings::getInstance()->getNumberOfHumanPlayers() + 1;
+  if (humans > std::GameSettings::getInstance()->getNumberOfPlayers())
   {
-    humans = 0;
-    for (int i = 0; i < std::GameSettings::getInstance()->getNumberOfPlayers(); i++)
-    {
-      std::GameSettings::getInstance()->setPlayerAI(i, true);
-    }
+    humans = 0; // wrap it back to zero human players
   }
-  else
+
+  // reset all 
+  for(int playerIndex = 0; playerIndex < std::GameSettings::getInstance()->getNumberOfPlayers(); playerIndex++)
   {
-    ++humans;
-    std::GameSettings::getInstance()->setPlayerAI(humans - 1, false);
+    bool isAiControlled = (playerIndex >= humans);
+    std::GameSettings::getInstance()->setPlayerAI(playerIndex, isAiControlled);
   }
 
   if (event)
@@ -68,22 +71,24 @@ void EventHandlerOptions::changeHumanPlayers(Rml::Event* event)
 
 void EventHandlerOptions::changeTotalPlayers(Rml::Event* event)
 {
-  int players = std::GameSettings::getInstance()->getNumberOfPlayers();
-  if (players >= std::GameSettings::MAX_PLAYERS)
+  int players = std::GameSettings::getInstance()->getNumberOfPlayers() + 1;
+  if (players > std::GameSettings::MAX_PLAYERS)
   {
-    players = 1;
-    std::GameSettings::getInstance()->setNumberOfPlayers(players);
+    players = std::GameSettings::MIN_PLAYERS; // wrap it back to the minimum
   }
-  else
-  {
-    ++players;
-    std::GameSettings::getInstance()->setNumberOfPlayers(players);
-    std::GameSettings::getInstance()->setPlayerAI(players - 1, true);
-  }
+
+  std::GameSettings::getInstance()->setNumberOfPlayers(players);
 
   if (event)
   {
     MickRmlUIElementUtil::replaceEndStringInTextNode(event->GetTargetElement(), std::to_string(players));
+
+    // Reset the number of human players displayed on the page too
+    Rml::Element *humanPlayersElement = event->GetTargetElement()->GetOwnerDocument()->GetElementById("humanplayers");
+    if(humanPlayersElement)
+    {
+      MickRmlUIElementUtil::replaceEndStringInTextNode(humanPlayersElement, std::to_string(std::GameSettings::getInstance()->getNumberOfHumanPlayers()));
+    }
   }
 }
 
@@ -204,7 +209,6 @@ void EventHandlerOptions::ProcessEvent(Rml::Event& event, const Rml::String& val
   else if (value == "totalplayers")
   {
     // TODO, FIXME causes out of bounds check to fail - presumably in GameEngine?
-    //changeTotalPlayers(&event);
-    //changeHumanPlayers(NULL);
+    changeTotalPlayers(&event);
   }
 }

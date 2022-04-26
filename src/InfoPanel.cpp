@@ -1,8 +1,9 @@
 
 #include "InfoPanel.h"
+#include "GameSettings.h"
+#include <cstddef>
 
 static const unsigned int TRANSPARENT_COLOR = (255 << 8) + (255 << 0);
-
 
 int InfoPanel::WIDTH =PANEL_TILE_WIDTH * Map::TILE_WIDTH;
 int InfoPanel::HEIGHT=13 * Map::TILE_HEIGHT; //unknown here
@@ -15,12 +16,16 @@ InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, std::vector<bool>* ma
   WIDTH = PANEL_TILE_WIDTH * Map::TILE_WIDTH;
   HEIGHT = GameSettings::getInstance()->getMapHeight() * Map::TILE_HEIGHT;
 
-  m_players = numPlayers;
-
-  for (int i = 0; i < 4; i++)
+  if(numPlayers > GameSettings::MAX_PLAYERS)
   {
-    playerPointer[i] = NULL;
+    numPlayers = GameSettings::MAX_PLAYERS;
   }
+  if(numPlayers < GameSettings::MIN_PLAYERS)
+  {
+    numPlayers = GameSettings::MIN_PLAYERS;
+  }
+
+  m_playerPointers.resize(numPlayers, nullptr);
 
   clearSelections();
 
@@ -28,8 +33,9 @@ InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, std::vector<bool>* ma
       backbuf->format->Gmask, backbuf->format->Bmask, 0);
 
   // set up face surfaces
-  for (int i = 0; i < 4; i++)
+  for (int i = 0; i < numPlayers; i++)
   {
+    // TODO handle more than 4 players
     stringstream ss;
     ss << "assets/bitmaps/player" << (i + 1);
     if (malePlayers->at(i) == true)
@@ -46,7 +52,7 @@ InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, std::vector<bool>* ma
   }
 
   // change to team colours and apply color key
-  for (int i = 0; i < 4; ++i)
+  for (int i = 0; i < numPlayers; ++i)
   {
     SDL_SetColorKey( m_faceSurfaces[i], SDL_TRUE, SDL_MapRGB(m_faceSurfaces[i]->format, 0, 255, 255) );
   }
@@ -57,33 +63,27 @@ InfoPanel::~InfoPanel()
   if (m_surface)
   {
     SDL_FreeSurface(m_surface);
-    m_surface = NULL;
+    m_surface = nullptr;
   }
-  for (int i = 0; i < 4; i++)
+  for (int i = 0; i < m_playerPointers.size(); i++)
+  {
     if (m_faceSurfaces[i])
     {
       SDL_FreeSurface(m_faceSurfaces[i]);
-      m_faceSurfaces[i] = NULL;
+      m_faceSurfaces[i] = nullptr;
     }
-  //  m_faceSurfaces[i]->Release();
+  }
 }
 
-void InfoPanel::setPlayerPointers(int num,
-                                  PlayerCharacterEntity * player1,
-                                  PlayerCharacterEntity * player2,
-                                  PlayerCharacterEntity * player3,
-                                  PlayerCharacterEntity * player4)
+// TODO vector types
+void InfoPanel::setPlayerPointers(vector<shared_ptr<PlayerCharacterEntity>> playerCharacters)
 {
-  m_players = num;
-  playerPointer[0] = player1;
-  playerPointer[1] = player2;
-  playerPointer[2] = player3;
-  playerPointer[3] = player4;
+  m_playerPointers = playerCharacters;
 }
 
 void InfoPanel::clearSelections()
 {
-  for (int t = 0; t < 4; t++)
+  for (int t = 0; t < GameSettings::MAX_PLAYERS; t++)
   {
     playerSelection[t] = PLAYER_CHARACTER; // player character used as null selection
   }
@@ -92,28 +92,29 @@ void InfoPanel::clearSelections()
 void InfoPanel::setSelection(EntityType type, int team)
 {
   team--;
-  if (0 <= team && team < 4)
+  if (0 <= team && team < GameSettings::MAX_PLAYERS)
   {
     // ok to set array
-    playerSelection[team ] = type;
+    playerSelection[team] = type;
   }
 }
 
 void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
 {
-  assert(playerPointer[0] != NULL);
+  assert(m_playerPointers.size() > 0);
+  assert(m_playerPointers.at(0));
 
   drawBGTiles();
 
   SDL_Rect sourceRect, destRect;
   int xOffset, yOffset;
 
-  for (int i = 0; i < m_players; i++)
+  for (unsigned int i = 0; i < m_playerPointers.size(); i++)
   {
     int health = 0;
-    if (m_playerDead[i] != true && playerPointer[i] != NULL)
+    if (m_playerPointers.at(i) && m_playerPointers.at(i)->isAlive())
     {
-      health = playerPointer[i]->getHealth();
+      health = m_playerPointers.at(i)->getHealth();
     }
     xOffset = 0;
     yOffset = ((i * 3) + 1) * Map::TILE_HEIGHT;
@@ -148,8 +149,6 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
       intensity = 255;
     }
 
-    //ddbltfx.dwFillColor = ((255 - intensity) << 16) + (intensity << 8);
-
     Uint32 fillColour = SDL_MapRGB(m_surface->format, (255-intensity), intensity,0);
     destRect.y = yOffset + Map::TILE_HEIGHT; // + (int)(1.25f * (float)Map::TILE_HEIGHT);
     /*destRect.h = yOffset + (int)(1.75f * (float)Map::TILE_HEIGHT);*/
@@ -183,10 +182,10 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
 
     if (DRAW_HEALTH_UNDER_PLAYERS)
     {
-      if (m_playerDead[i] != true && playerPointer[i] != NULL)
+      if (m_playerPointers.at(i) && m_playerPointers.at(i)->isAlive())
       {
-        int destX = (playerPointer[i]->getTileX() * Map::TILE_WIDTH) + (int)(playerPointer[i]->getOffsetX() * (Map::TILE_WIDTH/2));
-        int destY = (playerPointer[i]->getTileY() * Map::TILE_WIDTH) + (int)(playerPointer[i]->getOffsetY() * (Map::TILE_WIDTH/2)) + Map::TILE_WIDTH + 2;
+        int destX = (m_playerPointers.at(i)->getTileX() * Map::TILE_WIDTH) + (int)(m_playerPointers.at(i)->getOffsetX() * (Map::TILE_WIDTH/2));
+        int destY = (m_playerPointers.at(i)->getTileY() * Map::TILE_WIDTH) + (int)(m_playerPointers.at(i)->getOffsetY() * (Map::TILE_WIDTH/2)) + Map::TILE_WIDTH + 2;
 
         destRect.x = destX;
         destRect.y = destY;
@@ -247,11 +246,6 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
   SDL_BlitSurface(m_surface, &sourceRect, dest, &destRect);
   //dest->Blt(&destRect, m_surface, &sourceRect, DDBLT_WAIT, 0);
 
-}
-
-void InfoPanel::setPlayerDead(int player, bool flag)
-{
-  m_playerDead[player] = flag;
 }
 
 void InfoPanel::drawTextGDI(const char * text, int x, int y,

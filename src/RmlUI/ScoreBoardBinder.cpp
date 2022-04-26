@@ -15,7 +15,7 @@ namespace std
     int playerWinNumber = 0;
   } m_scores;
 
-  ScoreBoardBinder::ScoreBoardBinder(Rml::Context* rmlContext, PlayerCharacterEntity* winner, int gameTotalLength)
+  ScoreBoardBinder::ScoreBoardBinder(Rml::Context* rmlContext, shared_ptr<PlayerCharacterEntity> winner, int gameTotalLength)
   {
     ScoreBoardBinder::mapScoreBoardData(winner, gameTotalLength);
     SetupDataBinding(rmlContext);
@@ -49,7 +49,7 @@ namespace std
     }
   }
 
-  void ScoreBoardBinder::mapScoreBoardData(PlayerCharacterEntity *winner, int gameTotalLength)
+  void ScoreBoardBinder::mapScoreBoardData(shared_ptr<PlayerCharacterEntity> winner, int gameTotalLength)
   {
     std::ostringstream ss;
     m_scores.gameLengthSeconds = gameTotalLength;

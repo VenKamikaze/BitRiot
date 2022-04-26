@@ -1,6 +1,9 @@
 
 #include "EntityManager.h"
+#include "GameEntity.h"
 #include "MickLogger.h"
+#include "PlayerCharacterEntity.h"
+#include <memory>
 #include <string>
 
 EntityManager::EntityManager()
@@ -8,14 +11,14 @@ EntityManager::EntityManager()
   // set dynamicMap vector sizes to map width and height
   m_pDynamicMap = new DynamicMap(GameSettings::getInstance()->getMapWidth(), GameSettings::getInstance()->getMapHeight());
 
-  m_playerDead = new std::vector<bool>(GameSettings::getInstance()->getNumberOfPlayers(), true);
+  //m_playerDead = new std::vector<bool>(GameSettings::getInstance()->getNumberOfPlayers(), true);
 }
 
 EntityManager::~EntityManager()
 {
   delete m_pDynamicMap;
-  delete m_playerDead;
-  m_playerDead = NULL;
+  //delete m_playerDead;
+  //m_playerDead = NULL;
 }
 
 
@@ -99,22 +102,22 @@ void EntityManager::processMessageQueue()
           y = message->getToY();
 
           EntityType typeToCreate = (EntityType)message->getTypeToCreate();
-          GameEntity * entity = ef->getEntity(typeToCreate, message->getTeamToCreate(),
+          shared_ptr<GameEntity> entity = ef->getEntity(typeToCreate, message->getTeamToCreate(),
                                               x, y, message->getFlags(), message->getOffsetX(), message->getOffsetY());
 
           int id = entity->getID();
 
           // add to entity list
-          pair<int, GameEntity *> value(id, entity);
+          pair<int, shared_ptr<GameEntity>> value(id, entity);
           m_pDynamicMap->entityList.insert(value);
           // add entity to dynamic map
           m_pDynamicMap->entityMap[x][y].push_back(id);
 
           // check for player character creation for setting dead flag
-          if (typeToCreate == PLAYER_CHARACTER)
-          {
-            m_playerDead->at(message->getTeamToCreate() - 1) = false;
-          }
+          //if (typeToCreate == PLAYER_CHARACTER)
+          //{
+          //  m_playerDead->at(message->getTeamToCreate() - 1) = false;
+          //}
 
           // also add to AIGameView
           EntityInfo info;
@@ -144,7 +147,8 @@ void EntityManager::processMessageQueue()
           // check for setting player dead flag
           if (m_pDynamicMap->entityIterator->second->getType() == PLAYER_CHARACTER)
           {
-            m_playerDead->at(m_pDynamicMap->entityIterator->second->getTeam() - 1) = true;
+            //m_playerDead->at(m_pDynamicMap->entityIterator->second->getTeam() - 1) = true;
+            static_pointer_cast<PlayerCharacterEntity>(m_pDynamicMap->entityIterator->second)->setAlive(false);
           }
 
           // remove from map
@@ -162,8 +166,6 @@ void EntityManager::processMessageQueue()
           }
           if (foundOnMap) // may not be found on map due to multiple destroy messages
           {
-            // delete and remove from list
-            delete m_pDynamicMap->entityIterator->second;
             m_pDynamicMap->entityIterator->second = 0;
             m_pDynamicMap->entityList.erase(m_pDynamicMap->entityIterator);
 
@@ -186,7 +188,25 @@ void EntityManager::processMessageQueue()
   }
 }
 
-PlayerCharacterEntity * EntityManager::getPlayerPointer(int team)
+unique_ptr<vector<shared_ptr<PlayerCharacterEntity>>> EntityManager::getAllPlayerCharacters()
+{
+  unique_ptr<vector<shared_ptr<PlayerCharacterEntity>>> players = make_unique<vector<shared_ptr<PlayerCharacterEntity>>>();
+  int numPlayers = 0;
+  // set up player character entity pointers
+  for (m_pDynamicMap->entityIterator = m_pDynamicMap->entityList.begin();
+       m_pDynamicMap->entityIterator != m_pDynamicMap->entityList.end();
+       m_pDynamicMap->entityIterator++)
+  {
+    if (m_pDynamicMap->entityIterator->second->getType() == PLAYER_CHARACTER)
+    {
+      players->resize(++numPlayers, std::static_pointer_cast<PlayerCharacterEntity>(m_pDynamicMap->entityIterator->second));
+    }
+  }
+
+  return players;
+}
+
+shared_ptr<PlayerCharacterEntity> EntityManager::getPlayerPointer(int team)
 {
 
   // set up player character entity pointers
@@ -198,24 +218,26 @@ PlayerCharacterEntity * EntityManager::getPlayerPointer(int team)
     {
       if (m_pDynamicMap->entityIterator->second->getTeam() == team)
       {
-        return (PlayerCharacterEntity*)m_pDynamicMap->entityIterator->second;
+        return std::static_pointer_cast<PlayerCharacterEntity>(m_pDynamicMap->entityIterator->second);
+        //return (shared_ptr<PlayerCharacterEntity>) m_pDynamicMap->entityIterator->second;
       }
     }
   }
 
-  return NULL;
+  return nullptr;
 }
 
-PlayerCharacterEntity * EntityManager::getWinningPlayer()
+shared_ptr<PlayerCharacterEntity> EntityManager::getWinningPlayer()
 {
   if(oneOrZeroPlayersRemain())
   {
-    for(unsigned int i = 0; i < m_playerDead->size(); i++)
+    unique_ptr<vector<shared_ptr<PlayerCharacterEntity>>> playerCharacters = getAllPlayerCharacters();
+    for(const auto& player : *playerCharacters)
     {
-      if(! m_playerDead->at(i))
+      if(player->isAlive())
       {
-        MickLogger::getInstance()->debug(this, string("Player " + to_string(i) + " is the winning player").c_str());
-        return getPlayerPointer(i+1); // team is 
+        MickLogger::getInstance()->debug(this, string("Player " + to_string(player->getTeam()) + " is the winning player").c_str());
+        return player;
       }
     }
   }
@@ -224,27 +246,26 @@ PlayerCharacterEntity * EntityManager::getWinningPlayer()
 
 bool EntityManager::oneOrZeroPlayersRemain()
 {
-  unsigned int remainingPlayers = 0;
-  for(unsigned int i = 0; i < m_playerDead->size(); i++)
-  {
-    if(! m_playerDead->at(i))
-    {
-      remainingPlayers++;
-    }
-  }
-  return remainingPlayers <= 1;
+  return numPlayersAlive() <= 1;
 }
 
 bool EntityManager::allPlayersDead()
 {
-  for(unsigned int i = 0; i < m_playerDead->size(); i++)
+  return numPlayersAlive() == 0;
+}
+
+int EntityManager::numPlayersAlive()
+{
+  unsigned int remainingPlayers = 0;
+  unique_ptr<vector<shared_ptr<PlayerCharacterEntity>>> playerCharacters = getAllPlayerCharacters();
+  for(const auto& player : *playerCharacters)
   {
-    if(! m_playerDead->at(i))
+    if(player->isAlive())
     {
-      return false;
+      remainingPlayers++;
     }
   }
-  return true;
+  return remainingPlayers;
 }
 
 void EntityManager::runCollisions()
@@ -264,7 +285,7 @@ void EntityManager::runCollisions()
         {
           // for each entity in map location
           int currentID = (*m_pDynamicMap->mapLocationIterator);
-          GameEntity * currentEntity = m_pDynamicMap->entityList.find(currentID)->second;
+          shared_ptr<GameEntity> currentEntity = m_pDynamicMap->entityList.find(currentID)->second;
 
           for (mapLocationIterator2 = m_pDynamicMap->entityMap[x][y].begin();
                mapLocationIterator2 != m_pDynamicMap->entityMap[x][y].end();
@@ -275,7 +296,7 @@ void EntityManager::runCollisions()
             {
               // entities are different
               // run collision on other entity
-              GameEntity * otherEntity = m_pDynamicMap->entityList.find(otherID)->second;
+              shared_ptr<GameEntity> otherEntity = m_pDynamicMap->entityList.find(otherID)->second;
               otherEntity->onCollision(currentEntity->getType(),
                                        currentEntity->getGroupType(),
                                        currentEntity->getTeam());

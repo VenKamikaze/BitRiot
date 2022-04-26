@@ -1,10 +1,14 @@
 #include "InputHandler.h"
 #include "EntityEnum.h"
+#include "GameSettings.h"
+#include "MickBaseInput.h"
+#include "PlayerCharacterEntity.h"
+#include <utility>
 
 
 InputHandler::InputHandler()
 {
-  setKeys();
+  setAvailableKeys();
 }
 
 InputHandler::~InputHandler()
@@ -12,113 +16,105 @@ InputHandler::~InputHandler()
 
 }
 
-void InputHandler::setPointers(int numPlayers, PlayerCharacterEntity * player1,
-                               PlayerCharacterEntity * player2, PlayerCharacterEntity * player3,
-                               PlayerCharacterEntity * player4, DynamicMap * dynamicMap, InfoPanel * panel)
+void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerCharacters,
+                               DynamicMap * dynamicMap, InfoPanel * panel)
 {
-  m_numPlayers = numPlayers;
-  p_players[0] = player1;
-  p_players[1] = player2;
-  p_players[2] = player3;
-  p_players[3] = player4;
+  //m_numPlayers = playerCharacters.size();
+  p_players = playerCharacters;
   p_dynamicMap = dynamicMap;
   p_infoPanel = panel;
-}
 
-void InputHandler::setKeys()
-{
-  m_keyMap[0][UP_KEY] = KEY_w;
-  m_keyMap[0][DOWN_KEY] = KEY_s;
-  m_keyMap[0][LEFT_KEY] = KEY_a;
-  m_keyMap[0][RIGHT_KEY] = KEY_d;
-  m_keyMap[0][ACTION1_KEY] = KEY_LCTRL;
-  m_keyMap[0][ACTION2_KEY] = KEY_LSHIFT;
-
-  m_keyMap[1][UP_KEY] = KEY_i;
-  m_keyMap[1][DOWN_KEY] = KEY_k;
-  m_keyMap[1][LEFT_KEY] = KEY_j;
-  m_keyMap[1][RIGHT_KEY] = KEY_l;
-  m_keyMap[1][ACTION1_KEY] = KEY_LEFTBRACKET;
-  m_keyMap[1][ACTION2_KEY] = KEY_RIGHTBRACKET;
-
-  m_keyMap[2][UP_KEY] = KEY_KP8;
-  m_keyMap[2][DOWN_KEY] = KEY_KP5;
-  m_keyMap[2][LEFT_KEY] = KEY_KP4;
-  m_keyMap[2][RIGHT_KEY] = KEY_KP6;
-  m_keyMap[2][ACTION1_KEY] = KEY_KP_PLUS;
-  m_keyMap[2][ACTION2_KEY] = KEY_KP_MINUS;
-
-  m_keyMap[3][UP_KEY] = KEY_UP;
-  m_keyMap[3][DOWN_KEY] =  KEY_DOWN;
-  m_keyMap[3][LEFT_KEY] =  KEY_LEFT;
-  m_keyMap[3][RIGHT_KEY] =  KEY_RIGHT;
-  m_keyMap[3][ACTION1_KEY] =  KEY_RCTRL;
-  m_keyMap[3][ACTION2_KEY] =  KEY_RSHIFT;
-}
-
-void InputHandler::setPlayerDead(int player, bool flag)
-{
-  m_playerDead[player] = flag;
-}
-
-PlayerCharacterEntity *InputHandler::getPlayerAttachedToController(int controllerId)
-{
-  for (int i = 0; i < m_numPlayers; i++)
+  m_action1Down.clear();
+  m_action2Down.clear();
+  m_spawnSelection.clear();
+  m_keyMap.clear();
+  for(const auto& player: playerCharacters)
   {
-    if (m_playerDead[i]) //Seems p_players[] is not nulled when memory is released.
+    m_keyMap[player->getID()] = m_availableKeySets.front();
+    m_availableKeySets.erase(m_availableKeySets.begin());
+    m_action1Down.insert(std::pair<int, bool>(player->getID(), false));
+    m_action2Down.insert(std::pair<int, bool>(player->getID(), false));
+    m_spawnSelection.insert(std::pair<int, EntityType>(player->getID(), BLOCK));
+  }
+}
+
+void InputHandler::setAvailableKeys()
+{
+  array<KEY, NUM_ACTION_BUTTONS> keySet;
+  keySet[UP_KEY] = KEY_w;
+  keySet[DOWN_KEY] = KEY_s;
+  keySet[LEFT_KEY] = KEY_a;
+  keySet[RIGHT_KEY] = KEY_d;
+  keySet[ACTION1_KEY] = KEY_LCTRL;
+  keySet[ACTION2_KEY] = KEY_LSHIFT;
+  m_availableKeySets.push_back(keySet);
+
+  keySet[UP_KEY] = KEY_UP;
+  keySet[DOWN_KEY] = KEY_DOWN;
+  keySet[LEFT_KEY] = KEY_LEFT;
+  keySet[RIGHT_KEY] = KEY_RIGHT;
+  keySet[ACTION1_KEY] = KEY_RCTRL;
+  keySet[ACTION2_KEY] = KEY_RSHIFT;
+  m_availableKeySets.push_back(keySet);
+
+  keySet[UP_KEY] = KEY_KP8;
+  keySet[DOWN_KEY] = KEY_KP5;
+  keySet[LEFT_KEY] = KEY_KP4;
+  keySet[RIGHT_KEY] = KEY_KP6;
+  keySet[ACTION1_KEY] = KEY_KP_PLUS;
+  keySet[ACTION2_KEY] = KEY_KP_MINUS;
+  m_availableKeySets.push_back(keySet);
+
+  keySet[UP_KEY] = KEY_i;
+  keySet[DOWN_KEY] = KEY_k;
+  keySet[LEFT_KEY] = KEY_j;
+  keySet[RIGHT_KEY] = KEY_l;
+  keySet[ACTION1_KEY] = KEY_LEFTBRACKET;
+  keySet[ACTION2_KEY] = KEY_RIGHTBRACKET;
+  m_availableKeySets.push_back(keySet);
+
+  // TODO m_keyMap for players 5 and 6
+}
+
+//void InputHandler::setPlayerDead(int player, bool flag)
+//{
+//  m_playerDead.at(player) = flag;
+//}
+
+shared_ptr<PlayerCharacterEntity> InputHandler::getPlayerAttachedToController(int controllerId)
+{
+  for(const auto& player : p_players)
+  {
+    if(player && player->isAlive() && player->attachedController == controllerId)
     {
-      //TODO: game needs a proper way of handling dangling pointers
-      continue;
-    }
-    if (p_players[i] == NULL)
-    {
-      continue;
-    }
-    if (p_players[i]->attachedController==controllerId)
-    {
-      return p_players[i];
+      return player;
     }
   }
-  return 0;
+  return nullptr;
 }
 
-PlayerCharacterEntity *InputHandler::attachNewControllerToPlayer(int controllerId)
+shared_ptr<PlayerCharacterEntity> InputHandler::attachNewControllerToPlayer(int controllerId)
 {
-  for (int i = m_numPlayers-1; i >= 0; i--)
+  for (int i = p_players.size()-1; i >= 0; i--)
   {
-    if (m_playerDead[i])
+    shared_ptr<PlayerCharacterEntity> player = p_players.at(i);
+    if(player && player->isAlive() && player->attachedController == -1)
     {
-      continue;
-    }
-    if (p_players[i] == NULL)
-    {
-      continue;
-    }
-    if (p_players[i]->attachedController==-1)
-    {
-      p_players[i]->attachedController=controllerId;
-      p_players[i]->m_controlledByAI=false;
-      return p_players[i];
+      player->attachedController=controllerId;
+      player->m_controlledByAI=false; // FIXME duplication as we already have a playerAI flag in gamesettings...
+      return player;
     }
   }
-  return 0;
+  return nullptr;
 }
 
 void InputHandler::detachController(int controllerId)
 {
-  for (int i = 0; i < m_numPlayers; i++)
+  for(const auto& player : p_players)
   {
-    if (m_playerDead[i])
+    if(player && player->isAlive() && player->attachedController == controllerId)
     {
-      continue;
-    }
-    if (p_players[i] == NULL)
-    {
-      continue;
-    }
-    if (p_players[i]->attachedController==controllerId)
-    {
-      p_players[i]->attachedController=-1;
+      player->attachedController = -1;
     }
   }
 }
@@ -131,93 +127,85 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
 
   if(input->doQuit())
   {
-    cout << "Got QUIT!\n";
-    //InputException e;
-    //e.setType(GOT_QUIT);
+    MickLogger::getInstance()->debug(this, "Escape pressed in game");
     throw InputException("Escape pressed", GOT_QUIT);
   }
   else if(input->isAKeyDown() || input->isAKeyReleased())
   {
-    for (int i = 0; i < m_numPlayers; i++)
+    for(const auto& player : p_players)
     {
-      if (p_players[i] == NULL)
-      {
-        continue;
-      }
-      if (m_playerDead[i])
-      {
-        continue;
-      }
-      if (p_players[i]->isControlledByAI())
+      if ((!player) || (!player->isAlive()) || (player->isControlledByAI()) )
       {
         continue;
       }
 
-      static bool action1Down[4] = { false, false, false, false };
-      static bool action2Down[4] = { false, false, false, false };
-      static EntityType selection[4] = { BLOCK, BLOCK, BLOCK, BLOCK };
+      int i = player->getID();
 
-      if (action1Down[i] == false && action2Down[i] == false)
+      //static bool action1Down[GameSettings::MAX_PLAYERS] = { false, false, false, false };
+      //static bool action2Down[4] = { false, false, false, false };
+      //static EntityType selection[4] = { BLOCK, BLOCK, BLOCK, BLOCK };
+
+      if (m_action1Down[i] == false && m_action2Down[i] == false)
       {
         if (input->isKeyDown(m_keyMap[i][UP_KEY]))
         {
           //cout << "UP: KEY IS DOWN!\n";
-          p_players[i]->moveInDirection(UP);
-          p_players[i]->incAnimFrame();
+          player->moveInDirection(UP);
+          player->incAnimFrame();
         }
         else if (input->isKeyDown(m_keyMap[i][DOWN_KEY]))
         {
-          p_players[i]->moveInDirection(DOWN);
-          p_players[i]->incAnimFrame();
+          player->moveInDirection(DOWN);
+          player->incAnimFrame();
         }
         else if (input->isKeyDown(m_keyMap[i][LEFT_KEY]))
         {
-          p_players[i]->moveInDirection(LEFT);
-          p_players[i]->incAnimFrame();
+          player->moveInDirection(LEFT);
+          player->incAnimFrame();
         }
         else if (input->isKeyDown(m_keyMap[i][RIGHT_KEY]))
         {
-          p_players[i]->moveInDirection(RIGHT);
-          p_players[i]->incAnimFrame();
+          player->moveInDirection(RIGHT);
+          player->incAnimFrame();
         }
         if (input->isKeyDown(m_keyMap[i][ACTION1_KEY]))
         {
-          action1Down[i] = true;
+          m_action1Down[i] = true;
         }
         else if (input->isKeyDown(m_keyMap[i][ACTION2_KEY]))
         {
-          action2Down[i] = true;
-          selection[i] = EGG1;
+          m_action2Down[i] = true;
+          m_spawnSelection[i] = EGG1;
         }
       }
       else // action1Down == true || action2Down == true
       {
-        if (action1Down[i] == true)
+        if (m_action1Down[i] == true)
         {
           // get action1 + direction
           if (input->isKeyDown(m_keyMap[i][UP_KEY]))
           {
-            selection[i] = BOMB;
+            m_spawnSelection[i] = BOMB;
             p_infoPanel->setSelection(BOMB, i + 1);
           }
           else if (input->isKeyDown(m_keyMap[i][DOWN_KEY]))
           {
-            selection[i] = BLOCK;
+            m_spawnSelection[i] = BLOCK;
             p_infoPanel->setSelection(BLOCK, i + 1);
           }
           else if (input->isKeyDown(m_keyMap[i][LEFT_KEY]))
           {
-            selection[i] = MINE;
+            m_spawnSelection[i] = MINE;
             p_infoPanel->setSelection(MINE, i + 1);
           }
           else if (input->isKeyDown(m_keyMap[i][RIGHT_KEY]))
           {
-            selection[i] = ROCKET_SPIN;
+            m_spawnSelection[i] = ROCKET_SPIN;
             p_infoPanel->setSelection(ROCKET_SPIN, i + 1);
           }
 
           // for no direction press
-          if (selection[i] == BLOCK)
+          if (m_spawnSelection[i] == BLOCK)
           {
             p_infoPanel->setSelection(BLOCK, i + 1);
           }
@@ -225,17 +213,17 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
           if (input->isKeyReleased(m_keyMap[i][ACTION1_KEY]))
           {
             // control released this frame, try to place item
-            if (p_dynamicMap->tileHasStaticEntity(p_players[i]->getTileX(), p_players[i]->getTileY()) == false)
+            if (p_dynamicMap->tileHasStaticEntity(player->getTileX(), player->getTileY()) == false)
             {
               // TO DO - if trying to place block, check there is an exit
-              if(p_players[i]->createEntity(selection[i]) && BOMB == selection[i])
+              if(player->createEntity(m_spawnSelection[i]) && BOMB == m_spawnSelection[i])
               {
-                p_players[i]->incNumberBombsPlaced();
+                player->incNumberBombsPlaced();
               }
             }
 
-            action1Down[i] = false;
-            selection[i] = BLOCK;
+            m_action1Down[i] = false;
+            m_spawnSelection[i] = BLOCK;
             p_infoPanel->setSelection(PLAYER_CHARACTER, i + 1);
           }
           // end if action1Down == true
@@ -246,37 +234,37 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
           // get action2 + direction
           if (input->isKeyDown(m_keyMap[i][UP_KEY]))
           {
-            selection[i] = EGG3;
+            m_spawnSelection[i] = EGG3;
           }
           else if (input->isKeyDown(m_keyMap[i][DOWN_KEY]))
           {
-            selection[i] = EGG5;
+            m_spawnSelection[i] = EGG5;
           }
           else if (input->isKeyDown(m_keyMap[i][LEFT_KEY]))
           {
-            selection[i] = EGG2;
+            m_spawnSelection[i] = EGG2;
           }
           else if (input->isKeyDown(m_keyMap[i][RIGHT_KEY]))
           {
-            selection[i] = EGG4;
+            m_spawnSelection[i] = EGG4;
           }
 
-          p_infoPanel->setSelection(selection[i], i + 1);
+          p_infoPanel->setSelection(m_spawnSelection[i], i + 1);
 
 
           if (input->isKeyReleased(m_keyMap[i][ACTION2_KEY]))
           {
             // action2 released this frame, try to place egg
-            if (p_dynamicMap->tileHasStaticEntity(p_players[i]->getTileX(), p_players[i]->getTileY()) == false)
+            if (p_dynamicMap->tileHasStaticEntity(player->getTileX(), player->getTileY()) == false)
             {
-              if(p_players[i]->createEntity(selection[i]))
+              if(player->createEntity(m_spawnSelection[i]))
               {
-                p_players[i]->incNumberEggsPlaced();
+                player->incNumberEggsPlaced();
               }
             }
 
-            action2Down[i] = false;
-            selection[i] = BLOCK;
+            m_action2Down[i] = false;
+            m_spawnSelection[i] = BLOCK;
             p_infoPanel->setSelection(PLAYER_CHARACTER, i + 1);
           }
 

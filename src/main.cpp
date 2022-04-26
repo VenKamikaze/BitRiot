@@ -57,8 +57,6 @@ bool consoleMain();
 
 // GLOBALS ////////////////////////////////////////////////
 
-MenuSDLRenderer* menu = nullptr;
-
 // game object globals
 GameEngine* engine = nullptr;
 
@@ -170,8 +168,7 @@ int main(int argc, char* argv[])
   try
   {
     quitkey = consoleInit();
-    menu = new MenuSDLRenderer(MickSDLRenderer::getInstance()->getRendererHandle(), MickSDLRenderer::getInstance()->getWindowHandle());
-    engine->setMenuSystem(menu);
+    engine->setMenuSystem(make_unique<MenuSDLRenderer>(MickSDLRenderer::getInstance()->getRendererHandle(), MickSDLRenderer::getInstance()->getWindowHandle()));
   }
   catch(const exception &e)
   {
@@ -266,12 +263,6 @@ int main(int argc, char* argv[])
     delete engine;
     engine = nullptr;
   }
-  
-//  if (menu)
-//  {
-//    delete menu;
-//    menu = nullptr;
-//  }
 
   cout << "Exiting.. " << endl;
   return 0;

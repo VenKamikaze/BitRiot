@@ -16,7 +16,8 @@ PlayerCharacterEntity::PlayerCharacterEntity(int uniqueID, int teamNumber, int a
   m_offsetX = 0.0F;
   m_offsetY = 0.0F;
   m_health = DataReader::getInstance()->getIntFromFile("PLAYER_INITIAL_HEALTH", "data/player.txt");
-
+  setAlive(m_health > 0);
+  
   m_velocityModifier = DataReader::getInstance()->getIntFromFile("PLAYER_VELOCITY_MODIFIER", "data/player.txt");
   m_velocity = ((float)m_health + 10)/m_velocityModifier;
 
