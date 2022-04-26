@@ -199,8 +199,6 @@ void EventHandlerOptions::ProcessEvent(Rml::Event& event, const Rml::String& val
   else if (value.find("genderplayer") == 0 )
   {
     int player = atoi(event.GetTargetElement()->GetId().substr(event.GetTargetElement()->GetId().length() - 1, 1).c_str());
-    // TODO we should conditionally display these buttons when toggling total number of players
-    //   instead of having to check the bounds of the total players array.
     if (std::GameSettings::getInstance()->getNumberOfPlayers() >= player)
     {
       togglePlayerGender(&event, player-1);
@@ -208,7 +206,6 @@ void EventHandlerOptions::ProcessEvent(Rml::Event& event, const Rml::String& val
   }
   else if (value == "totalplayers")
   {
-    // TODO, FIXME causes out of bounds check to fail - presumably in GameEngine?
     changeTotalPlayers(&event);
   }
 }
