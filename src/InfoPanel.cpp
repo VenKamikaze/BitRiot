@@ -65,7 +65,7 @@ InfoPanel::~InfoPanel()
     SDL_FreeSurface(m_surface);
     m_surface = nullptr;
   }
-  for (int i = 0; i < m_playerPointers.size(); i++)
+  for (unsigned int i = 0; i < m_playerPointers.size(); i++)
   {
     if (m_faceSurfaces[i])
     {
