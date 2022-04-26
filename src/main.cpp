@@ -74,6 +74,7 @@ int consoleInit()
   windowMetadata.windowHeight = Map::MAP_HEIGHT * Map::TILE_HEIGHT;
   windowMetadata.windowBpp = WINDOW_BPP;
   windowMetadata.windowTitle = WINDOW_TITLE;
+  windowMetadata.initFlags = initFlags;
 
   new MickSDLRenderer(windowMetadata); // performs initialisation
   SDL_JoystickEventState(SDL_ENABLE);
