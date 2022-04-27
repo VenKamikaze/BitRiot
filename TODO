@@ -1,3 +1,13 @@
-Bugs:
-2022-04-27: Menu is not centered correctly when full screen.
+Feature:
+2022-04-27: Add a player select screen before starting the game.
 
+* Navigate menu with first controller 
+* action1 button allows navigation of menu buttons 
+* In player select screen:
+** Probably use RmlUi data-model again
+** Detect game controller action2 button press and associate it with a player.
+** Detect action2 key press and associate it with a player
+** Show portrait for each character
+** Allow switching gender/portrait once associated with a player (left/right)
+** first controller has Up/down navigation to access buttons on this screen (left/right is used for portrait if associated with character)
+** allow switching between human/CPU controlled by pressing action2 again.
