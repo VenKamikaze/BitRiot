@@ -22,15 +22,39 @@ Here's an example of the tagged releases:
 * sdl2-v1.3
 * sdl2-v1.39
 * sdl2-v1.40
+* sdl2-v1.41
 
-This indicates both the framework used underneath (win32, sdl, sdl2), plus the version of the game code, e.g. v1.1, v1.2. It means that the sdl2-v1.40 tag contains a lot of fixes and changes that are not within the sdl-v1.1 tag.
+This indicates both the framework used underneath (win32, sdl, sdl2), plus the version of the game code, e.g. v1.1, v1.2. It means that the sdl2-v1.41 tag contains a lot of fixes and changes that are not within the sdl-v1.1 tag.
 
 The master branch typically has the latest stable sdl2 code. It may or may not advance further as I don't have as much time to spend on this as I'd like. That being said, I'm very open to any contributions. Contributions to this code base are what enabled SDL2 support in the first place.
 
-The newest SDL2 version (v1.40) now supports a larger map option on startup (-b), fullscreen (-f), game controllers (plus rumble support) and hot joining (take over from CPU player), and a menu system.
+The newest SDL2 version (v1.41) now supports a larger map option on startup (-b), fullscreen (-f), game controllers (plus rumble support) and hot joining (take over from CPU player), and a menu system.
 
 ![Larger map screenshot](https://raw.github.com/VenKamikaze/BitRiot/master/doco/screenshots/BitRiot-2.png)
 
+## Changelog
+
+v1.41
+
+Bugfixes:
+* Resizing window in menu system did not adjust renderer, causing letterboxing of view.
+* SDL GameController was not being initialised - controllers were non functional in 1.40
+
+v1.40
+
+Feature:
+* Switch to RmlUi which is a forked and supported version of libRocket
+* Implement additional toggle option in Game Options menu (total players)
+* Add a scoreboard showing the winner's statistics
+* Support SDL2 2.0.18+ (this is now a minimum)
+* Resizable window
+
+Bugfixes:
+* Handle escape key in menu system
+* Minor cleanup of menu styles / layout
+* Autofocus an element on new menu open
+* Fix up conflicting rendering calls when in menu system
+* Fix up letterboxing of game rendering when going from menu -> game
 
 ## Branches
 
@@ -40,22 +64,12 @@ The 'develop' branch should contain the latest development code for BitRiot, sta
 
 Things that I'd like to do, but likely won't ever find time for (in order of personal interest). Note if the top two items are completed I'll remove the 'Beta' tag from the game title:
 
-* ~~Create a basic menu selection screen on startup to configure game parameters~~ (partly done, can be improved further)
-    * ~~When all human players have been eliminated, wait for a few moments then re-display the main menu~~ (partly done)
-    * ~~Hitting escape in menu should quit game~~
-    * ~~Change menu font~~
-    * Add variable to toggle hot joining and taking over existing AI players
-    * Allow toggle of map height/width in menu options
-* ~~Allow players to restart the game~~ (done!)
-* ~~Fix up the input code~~ (done!)
-* ~~Port this to SDL2~~ (done! work may or may not continue to switch a lot of surfaces into textures)
+* Create a player select menu before starting a game and remove 'Human Players' option in Game Options.
+* Allow toggle of map height/width in menu options
+* Scaling and fullscreen options (mostly done - fullscreen parameter '-f' available - (should be added to Game Options), resizing window works fine).
 * Cleanups (code formatting and style, also some collections always grow e.g. in the input code)
-* Scaling / resolution options (Partly done - fullscreen option '-f' available, and resizing window works).
 * Write up some notes to explain the porting process to SDL2, as a quick 'n' dirty tutorial for others thinking of doing this for other games.
-* ~~Controller input~~ (done!)
 * Network play (this will probably never get done)
-
-Please note: If you'd found the original BitRiot release anywhere, you might notice the artwork in this one was different. This was only done out of safety incase there were any concerns over the artwork included in the original release.
 
 # Build
 
