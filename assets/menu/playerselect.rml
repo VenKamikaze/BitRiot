@@ -1,0 +1,46 @@
+<rml>
+  <head>
+    <title>Score</title>
+    <link rel="stylesheet" type="text/rcss" href="rkt.rcss"/>
+    <link rel="stylesheet" type="text/rcss" href="common.rcss"/>
+    <link rel="stylesheet" type="text/rcss" href="playerselect.rcss"/>
+  </head>
+
+  <body class="background">
+		
+    <section class="strips">
+      <article class="strip invisible" id="0">
+        <div class="stripContent">
+          <h1>0</h1>
+        </div>
+      </article>
+      <article class="strip " id="1">
+        <div class="stripContent">
+          <h1>1</h1>
+        </div>
+      </article>
+      <article class="strip " id="2">
+        <div class="stripContent">
+          <h1>2</h1>
+        </div>
+      </article>
+      <article class="strip " id="3">
+        <div class="stripContent">
+          <h1>3</h1>
+        </div>
+      </article>
+      <article class="strip " id="4">
+        <div class="stripContent">
+          <h1>4</h1>
+        </div>
+      </article>
+    </section>
+    <div class="menu-container">
+      <div class="menu">
+        <button id="options" tabindex="1" escapeAction="1" onclick="open mainmenu.rml">Main Menu</button><br />
+      </div>
+    </div>
+
+  </body>
+
+</rml>
