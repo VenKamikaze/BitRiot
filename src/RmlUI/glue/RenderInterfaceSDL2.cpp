@@ -52,6 +52,7 @@ RmlUiSDL2Renderer::RmlUiSDL2Renderer(SDL_Renderer* renderer, SDL_Window* screen)
 // Called by RmlUi when it wants to render geometry that it does not wish to optimise.
 void RmlUiSDL2Renderer::RenderGeometry(Rml::Vertex* vertices, int num_vertices, int* indices, int num_indices, const Rml::TextureHandle texture, const Rml::Vector2f& translation)
 {
+    SDL_GetRendererOutputSize(mRenderer, &mRenderer_w, &mRenderer_h);
     SDL_Texture *sdl_texture = (SDL_Texture *) texture;
 
     SDL_Rect r;

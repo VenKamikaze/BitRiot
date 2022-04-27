@@ -50,6 +50,7 @@ class MenuSDLRenderer
     virtual ~MenuSDLRenderer();
 
   private:
+    void handleWindowResize();
     void init(SDL_Renderer* renderer, SDL_Window *screen);
     int getTabIndex(Rml::Element* node);
     Rml::Element* getChildElementWithTabIndex(Rml::Element* parentNode, int tabIndex);
