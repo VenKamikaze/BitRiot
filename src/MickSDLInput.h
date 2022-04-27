@@ -14,7 +14,7 @@ class InputHandler;
 #include <SDL2/SDL.h>
 #include <map>
 #include <set>
-
+#include <memory>
 
 class MickSDLInput : public MickBaseInput
 {
@@ -35,7 +35,7 @@ class MickSDLInput : public MickBaseInput
     //KEY_EVENT newEvent();
     void updateEventQueue();
 
-    static MickBaseInput* getInstance(InputHandler *inputHandler);
+    static std::shared_ptr<MickSDLInput> getInstance(InputHandler *inputHandler);
     static bool rumbleController(SDL_JoystickID joystickID, float strength, Uint32 length);
 
     SDL_Keycode getSDLKeycodeForKey(KEY k); // needed for libRocket key translation map

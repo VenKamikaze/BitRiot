@@ -102,6 +102,7 @@ shared_ptr<PlayerCharacterEntity> InputHandler::attachNewControllerToPlayer(int 
     {
       player->attachedController=controllerId;
       player->m_controlledByAI=false; // FIXME duplication as we already have a playerAI flag in gamesettings...
+      MickLogger::getInstance()->debug(this, string("Attaching controller to player: ").append(to_string(i)));
       return player;
     }
   }
@@ -114,6 +115,7 @@ void InputHandler::detachController(int controllerId)
   {
     if(player && player->isAlive() && player->attachedController == controllerId)
     {
+      MickLogger::getInstance()->debug(this, string("Detached controller from player: ").append(to_string(player->getTeam())));
       player->attachedController = -1;
     }
   }
@@ -122,7 +124,7 @@ void InputHandler::detachController(int controllerId)
 
 void InputHandler::processKeyboardInput(/*SDL_Event event*/)
 {
-  MickBaseInput* input = MickSDLInput::getInstance(this);
+  shared_ptr<MickBaseInput> input = MickSDLInput::getInstance(this);
   input->updateEventQueue();
 
   if(input->doQuit())

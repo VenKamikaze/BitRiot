@@ -8,6 +8,9 @@
 #include "MickSDLInput.h"
 #include "InputHandler.h"
 #include "MickLogger.h"
+#include "SDL.h"
+#include "SDL_error.h"
+#include <memory>
 #include <string>
 
 
@@ -16,7 +19,6 @@ using namespace std;
 static map<KEY, SDL_Keycode>* translateMap;
 static map<SDL_Keycode, KEY>* reverseTranslateMap;
 static map<SDL_JoystickID, SDL_Haptic*>* hapticDevices;
-static MickSDLInput *s_instance = NULL;
 
 MickSDLInput::MickSDLInput(InputHandler *inputHandler) : MickBaseInput()
 {
@@ -33,13 +35,9 @@ MickSDLInput::MickSDLInput(InputHandler *inputHandler) : MickBaseInput()
   setupControllers();
 }
 
-MickBaseInput* MickSDLInput::getInstance(InputHandler *inputHandler)
+shared_ptr<MickSDLInput> MickSDLInput::getInstance(InputHandler *inputHandler)
 {
-  if (!s_instance)
-  {
-    s_instance = new MickSDLInput(inputHandler); //TODO: need to handle inputHandler better or refactor to support inputHandler changing
-  }
-  s_instance->quitEvent = false;
+  static shared_ptr<MickSDLInput> s_instance = make_shared<MickSDLInput>(inputHandler);
   return s_instance;
 }
 /*
@@ -160,13 +158,18 @@ void MickSDLInput::setKeyState(KEY key, bool down)
 
 void MickSDLInput::setupControllers()
 {
+  if(SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) != 0)
+  {
+    MickLogger::getInstance()->warn(this, string("Unable to initialise game controller subsystem. Got error: ").append(SDL_GetError()));
+    return;
+  }
   m_pInputHandler->usingControllers=true;
 
   SDL_GameControllerAddMappingsFromFile("data/gamecontrollerdb.txt");
 
   int numJoysticks=SDL_NumJoysticks();
 
-  printf("Seting up controllers (%i)\n",numJoysticks);
+  MickLogger::getInstance()->debug(this, string("Found controllers: ").append(to_string(numJoysticks)));
 
   for (int i = 0; i < numJoysticks; ++i)
   {
@@ -175,11 +178,11 @@ void MickSDLInput::setupControllers()
       SDL_GameController *controller = SDL_GameControllerOpen(i);
       if (controller)
       {
-        printf("Found a valid controller, named: %s\n", SDL_GameControllerName(controller));
+        MickLogger::getInstance()->debug(this, string("Found a valid controller, named: ").append(SDL_GameControllerName(controller)));
       }
       else
       {
-        fprintf(stderr, "Could not open gamecontroller %i: %s\n", i, SDL_GetError());
+        MickLogger::getInstance()->warn(this, string("Could not open controller: ").append(to_string(i)).append("error: ").append(SDL_GetError()));
       }
 
     }
@@ -330,11 +333,12 @@ void MickSDLInput::updateEventQueue()
     }
     else if (event.type == SDL_CONTROLLERBUTTONDOWN || event.type == SDL_CONTROLLERBUTTONUP)
     {
+      MickLogger::getInstance()->debug(this, string("Got controller button event: ").append(to_string(event.type)));
       setControllerInput(event.jbutton.which, event.jbutton.button, event.jbutton.state);
     }
     else if (event.type == SDL_CONTROLLERDEVICEADDED)
     {
-      printf("New gamecontroller found: %i\n", event.jbutton.which);
+      MickLogger::getInstance()->debug(this, string("New gamecontroller found: ").append(to_string(event.jbutton.which)));
       if (SDL_IsGameController(event.jbutton.which))
       {
         SDL_GameControllerOpen(event.jbutton.which);
@@ -342,15 +346,15 @@ void MickSDLInput::updateEventQueue()
     }
     else if (event.type == SDL_CONTROLLERDEVICEREMOVED)
     {
-      printf("Gamecontroller removed: %i\n", event.jbutton.which);
+      MickLogger::getInstance()->debug(this, string("Gamecontroller removed: ").append(to_string(event.jbutton.which)));
       m_pInputHandler->detachController(event.jbutton.which);
       if( hapticDevices->find(event.jbutton.which) != hapticDevices->end() )
       {
         SDL_Haptic* haptic = hapticDevices->find(event.jbutton.which)->second;
         SDL_HapticClose(haptic);
-        haptic = NULL;
+        haptic = nullptr;
         hapticDevices->erase(event.jbutton.which);
-        printf("Haptics removed: %i\n", event.jbutton.which);
+        MickLogger::getInstance()->debug(this, string("Haptics removed: ").append(to_string(event.jbutton.which)));
       }
     }
     else if (event.type == SDL_QUIT)
@@ -529,6 +533,5 @@ MickSDLInput::~MickSDLInput()
   reverseTranslateMap->clear();
   delete reverseTranslateMap;
   reverseTranslateMap = NULL;
-  delete s_instance;
 }
 
