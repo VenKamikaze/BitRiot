@@ -89,6 +89,16 @@ void MenuSDLRenderer::clearScoreBoard()
   }
 }
 
+void MenuSDLRenderer::handleWindowResize()
+{
+  int windowWidth, windowHeight;
+  SDL_GetWindowSize(m_screen, &windowWidth, &windowHeight);
+  if( m_context->GetDimensions().x != windowWidth || m_context->GetDimensions().y != windowHeight)
+  {
+    m_context->SetDimensions(Rml::Vector2i(windowWidth, windowHeight));
+  }
+}
+
 bool MenuSDLRenderer::showMenu()
 {
   SDL_Event event;
@@ -100,6 +110,8 @@ bool MenuSDLRenderer::showMenu()
     MickLogger::getInstance()->error(this, "MenuRenderer::showMenu has nullptr for m_renderer!");
     return false;
   }
+
+  handleWindowResize(); // Check for adjusted window size.
   
   m_context->Render();
   RmlUiSDL2SystemInterface* systemInterface = (RmlUiSDL2SystemInterface*) Rml::GetSystemInterface();
