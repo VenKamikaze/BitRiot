@@ -2,6 +2,9 @@
 
 #include "MenuSDLRenderer.h"
 #include "RmlUI/MickRmlUIElementUtil.h"
+#include "RmlUI/binders/PlayersBinder.h"
+#include "SDL_gamecontroller.h"
+#include "SDL_keycode.h"
 #include <RmlUi/Core/ElementDocument.h>
 
 
@@ -61,6 +64,10 @@ void MenuSDLRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
   Rml::Factory::RegisterEventListenerInstancer(event_instancer);
 
   EventManager::getInstance()->RegisterEventHandler("gameoptions.rml", new EventHandlerOptions());
+  EventManager::getInstance()->RegisterEventHandler("playerselect.rml", new EventHandlerOptions());
+  
+  m_playersBinder = make_unique<PlayersBinder>(m_context);
+
   loadMenu("mainmenu.rml");
   m_renderer = renderer;
   m_screen = screen;
@@ -142,7 +149,7 @@ bool MenuSDLRenderer::showMenu()
         break;
 
       case SDL_KEYDOWN:
-        {
+      {
           //printf("keydown: %d, sdl: %d\n", event.key, event.key.keysym.sym);
           // Intercept SHIFT + ~ key stroke to toggle libRmlUi's
           // visual debugger tool
@@ -157,19 +164,7 @@ bool MenuSDLRenderer::showMenu()
           }
           else if(event.key.keysym.sym == SDLK_ESCAPE)
           {
-            Rml::ElementDocument *document = m_context->GetFocusElement()->GetOwnerDocument();
-            if(document)
-            {
-              MickLogger::getInstance()->debug(this, std::string("current document id: ").append(document ? document->GetId() : "null") );
-              Rml::Element* escapeActionElement = MickRmlUIElementUtil::getFirstElementWithAttribute(document, "escapeAction");
-              if(escapeActionElement)
-              {
-                MickLogger::getInstance()->debug(this, std::string("escapeActionElement element id: ").append(escapeActionElement->GetId()) );
-                // process the element with the attribute 'escapeAction'
-                escapeActionElement->Focus();
-                m_context->ProcessKeyDown(systemInterface->TranslateKey(SDLK_RETURN), 0);
-              }
-            }
+            menuBackButtonHit();
             break;
           }
           else if(event.key.keysym.sym == SDLK_DOWN
@@ -187,6 +182,31 @@ bool MenuSDLRenderer::showMenu()
 
           m_context->ProcessKeyDown(systemInterface->TranslateKey(event.key.keysym.sym), systemInterface->GetKeyModifiers());
           break;
+      }
+
+        case SDL_CONTROLLER_BUTTON_DPAD_DOWN:
+        case SDL_CONTROLLER_BUTTON_DPAD_UP:
+        {
+          Rml::Element* focussedElement = m_context->GetFocusElement();
+          int currentTabIndex = MickRmlUIElementUtil::getTabIndex(focussedElement);
+          Rml::Element* nextElement = MickRmlUIElementUtil::getChildElementWithTabIndex(focussedElement->GetParentNode(), (event.key.keysym.sym == SDL_CONTROLLER_BUTTON_DPAD_DOWN) ? ++currentTabIndex : --currentTabIndex);
+          if(nextElement)
+          {
+            nextElement->Focus();
+          }
+          break;
+        }
+
+        case SDL_CONTROLLER_BUTTON_A:
+        {
+          m_context->ProcessKeyDown(systemInterface->TranslateKey(SDLK_RETURN), systemInterface->GetKeyModifiers());
+          break;
+        }
+
+        case SDL_CONTROLLER_BUTTON_B:
+        {
+          menuBackButtonHit();
+          break;
         }
 
       default:
@@ -196,6 +216,24 @@ bool MenuSDLRenderer::showMenu()
   m_context->Update();
 
   return continueRenderingMenu;
+}
+
+void MenuSDLRenderer::menuBackButtonHit()
+{
+  RmlUiSDL2SystemInterface* systemInterface = (RmlUiSDL2SystemInterface*) Rml::GetSystemInterface();
+  Rml::ElementDocument *document = m_context->GetFocusElement()->GetOwnerDocument();
+  if(document)
+  {
+    MickLogger::getInstance()->debug(this, std::string("current document id: ").append(document ? document->GetId() : "null") );
+    Rml::Element* escapeActionElement = MickRmlUIElementUtil::getFirstElementWithAttribute(document, "escapeAction");
+    if(escapeActionElement)
+    {
+      MickLogger::getInstance()->debug(this, std::string("escapeActionElement element id: ").append(escapeActionElement->GetId()) );
+      // process the element with the attribute 'escapeAction'
+      escapeActionElement->Focus();
+      m_context->ProcessKeyDown(systemInterface->TranslateKey(SDLK_RETURN), 0);
+    }
+  }
 }
 
 MenuSDLRenderer::~MenuSDLRenderer()

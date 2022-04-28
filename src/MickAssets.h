@@ -18,7 +18,9 @@ namespace std
 class MickAssets
 {
   public:
+    enum class PlayerType { MALE, FEMALE }; // eventually: { MALE1, MALE2, FEMALE1, FEMALE2, MACHINE }; // 
     MickAssets();
+    static string getPortraitBitmapFilename(int playerIndex, MickAssets::PlayerType type);
     static bool checkAssetAvailable(const char* pathfile);
 
     virtual ~MickAssets();

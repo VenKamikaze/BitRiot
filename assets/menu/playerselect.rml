@@ -7,40 +7,34 @@
   </head>
 
   <body class="background">
+
+    <div data-model="playersSelect">
+
+      <div id="header" class="header-container">
+        <div class="menu">
+          <button id="quickstart" tabindex="1" onclick="start">Start Game</button><br />
+          <button id="totalplayers" autofocus tabindex="2" onclick="totalplayers">Total Players: {{players.size}} </button><br />
+        </div>
+      </div>
+
 		
-    <section class="strips">
-      <article class="strip invisible" id="0">
-        <div class="stripContent">
-          <h1>0</h1>
+      <section class="strips">
+        <article data-for="player : players" class="strip" data-attr-id="it_index">
+          <div class="stripContent">
+            <h1 data-class-red="it_index == 0" data-class-blue="it_index == 1" data-class-green="it_index == 2" data-class-yellow="it_index == 3">Player {{player.id + 1}}</h1>
+            <h1 data-class-red="it_index == 0" data-class-blue="it_index == 1" data-class-green="it_index == 2" data-class-yellow="it_index == 3">Team {{player.team + 1}}</h1>
+            <img data-attr-src="player.portrait" />
+            <p>Control: {{player.human == 1 ? 'Human' : 'CPU'}}</p>
+          </div>
+        </article>
+      </section>
+
+      <div id="footer" class="footer-container">
+        <div class="menu">
+          <button id="options" tabindex="3" escapeAction="1" onclick="open mainmenu.rml">Main Menu</button><br />
         </div>
-      </article>
-      <article class="strip " id="1">
-        <div class="stripContent">
-          <h1>1</h1>
-        </div>
-      </article>
-      <article class="strip " id="2">
-        <div class="stripContent">
-          <h1>2</h1>
-        </div>
-      </article>
-      <article class="strip " id="3">
-        <div class="stripContent">
-          <h1>3</h1>
-        </div>
-      </article>
-      <article class="strip " id="4">
-        <div class="stripContent">
-          <h1>4</h1>
-        </div>
-      </article>
-    </section>
-    <div class="menu-container">
-      <div class="menu">
-        <button id="options" tabindex="1" escapeAction="1" onclick="open mainmenu.rml">Main Menu</button><br />
       </div>
     </div>
-
   </body>
 
 </rml>

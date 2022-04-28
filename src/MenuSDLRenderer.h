@@ -10,6 +10,7 @@
 
 #include <RmlUi/Core/ElementDocument.h>
 #include <SDL2/SDL_render.h>
+#include "RmlUI/binders/PlayersBinder.h"
 #include "SDL_keycode.h"
 #include "SDL_pixels.h"
 #include "RuntimeException.h"
@@ -34,7 +35,7 @@
 #include "RmlUI/events/EventInstancer.h"
 #include "RmlUI/events/EventManager.h"
 #include "RmlUI/events/EventHandlerOptions.h"
-#include "RmlUI/ScoreBoardBinder.h"
+#include "RmlUI/binders/ScoreBoardBinder.h"
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -47,6 +48,7 @@ class MenuSDLRenderer
     void loadScoreBoard(shared_ptr<PlayerCharacterEntity> winner, int gameTotalLength);
     void clearScoreBoard();
     bool showMenu();
+    void menuBackButtonHit();
     virtual ~MenuSDLRenderer();
 
   private:
@@ -59,6 +61,7 @@ class MenuSDLRenderer
     SDL_Window *m_screen;
     SDL_Renderer *m_renderer;
     ScoreBoardBinder *m_scoreBinder = nullptr;
+    unique_ptr<PlayersBinder> m_playersBinder = nullptr;
 };
 
 #endif /* MENUSDLRENDERER_H_ */

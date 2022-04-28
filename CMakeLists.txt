@@ -84,9 +84,11 @@ set(SOURCES ./src/AIGameView.cpp
 ./src/RmlUI/events/Event.cpp
 ./src/RmlUI/events/EventHandler.cpp
 ./src/RmlUI/events/EventHandlerOptions.cpp
+./src/RmlUI/events/EventHandlerPlayerSelect.cpp
 ./src/RmlUI/events/EventInstancer.cpp
 ./src/RmlUI/events/EventManager.cpp
-./src/RmlUI/ScoreBoardBinder.cpp
+./src/RmlUI/binders/ScoreBoardBinder.cpp
+./src/RmlUI/binders/PlayersBinder.cpp
 ./src/ExplosionEntity.cpp
 ./src/GameEngine.cpp
 ./src/GameEntity.cpp
