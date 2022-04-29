@@ -40,6 +40,7 @@
 #include "MickLogger.h"
 #include "RmlUI/MickRmlUIElementUtil.h"
 
+
 EventHandlerPlayerSelect::EventHandlerPlayerSelect()
 {
 }
@@ -78,6 +79,7 @@ void EventHandlerPlayerSelect::changeTotalPlayers(Rml::Event* event)
   }
 
   std::GameSettings::getInstance()->setNumberOfPlayers(players);
+  std::MickLogger::getInstance()->debug(this, std::string("EventHandlerPlayerSelect::changeTotalPlayers=").append(std::to_string(players)));
 
   if (event)
   {

@@ -3,6 +3,7 @@
 #include "MenuSDLRenderer.h"
 #include "RmlUI/MickRmlUIElementUtil.h"
 #include "RmlUI/binders/PlayersBinder.h"
+#include "RmlUI/events/EventHandlerPlayerSelect.h"
 #include "SDL_gamecontroller.h"
 #include "SDL_keycode.h"
 #include <RmlUi/Core/ElementDocument.h>
@@ -64,7 +65,7 @@ void MenuSDLRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
   Rml::Factory::RegisterEventListenerInstancer(event_instancer);
 
   EventManager::getInstance()->RegisterEventHandler("gameoptions.rml", new EventHandlerOptions());
-  EventManager::getInstance()->RegisterEventHandler("playerselect.rml", new EventHandlerOptions());
+  EventManager::getInstance()->RegisterEventHandler("playerselect.rml", new EventHandlerPlayerSelect());
   
   m_playersBinder = make_unique<PlayersBinder>(m_context);
 

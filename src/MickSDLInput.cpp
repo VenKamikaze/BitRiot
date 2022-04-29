@@ -20,9 +20,9 @@ static map<KEY, SDL_Keycode>* translateMap;
 static map<SDL_Keycode, KEY>* reverseTranslateMap;
 static map<SDL_JoystickID, SDL_Haptic*>* hapticDevices;
 
-MickSDLInput::MickSDLInput(InputHandler *inputHandler) : MickBaseInput()
+MickSDLInput::MickSDLInput(shared_ptr<InputHandler> inputHandler) : MickBaseInput()
 {
-  m_pInputHandler=inputHandler;
+  m_pInputHandler = inputHandler;
 
   // TODO Auto-generated constructor stub
   aKeyIsDown = false;
@@ -35,11 +35,21 @@ MickSDLInput::MickSDLInput(InputHandler *inputHandler) : MickBaseInput()
   setupControllers();
 }
 
-shared_ptr<MickSDLInput> MickSDLInput::getInstance(InputHandler *inputHandler)
+void MickSDLInput::resetInputEvents()
+{
+  keysCurrentlyDown.clear();
+  keysRecentlyReleased.clear();
+    aKeyIsDown = false;
+  aKeyIsUp = false;
+  quitEvent = false;
+}
+
+shared_ptr<MickSDLInput> MickSDLInput::getInstance(shared_ptr<InputHandler> inputHandler)
 {
   static shared_ptr<MickSDLInput> s_instance = make_shared<MickSDLInput>(inputHandler);
   return s_instance;
 }
+
 /*
 SDL_Event* MickSDLInput::popEvent()
 {
@@ -163,6 +173,7 @@ void MickSDLInput::setupControllers()
     MickLogger::getInstance()->warn(this, string("Unable to initialise game controller subsystem. Got error: ").append(SDL_GetError()));
     return;
   }
+  
   m_pInputHandler->usingControllers=true;
 
   SDL_GameControllerAddMappingsFromFile("data/gamecontrollerdb.txt");

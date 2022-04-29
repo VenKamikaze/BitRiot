@@ -24,7 +24,7 @@
 class GameEngine
 {
   public:
-    GameEngine(SDL_Surface* lpddsback);
+    GameEngine(SDL_Surface* lpddsback, shared_ptr<InputHandler> inputHandler);
     void setMenuSystem(unique_ptr<MenuSDLRenderer> rmlMenu)
     {
       menuSystem = std::move(rmlMenu);
@@ -39,7 +39,7 @@ class GameEngine
     unique_ptr<MenuSDLRenderer> menuSystem = nullptr;
     EntityManager* m_pEntityManager = nullptr;
     InfoPanel* m_pPanel = nullptr;
-    InputHandler* m_pInputHandler = nullptr;
+    shared_ptr<InputHandler> m_pInputHandler = nullptr;
     SpawningPool* m_pSpawningPool = nullptr;
     //PlayerCharacterEntity* m_pPlayers[NUM_TEAMS];
     vector<shared_ptr<PlayerCharacterEntity>> m_pPlayers;

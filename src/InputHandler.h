@@ -14,7 +14,7 @@
 #include "InputException.h"
 
 
-class InputHandler
+class InputHandler : public std::enable_shared_from_this<InputHandler>
 {
   public:
     InputHandler();

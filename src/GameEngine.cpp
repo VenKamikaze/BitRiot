@@ -1,14 +1,18 @@
 #include "GameEngine.h"
 #include "GameSettings.h"
+#include "MickBaseInput.h"
+#include "MickSDLInput.h"
 #include "MickSDLRenderer.h"
 #include "PlayerCharacterEntity.h"
 #include "SDL_timer.h"
+#include <cstddef>
 #include <string>
 
-GameEngine::GameEngine(SDL_Surface* back)
+GameEngine::GameEngine(SDL_Surface* back, shared_ptr<InputHandler> inputHandler)
 {
-  m_pEntityManager = NULL;
-  m_pSpawningPool = NULL;
+  m_pEntityManager = nullptr;
+  m_pSpawningPool = nullptr;
+  m_pInputHandler = inputHandler;
 
   m_surface = back;
 
@@ -22,11 +26,6 @@ GameEngine::~GameEngine()
 
 void GameEngine::uninitialise()
 {
-  if (m_pInputHandler)
-  {
-    delete m_pInputHandler;
-    m_pInputHandler = NULL;
-  }
   if (m_pPanel)
   {
     delete m_pPanel;
@@ -42,6 +41,7 @@ void GameEngine::uninitialise()
     delete m_pSpawningPool;
     m_pSpawningPool = NULL;
   }
+  m_pInputHandler = nullptr;
 }
 
 void GameEngine::resetGame()
@@ -64,11 +64,6 @@ void GameEngine::resetGame()
     delete m_pPanel;
     m_pPanel = nullptr;
   }
-  if (m_pInputHandler)
-  {
-    delete m_pInputHandler;
-    m_pInputHandler = nullptr;
-  }
   if (m_pSpawningPool)
   {
     delete m_pSpawningPool;
@@ -78,9 +73,10 @@ void GameEngine::resetGame()
   // after setting initialisation parameters
   m_pPlayers.resize(numPlayers);
   
+  
   m_pEntityManager = new EntityManager();
   m_pPanel = new InfoPanel(m_surface, numPlayers, genders);
-  m_pInputHandler = new InputHandler();
+  MickSDLInput::getInstance(m_pInputHandler)->resetInputEvents();
   m_pSpawningPool = new SpawningPool(numPlayers * 100);
   initPlayerCharacters(numPlayers, genders, playerAIs);
   m_pInputHandler->setPointers(m_pPlayers, m_pEntityManager->getDynamicMap(), m_pPanel);
@@ -115,13 +111,6 @@ bool GameEngine::runEngine()
     }
     case GameSettings::GAME_RUNNING:
     {
-      // PlayerCharacterEntity knows if it is alive, so we don't need to synchronise with input or panel now.
-      //for (int i = 0; i < GameSettings::getInstance()->getNumberOfPlayers(); i++)
-      //{
-        //m_pInputHandler->setPlayerDead(i, m_pEntityManager->getPlayerDead(i)); // TODO check isAlive on the PCE
-        //m_pPanel->setPlayerDead(i, m_pEntityManager->getPlayerDead(i));
-      //}
-      // read keyboard and other devices here
       if(m_pEntityManager->oneOrZeroPlayersRemain())
       {
         GameTimer* timer = GameOverTimer::getInstance();

@@ -39,6 +39,7 @@ namespace std
       }
 
       std::GameSettings::getInstance()->setNumberOfPlayers(players.size());
+      MickLogger::getInstance()->debug(this, std::string("Players.toggleNumPlayers=").append(to_string(players.size())));
       model_handle.DirtyVariable("players");
 	  }
   } playersData;

@@ -5,6 +5,7 @@
 
 /// UNIX INCLUDES
 #include "MickBaseRenderer.h"
+#include "MickSDLInput.h"
 #include "MickSDLRenderer.h"
 #include "SDL_render.h"
 #include "SDL_surface.h"
@@ -85,9 +86,11 @@ int consoleInit()
     return 1;
   }
 
+  shared_ptr<MickSDLInput> input;
   try
   {
     MickSDLSound::getInstance()->initAudio();
+    input = MickSDLInput::getInstance(make_shared<InputHandler>());
   }
   catch(const exception &e)
   {
@@ -102,7 +105,8 @@ int consoleInit()
   staticMap->init(renderer->getSurfaceBackBufferHandle());
   EntityRendererFactory * erf = EntityRendererFactory::getInstance();
   erf->initSurfaces(renderer->getSurfaceBackBufferHandle());
-  engine = make_unique<GameEngine>(renderer->getSurfaceBackBufferHandle());
+  
+  engine = make_unique<GameEngine>(renderer->getSurfaceBackBufferHandle(), input->getInputHandler() );
 
   return 0;
 } // end Game_Init

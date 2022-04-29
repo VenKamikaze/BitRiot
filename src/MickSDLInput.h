@@ -16,12 +16,13 @@ class InputHandler;
 #include <set>
 #include <memory>
 
-class MickSDLInput : public MickBaseInput
+class MickSDLInput : public MickBaseInput, std::enable_shared_from_this<MickSDLInput>
 {
   public:
-    MickSDLInput(InputHandler *inputHandler);
+    MickSDLInput(std::shared_ptr<InputHandler> inputHandler);
     virtual ~MickSDLInput();
 
+    void resetInputEvents(); // reset input event arrays
     SDL_Event* popEvent();
     bool isKeyDown(KEY k);
     bool isKeyReleased(KEY k);
@@ -29,13 +30,17 @@ class MickSDLInput : public MickBaseInput
     void setKeyState(KEY k, bool down);
 
     std::set<KEY>* getKeysDown();
+    inline std::shared_ptr<InputHandler> getInputHandler()
+    {
+      return m_pInputHandler;
+    }
 
     void keyEvent(KEY k);
 
     //KEY_EVENT newEvent();
     void updateEventQueue();
 
-    static std::shared_ptr<MickSDLInput> getInstance(InputHandler *inputHandler);
+    static std::shared_ptr<MickSDLInput> getInstance(std::shared_ptr<InputHandler> inputHandler);
     static bool rumbleController(SDL_JoystickID joystickID, float strength, Uint32 length);
 
     SDL_Keycode getSDLKeycodeForKey(KEY k); // needed for libRocket key translation map
@@ -54,7 +59,7 @@ class MickSDLInput : public MickBaseInput
     std::set<KEY> keysCurrentlyDown;
     std::set<KEY> keysRecentlyReleased;
 
-    InputHandler *m_pInputHandler;
+    std::shared_ptr<InputHandler> m_pInputHandler;
 
 };
 

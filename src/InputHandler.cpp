@@ -3,6 +3,7 @@
 #include "GameSettings.h"
 #include "MickBaseInput.h"
 #include "PlayerCharacterEntity.h"
+#include <memory>
 #include <utility>
 
 
@@ -124,7 +125,7 @@ void InputHandler::detachController(int controllerId)
 
 void InputHandler::processKeyboardInput(/*SDL_Event event*/)
 {
-  shared_ptr<MickBaseInput> input = MickSDLInput::getInstance(this);
+  shared_ptr<MickBaseInput> input = MickSDLInput::getInstance(shared_from_this());
   input->updateEventQueue();
 
   if(input->doQuit())
