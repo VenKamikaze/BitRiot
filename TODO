@@ -1,13 +1,16 @@
 Feature:
 2022-04-27: Add a player select screen before starting the game.
 
-* Navigate menu with first controller 
-* action1 button allows navigation of menu buttons 
+* Navigate menu with first controller (done)
+* action1 button allows navigation of menu buttons (done)
 * In player select screen:
-** Probably use RmlUi data-model again
-** Detect game controller action2 button press and associate it with a player.
-** Detect action2 key press and associate it with a player
-** Show portrait for each character
-** Allow switching gender/portrait once associated with a player (left/right)
+** Probably use RmlUi data-model again (done)
+** Detect game controller action2 button press and associate it with a player. (NOT DONE)
+** Detect action2 key press and associate it with a player (NOT DONE)
+** Show portrait for each character (done)
+** Allow switching gender/portrait once associated with a player (left/right) (partially done - portrait shows and is toggleable but only by main controller)
 ** first controller has Up/down navigation to access buttons on this screen (left/right is used for portrait if associated with character)
-** allow switching between human/CPU controlled by pressing action2 again.
+** allow switching between human/CPU controlled by pressing action2 again. (partially done - CPU/human switching works, but only by main controller)
+
+Bugs:
+2022-04-30: If using a controller, and your character dies, it immediately then associates with the next 'alive' character that is CPU controlled.
