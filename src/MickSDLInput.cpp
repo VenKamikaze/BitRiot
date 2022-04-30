@@ -10,6 +10,7 @@
 #include "MickLogger.h"
 #include "SDL.h"
 #include "SDL_error.h"
+#include <cstddef>
 #include <memory>
 #include <string>
 
@@ -24,7 +25,6 @@ MickSDLInput::MickSDLInput(shared_ptr<InputHandler> inputHandler) : MickBaseInpu
 {
   m_pInputHandler = inputHandler;
 
-  // TODO Auto-generated constructor stub
   aKeyIsDown = false;
   aKeyIsUp = false;
   quitEvent = false;
@@ -539,10 +539,10 @@ MickSDLInput::~MickSDLInput()
 {
   translateMap->clear();
   delete translateMap;
-  translateMap = NULL;
+  translateMap = nullptr;
 
   reverseTranslateMap->clear();
   delete reverseTranslateMap;
-  reverseTranslateMap = NULL;
+  reverseTranslateMap = nullptr;
 }
 

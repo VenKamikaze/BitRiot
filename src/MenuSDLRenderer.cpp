@@ -185,30 +185,58 @@ bool MenuSDLRenderer::showMenu()
           break;
       }
 
-        case SDL_CONTROLLER_BUTTON_DPAD_DOWN:
-        case SDL_CONTROLLER_BUTTON_DPAD_UP:
+      case SDL_CONTROLLERBUTTONDOWN:
+      case SDL_CONTROLLERBUTTONUP:
+      {
+        //event.jbutton.which, event.jbutton.button, event.jbutton.state
+        if(event.jbutton.which == 0) // only process first controller in menu.
         {
-          Rml::Element* focussedElement = m_context->GetFocusElement();
-          int currentTabIndex = MickRmlUIElementUtil::getTabIndex(focussedElement);
-          Rml::Element* nextElement = MickRmlUIElementUtil::getElementWithTabIndex(focussedElement->GetOwnerDocument(), (event.key.keysym.sym == SDL_CONTROLLER_BUTTON_DPAD_DOWN) ? ++currentTabIndex : --currentTabIndex);
-          if(nextElement)
+          if(event.jbutton.state == SDL_PRESSED)
           {
-            nextElement->Focus();
+            if(event.jbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN
+                || event.jbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP)
+            {
+              MickLogger::getInstance()->debug(this, "Got DPAD down/up.");
+              Rml::Element* focussedElement = m_context->GetFocusElement();
+              int currentTabIndex = MickRmlUIElementUtil::getTabIndex(focussedElement);
+              Rml::Element* nextElement = MickRmlUIElementUtil::getElementWithTabIndex(focussedElement->GetOwnerDocument(), (event.jbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) ? ++currentTabIndex : --currentTabIndex);
+              if(nextElement)
+              {
+                nextElement->Focus();
+              }
+            }
+            else if (event.jbutton.button == SDL_CONTROLLER_BUTTON_A)
+            {
+              MickLogger::getInstance()->debug(this, "Got CTL A.");
+              m_context->ProcessKeyDown(systemInterface->TranslateKey(SDLK_RETURN), systemInterface->GetKeyModifiers());
+            }
+            else if (event.jbutton.button == SDL_CONTROLLER_BUTTON_B)
+            {
+              MickLogger::getInstance()->debug(this, "Got CTL B.");
+              menuBackButtonHit();
+            }
           }
-          break;
         }
+        break;
+      }
 
-        case SDL_CONTROLLER_BUTTON_A:
+      case SDL_CONTROLLERDEVICEADDED:
+      {
+        MickLogger::getInstance()->debug(this, string("Opening game controller: ").append(to_string(event.jbutton.which)));
+        if (SDL_IsGameController(event.jbutton.which))
         {
-          m_context->ProcessKeyDown(systemInterface->TranslateKey(SDLK_RETURN), systemInterface->GetKeyModifiers());
-          break;
+          if(SDL_GameControllerOpen(event.jbutton.which))
+          {
+            MickLogger::getInstance()->debug(this, string("Opened game controller: ").append(to_string(event.jbutton.which)));
+          }
         }
-
-        case SDL_CONTROLLER_BUTTON_B:
-        {
-          menuBackButtonHit();
-          break;
-        }
+        break;
+      }
+      case SDL_CONTROLLERDEVICEREMOVED:
+      {
+        MickLogger::getInstance()->debug(this, string("Gamecontroller removed: ").append(to_string(event.jbutton.which)));          break;
+        break;
+      }
 
       default:
         break;
