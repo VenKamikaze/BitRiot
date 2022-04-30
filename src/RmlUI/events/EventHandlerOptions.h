@@ -49,10 +49,7 @@ public:
 	virtual void ProcessEvent(Rml::Event& event, const Rml::String& value);
 
 private:
-	void changeHumanPlayers(Rml::Event* event);
-	void changeTotalPlayers(Rml::Event* event);
 	void changeBlockTilePercentage(Rml::Event* event);
-        void togglePlayerGender(Rml::Event* event, int playerIndex);
 	void OptionsPageInit(Rml::ElementDocument* bodyElement);
 };
 
