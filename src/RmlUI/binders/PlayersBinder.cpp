@@ -49,7 +49,8 @@ namespace std
         p.human = (i == 0);
         p.id = i;
         p.team = i;
-        p.portrait = MickAssets::getPortraitBitmapFilename(i, (i % 2 == 0) ? MickAssets::PlayerType::MALE : MickAssets::PlayerType::FEMALE);
+        p.type = (i % 2 == 0) ?  MickAssets::PlayerType::MALE : MickAssets::PlayerType::FEMALE;
+        p.portrait = MickAssets::getPortraitBitmapFilename(i, p.type);
         players.push_back(p);
       }
 

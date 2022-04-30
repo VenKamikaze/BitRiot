@@ -165,6 +165,9 @@ Rml::ElementDocument* EventManager::LoadWindow(const Rml::String& window_name, b
 	  document->Focus();
 	  document->Show();	
 	}
+	
+	// HACK. This sucks but I could not get autofocus to work *and* couldn't use an 'onload' event to
+	//  trigger autofocus on this page. Maybe this is a bug in RmlUi due to the datamodel??
 	if(window_name == "playerselect.rml")
 	{
 		std::MickLogger::getInstance()->debug(this, "Hack to focus element for playerselect.");

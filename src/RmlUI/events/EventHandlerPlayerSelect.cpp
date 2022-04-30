@@ -58,5 +58,10 @@ void EventHandlerPlayerSelect::playerSelectPageInit(Rml::ElementDocument* bodyEl
 
 void EventHandlerPlayerSelect::ProcessEvent(Rml::Event& event, const Rml::String& value)
 {
+		// Check for a generic 'load' or 'exit' command.
+		Rml::StringList values;
+		Rml::StringUtilities::ExpandString(values, value, ' ');
 
+		if (values.empty())
+			return;
 }

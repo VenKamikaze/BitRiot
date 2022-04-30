@@ -6,14 +6,14 @@
     <link rel="stylesheet" type="text/rcss" href="playerselect.rcss"/>
   </head>
 
-  <body class="background">
+  <body class="background" onload="focus totalplayers"> <!-- hack as autofocus is not working as it should here -->
 
     <div data-model="playersSelect">
 
       <div id="header" class="header-container">
         <div class="menu">
-          <button class="tabbed" id="quickstart" tabindex="1" onclick="start">Start Game</button><br />
-          <button class="tabbed" id="totalplayers" tabindex="2" autofocus data-event-click="toggleNumPlayers">Total Players: {{players.size}}</button><br />
+          <button class="tabbed" id="quickstart" tabindex="1" onclick="start" onkeydown="start">Start Game</button><br />
+          <button class="tabbed" id="totalplayers" tabindex="2" data-event-click="toggleNumPlayers" data-event-keydown="toggleNumPlayers">Total Players: {{players.size}}</button><br />
         </div>
       </div>
 
@@ -22,16 +22,16 @@
         <article data-for="player : players" class="strip" data-attr-id="it_index" data-attr-playerId="player.id">
           <div class="stripContent">
             <h1 data-class-red="it_index == 0" data-class-blue="it_index == 1" data-class-green="it_index == 2" data-class-yellow="it_index == 3">Player {{player.id + 1}}</h1>
-            <h1 data-class-red="it_index == 0" data-class-blue="it_index == 1" data-class-green="it_index == 2" data-class-yellow="it_index == 3">Team {{player.team + 1}}</h1>
-            <img class="tabbed" data-event-click="togglePlayerPortrait" data-attr-src="player.portrait" data-attr-tabindex="(it_index * 2) + 3" />
-            <p>Control: <button class="tabbed" data-attr-playerId="player.id" data-attr-tabindex="(it_index *2) + 4" data-event-click="togglePlayerAI" data-rml="player.human == 1 ? 'Human' : 'CPU'" /></p>
+            <!-- We'll do teams later --> <!-- <h1 data-class-red="it_index == 0" data-class-blue="it_index == 1" data-class-green="it_index == 2" data-class-yellow="it_index == 3">Team {{player.team + 1}}</h1> -->
+            <img class="tabbed" data-class-red="it_index == 0" data-class-blue="it_index == 1" data-class-green="it_index == 2" data-class-yellow="it_index == 3" data-event-click="togglePlayerPortrait" data-event-keydown="togglePlayerPortrait" data-attr-src="player.portrait" data-attr-tabindex="(it_index * 2) + 3" />
+            <p>Control: <button class="tabbed" data-attr-playerId="player.id" data-attr-tabindex="(it_index *2) + 4" data-event-keydown="togglePlayerAI" data-event-click="togglePlayerAI" data-rml="player.human == 1 ? 'Human' : 'CPU'" /></p>
           </div>
         </article>
       </section>
 
       <div id="footer" class="footer-container">
         <div class="menu">
-          <button class="tabbed" id="options" data-attr-tabindex="(players.size * 2) + 3" escapeAction="1" onclick="open mainmenu.rml">Main Menu</button><br />
+          <button class="tabbed" id="options" data-attr-tabindex="(players.size * 2) + 3" escapeAction="1" onclick="open mainmenu.rml" onkeydown="open mainmenu.rml">Main Menu</button><br />
         </div>
       </div>
     </div>

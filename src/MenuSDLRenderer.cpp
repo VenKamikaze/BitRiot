@@ -190,7 +190,7 @@ bool MenuSDLRenderer::showMenu()
         {
           Rml::Element* focussedElement = m_context->GetFocusElement();
           int currentTabIndex = MickRmlUIElementUtil::getTabIndex(focussedElement);
-          Rml::Element* nextElement = MickRmlUIElementUtil::getChildElementWithTabIndex(focussedElement->GetParentNode(), (event.key.keysym.sym == SDL_CONTROLLER_BUTTON_DPAD_DOWN) ? ++currentTabIndex : --currentTabIndex);
+          Rml::Element* nextElement = MickRmlUIElementUtil::getElementWithTabIndex(focussedElement->GetOwnerDocument(), (event.key.keysym.sym == SDL_CONTROLLER_BUTTON_DPAD_DOWN) ? ++currentTabIndex : --currentTabIndex);
           if(nextElement)
           {
             nextElement->Focus();
