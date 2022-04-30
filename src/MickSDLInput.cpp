@@ -39,7 +39,7 @@ void MickSDLInput::resetInputEvents()
 {
   keysCurrentlyDown.clear();
   keysRecentlyReleased.clear();
-    aKeyIsDown = false;
+  aKeyIsDown = false;
   aKeyIsUp = false;
   quitEvent = false;
 }

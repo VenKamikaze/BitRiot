@@ -26,6 +26,7 @@ class MickRmlUIElementUtil
 
     static int getTabIndex(Rml::Element* element);
     static Rml::Element* getChildElementWithTabIndex(Rml::Element* parentNode, int tabIndex);
+    static Rml::Element* getParentElementWithAttributeName(Rml::Element* nodeToSearchFrom, const std::string attributeName);
     static void appendTextToTextNode(Rml::Element* element, std::string toAppend);
     static void replaceEndStringInTextNode(Rml::Element* element, std::string toReplace);
     static Rml::Element* getFirstElementWithAttribute(Rml::Element *searchFrom, std::string attributeName);

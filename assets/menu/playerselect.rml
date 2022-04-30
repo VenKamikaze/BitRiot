@@ -19,12 +19,12 @@
 
 		
       <section class="strips">
-        <article data-for="player : players" class="strip" data-attr-id="it_index">
+        <article data-for="player : players" class="strip" data-attr-id="it_index" data-attr-playerId="player.id">
           <div class="stripContent">
             <h1 data-class-red="it_index == 0" data-class-blue="it_index == 1" data-class-green="it_index == 2" data-class-yellow="it_index == 3">Player {{player.id + 1}}</h1>
             <h1 data-class-red="it_index == 0" data-class-blue="it_index == 1" data-class-green="it_index == 2" data-class-yellow="it_index == 3">Team {{player.team + 1}}</h1>
-            <img data-attr-src="player.portrait" />
-            <p>Control: {{player.human == 1 ? 'Human' : 'CPU'}}</p>
+            <img data-event-click="togglePlayerPortrait" data-attr-src="player.portrait" />
+            <p>Control: <button data-attr-playerId="player.id" data-attr-tabindex="player.id + 2" data-event-click="togglePlayerAI" data-rml="player.human == 1 ? 'Human' : 'CPU'" /></p>
           </div>
         </article>
       </section>

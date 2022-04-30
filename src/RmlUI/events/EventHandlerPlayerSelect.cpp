@@ -49,123 +49,14 @@ EventHandlerPlayerSelect::~EventHandlerPlayerSelect()
 {
 }
 
-void EventHandlerPlayerSelect::changeHumanPlayers(Rml::Event* event)
-{
-  int humans = std::GameSettings::getInstance()->getNumberOfHumanPlayers() + 1;
-  if (humans > std::GameSettings::getInstance()->getNumberOfPlayers())
-  {
-    humans = 0; // wrap it back to zero human players
-  }
-
-  // reset all 
-  for(int playerIndex = 0; playerIndex < std::GameSettings::getInstance()->getNumberOfPlayers(); playerIndex++)
-  {
-    bool isAiControlled = (playerIndex >= humans);
-    std::GameSettings::getInstance()->setPlayerAI(playerIndex, isAiControlled);
-  }
-
-  if (event)
-  {
-    MickRmlUIElementUtil::replaceEndStringInTextNode(event->GetTargetElement(), std::to_string(humans));
-  }
-}
-
-void EventHandlerPlayerSelect::changeTotalPlayers(Rml::Event* event)
-{
-  int players = std::GameSettings::getInstance()->getNumberOfPlayers() + 1;
-  if (players > std::GameSettings::MAX_PLAYERS)
-  {
-    players = std::GameSettings::MIN_PLAYERS; // wrap it back to the minimum
-  }
-
-  std::GameSettings::getInstance()->setNumberOfPlayers(players);
-  std::MickLogger::getInstance()->debug(this, std::string("EventHandlerPlayerSelect::changeTotalPlayers=").append(std::to_string(players)));
-
-  if (event)
-  {
-    MickRmlUIElementUtil::replaceEndStringInTextNode(event->GetTargetElement(), std::to_string(players));
-
-    // Reset the number of human players displayed on the page too
-    Rml::Element *humanPlayersElement = event->GetTargetElement()->GetOwnerDocument()->GetElementById("humanplayers");
-    if(humanPlayersElement)
-    {
-      MickRmlUIElementUtil::replaceEndStringInTextNode(humanPlayersElement, std::to_string(std::GameSettings::getInstance()->getNumberOfHumanPlayers()));
-    }
-  }
-}
-
-void EventHandlerPlayerSelect::togglePlayerGender(Rml::Event* event, int playerIndex)
-{
-  bool newGenderIsMale = ! (std::GameSettings::getInstance()->getPlayerGender(playerIndex));
-  std::GameSettings::getInstance()->setPlayerGender(playerIndex, newGenderIsMale);
-
-  if (event)
-  {
-    MickRmlUIElementUtil::replaceEndStringInTextNode(event->GetTargetElement(), newGenderIsMale ? "Male" : "Female");
-  }
-}
-
 
 void EventHandlerPlayerSelect::playerSelectPageInit(Rml::ElementDocument* bodyElement)
 {
-  if (bodyElement == NULL)
+  if (! bodyElement)
     return;
-
-  Rml::ElementList buttons;
-  bodyElement->GetElementsByTagName(buttons, "button");
-  if (buttons.size() > 0)
-  {
-    std::string numPlayers = (std::to_string(std::GameSettings::getInstance()->getNumberOfPlayers()));
-    std::string numHumanPlayers = (std::to_string(std::GameSettings::getInstance()->getNumberOfHumanPlayers()));
-
-    for (Rml::ElementList::iterator i = buttons.begin(); i != buttons.end(); i++)
-    {
-      Rml::Element* element = *i;
-      if (element->GetId() == "totalplayers")
-      {
-        MickRmlUIElementUtil::appendTextToTextNode(element, numPlayers);
-      }
-      else if (element->GetId() == "humanplayers")
-      {
-        MickRmlUIElementUtil::appendTextToTextNode(element, numHumanPlayers);
-      }
-      else
-      {
-        if (element->GetId().find("genderplayer") == 0)
-        {
-          int player = atoi(element->GetId().substr(element->GetId().length() - 1, 1).c_str()) -1;
-          if (std::GameSettings::getInstance()->getNumberOfPlayers() >= player)
-          {
-            std::string gender = (std::GameSettings::getInstance()->getPlayerGenders()->at(player)) ? "Male" : "Female";
-            MickRmlUIElementUtil::appendTextToTextNode(element, gender);
-          }
-        }
-      }
-    }
-  }
 }
 
 void EventHandlerPlayerSelect::ProcessEvent(Rml::Event& event, const Rml::String& value)
 {
-  // Called on onload of the options menu
-  if (value == "changebuttons")
-  {
-    playerSelectPageInit(event.GetTargetElement()->GetOwnerDocument());
-  }
-  else if (value == "humanplayers")
-  {
-    changeHumanPlayers(&event);
-  }
-  else if (value.find("genderplayer") == 0 )
-  {
-    int player = atoi(event.GetTargetElement()->GetId().substr(event.GetTargetElement()->GetId().length() - 1, 1).c_str());
-    if (std::GameSettings::getInstance()->getNumberOfPlayers() >= player)
-    {
-      togglePlayerGender(&event, player-1);
-    }
-  }
-  else if (value == "totalplayers")
-  {
-    changeTotalPlayers(&event);
-  }
+
 }

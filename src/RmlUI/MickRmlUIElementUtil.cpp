@@ -9,6 +9,7 @@
 #include "MickLogger.h"
 #include <RmlUi/Core/Element.h>
 #include <RmlUi/Core/ElementDocument.h>
+#include <cassert>
 #include <string>
 
 static const char* TAB_INDEX = "tabindex";
@@ -41,6 +42,20 @@ Rml::Element* MickRmlUIElementUtil::getChildElementWithTabIndex(Rml::Element* pa
         return parentNode->GetChild(i);
       }
     }
+  }
+  return nullptr;
+}
+
+// Recursively search up until we either find the element with the attribute, or we exhaust our search.
+Rml::Element* MickRmlUIElementUtil::getParentElementWithAttributeName(Rml::Element* nodeToSearchFrom, const std::string attributeName)
+{
+  if (nodeToSearchFrom->GetParentNode() && nodeToSearchFrom->GetParentNode()->HasAttribute(attributeName))
+  {
+    return nodeToSearchFrom->GetParentNode();
+  }
+  else 
+  {
+    return getParentElementWithAttributeName(nodeToSearchFrom->GetParentNode(), attributeName);
   }
   return nullptr;
 }

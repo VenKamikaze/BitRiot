@@ -22,6 +22,7 @@ class MickAssets
     MickAssets();
     static string getPortraitBitmapFilename(int playerIndex, MickAssets::PlayerType type);
     static bool checkAssetAvailable(const char* pathfile);
+    static PlayerType getNextPlayerType(PlayerType type);
 
     virtual ~MickAssets();
 };

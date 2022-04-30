@@ -37,6 +37,22 @@ string MickAssets::getPortraitBitmapFilename(int playerIndex, MickAssets::Player
   return ss.str();
 }
 
+MickAssets::PlayerType MickAssets::getNextPlayerType(PlayerType currentType)
+{
+  switch(currentType)
+  {
+    case PlayerType::MALE:
+      return PlayerType::FEMALE;
+
+    case PlayerType::FEMALE:
+      return PlayerType::MALE;
+
+    default:
+      MickLogger::getInstance()->warn(nullptr, "Unknown player type found!");
+      return PlayerType::MALE; // start from idx 0
+  }
+}
+
 //cacheBitmap?
 //cacheSound?
 

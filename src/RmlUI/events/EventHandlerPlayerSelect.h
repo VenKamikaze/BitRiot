@@ -45,13 +45,9 @@ class EventHandlerPlayerSelect : public EventHandler
 public:
 	EventHandlerPlayerSelect();
 	virtual ~EventHandlerPlayerSelect();
-
 	virtual void ProcessEvent(Rml::Event& event, const Rml::String& value);
 
 private:
-	void changeHumanPlayers(Rml::Event* event);
-	void changeTotalPlayers(Rml::Event* event);
-  void togglePlayerGender(Rml::Event* event, int playerIndex);
 	void playerSelectPageInit(Rml::ElementDocument* bodyElement);
 };
 
