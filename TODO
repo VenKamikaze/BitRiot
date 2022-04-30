@@ -13,4 +13,4 @@ Feature:
 ** allow switching between human/CPU controlled by pressing action2 again. (partially done - CPU/human switching works, but only by main controller)
 
 Bugs:
-2022-04-30: If using a controller, and your character dies, it immediately then associates with the next 'alive' character that is CPU controlled.
+2022-04-30: No way of assigning controllers to players from the menu yet, so first come first serve when the game starts.
