@@ -1,6 +1,6 @@
 <rml>
   <head>
-    <title>Score</title>
+    <title>Player Select</title>
     <link rel="stylesheet" type="text/rcss" href="rkt.rcss"/>
     <link rel="stylesheet" type="text/rcss" href="common.rcss"/>
     <link rel="stylesheet" type="text/rcss" href="playerselect.rcss"/>
@@ -13,7 +13,7 @@
       <div id="header" class="header-container">
         <div class="menu">
           <button id="quickstart" tabindex="1" onclick="start">Start Game</button><br />
-          <button id="totalplayers" autofocus tabindex="2" data-event-click="toggleNumPlayers">Total Players: {{players.size}} </button><br />
+          <button id="totalplayers" tabindex="2" autofocus data-event-click="toggleNumPlayers">Total Players: {{players.size}} </button><br />
         </div>
       </div>
 
@@ -31,7 +31,7 @@
 
       <div id="footer" class="footer-container">
         <div class="menu">
-          <button id="options" tabindex="3" escapeAction="1" onclick="open mainmenu.rml">Main Menu</button><br />
+          <button id="options" data-attr-tabindex="players.size + 3" escapeAction="1" onclick="open mainmenu.rml">Main Menu</button><br />
         </div>
       </div>
     </div>

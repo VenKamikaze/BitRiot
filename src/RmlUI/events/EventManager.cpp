@@ -110,7 +110,7 @@ void EventManager::ProcessEvent(Rml::Event& event, const Rml::String& value)
  			values.size() > 1)
 		{
 			// Load the window, and if successful close the old window.
-			if (LoadWindow(values[1]))
+			if (LoadWindow(values[1]), true)
 				event.GetTargetElement()->GetOwnerDocument()->Close();
 		}
 		else if (values[0] == "exit")
