@@ -86,7 +86,7 @@ shared_ptr<PlayerCharacterEntity> InputHandler::getPlayerAttachedToController(in
 {
   for(const auto& player : p_players)
   {
-    if(player && player->isAlive() && player->attachedController == controllerId)
+    if(player && player->attachedController == controllerId)
     {
       return player;
     }

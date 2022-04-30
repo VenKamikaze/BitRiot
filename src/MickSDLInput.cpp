@@ -275,6 +275,11 @@ void MickSDLInput::setControllerInput(SDL_JoystickID joystickID, Uint8 button, U
     return; //eat attaching button press
   }
 
+  if(! attachedPlayer->isAlive())
+  {
+    return;
+  }
+
   int i = attachedPlayer->getID();
   bool pressed=state==SDL_PRESSED;
   KEY keyIndex=KEY_UNKNOWN;
