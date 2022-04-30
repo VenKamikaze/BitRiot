@@ -135,10 +135,15 @@ Rml::ElementDocument* EventManager::LoadWindow(const Rml::String& window_name, b
 	EventHandler* old_event_handler = event_handler;
 	EventHandlerMap::iterator iterator = event_handlers.find(window_name);
 	if (iterator != event_handlers.end())
-		event_handler = (*iterator).second;
+	{
+    event_handler = (*iterator).second;
+	}
 	else
+	{
 		event_handler = nullptr;
-
+		std::MickLogger::getInstance()->warn(this, std::string("EventHandler is null for page: ").append(window_name));
+	}
+  
 	// Attempt to load the referenced RML document.
 	Rml::String document_path = window_name; //  Rml::String("invaders/data/") + window_name + Rml::String(".rml");
 	Rml::ElementDocument* document = m_context->LoadDocument(document_path.c_str());
@@ -151,15 +156,20 @@ Rml::ElementDocument* EventManager::LoadWindow(const Rml::String& window_name, b
 	// Set the element's title on the title; IDd 'title' in the RML.
 	Rml::Element* title = document->GetElementById("title");
 	if (title != nullptr)
+	{
 		title->SetInnerRML(document->GetTitle());
+	}
 
-	// M2S
 	if(loadAndShow)
 	{
 	  document->Focus();
 	  document->Show();	
 	}
+	if(window_name == "playerselect.rml")
+	{
+		std::MickLogger::getInstance()->debug(this, "Hack to focus element for playerselect.");
+		document->GetElementById("totalplayers")->Focus();
+	}
 
-	// M2S return document;
 	return document;
 }

@@ -9,10 +9,12 @@
 #include "MickLogger.h"
 #include <RmlUi/Core/Element.h>
 #include <RmlUi/Core/ElementDocument.h>
+#include <RmlUi/Core/Types.h>
 #include <cassert>
 #include <string>
 
 static const char* TAB_INDEX = "tabindex";
+static const char* TAB_CLASS = "tabbed"; // all elements that have a tabindex should have this class
 
 MickRmlUIElementUtil::MickRmlUIElementUtil()
 {
@@ -41,6 +43,20 @@ Rml::Element* MickRmlUIElementUtil::getChildElementWithTabIndex(Rml::Element* pa
       {
         return parentNode->GetChild(i);
       }
+    }
+  }
+  return nullptr;
+}
+
+Rml::Element* MickRmlUIElementUtil::getElementWithTabIndex(Rml::ElementDocument* document, int tabIndex)
+{
+  Rml::ElementList eList;
+  document->GetElementsByClassName(eList, TAB_CLASS);
+  for (auto el : eList)
+  {
+    if (el->GetAttribute(TAB_INDEX) && atoi(el->GetAttribute(TAB_INDEX)->Get<Rml::String>().c_str()) == tabIndex)
+    {
+      return el;
     }
   }
   return nullptr;

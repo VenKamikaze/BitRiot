@@ -18,8 +18,8 @@
               <p>Player {{playerWinNumber}} placed {{numberBombsPlaced}} explosives.</p>
             </div>
           </div>
-	  <button id="quickstart" autofocus tabindex="1" onclick="start">Play Again</button><br />
-	  <button id="options" tabindex="2" escapeAction="1" onclick="open mainmenu.rml">Main Menu</button><br />
+	  <button class="tabbed" id="quickstart" autofocus tabindex="1" onclick="start">Play Again</button><br />
+	  <button class="tabbed" id="options" tabindex="2" escapeAction="1" onclick="open mainmenu.rml">Main Menu</button><br />
       </div>
     </div>
   </body>

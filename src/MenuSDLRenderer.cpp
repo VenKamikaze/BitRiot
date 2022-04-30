@@ -173,7 +173,7 @@ bool MenuSDLRenderer::showMenu()
           {
             Rml::Element* focussedElement = m_context->GetFocusElement();
             int currentTabIndex = MickRmlUIElementUtil::getTabIndex(focussedElement);
-            Rml::Element* nextElement = MickRmlUIElementUtil::getChildElementWithTabIndex(focussedElement->GetParentNode(), (event.key.keysym.sym == SDLK_DOWN) ? ++currentTabIndex : --currentTabIndex);
+            Rml::Element* nextElement = MickRmlUIElementUtil::getElementWithTabIndex(focussedElement->GetOwnerDocument(), (event.key.keysym.sym == SDLK_DOWN) ? ++currentTabIndex : --currentTabIndex);
             if(nextElement)
             {
               nextElement->Focus();

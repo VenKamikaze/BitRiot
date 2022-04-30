@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <RmlUi/Core.h>
+#include <cstddef>
 
 class MickRmlUIElementUtil
 {
@@ -26,6 +27,7 @@ class MickRmlUIElementUtil
 
     static int getTabIndex(Rml::Element* element);
     static Rml::Element* getChildElementWithTabIndex(Rml::Element* parentNode, int tabIndex);
+    static Rml::Element* getElementWithTabIndex(Rml::ElementDocument* document, int tabIndex);
     static Rml::Element* getParentElementWithAttributeName(Rml::Element* nodeToSearchFrom, const std::string attributeName);
     static void appendTextToTextNode(Rml::Element* element, std::string toAppend);
     static void replaceEndStringInTextNode(Rml::Element* element, std::string toReplace);

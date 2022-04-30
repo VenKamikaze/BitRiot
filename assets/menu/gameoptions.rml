@@ -9,10 +9,10 @@
 		
     <div class="menu-container">
       <div class="menu">
-	      <button id="blocktilepercent" tabindex="1" autofocus onclick="blocktilepercent">Block Coverage (%): </button><br />
-	      <button id="mapwidth" tabindex="2" onclick="mapwidth">Map Width: </button><br />
-	      <button id="mapheight" tabindex="3" onclick="mapheight">Map Height: </button><br />
-	      <button id="back" tabindex="4" escapeAction="1" onclick="open mainmenu.rml">Back</button><br />
+	      <button class="tabbed" id="blocktilepercent" tabindex="1" autofocus onclick="blocktilepercent">Block Coverage (%): </button><br />
+	      <button class="tabbed" id="mapwidth" tabindex="2" onclick="mapwidth">Map Width: </button><br />
+	      <button class="tabbed" id="mapheight" tabindex="3" onclick="mapheight">Map Height: </button><br />
+	      <button class="tabbed" id="back" tabindex="4" escapeAction="1" onclick="open mainmenu.rml">Back</button><br />
       </div>
     </div>
 		
