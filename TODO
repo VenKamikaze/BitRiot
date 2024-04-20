@@ -17,3 +17,11 @@ Bugs:
 
 2022-05-19: SDL input processing code is duplicated all over the place and is a mess.
 Joystick ID handling is almost working in Player Select, but not throughout other parts of the game.
+
+2024-04-20 (branch feature/playerselect): 
+* Player select: Highlight of player 1 character doesn't show blue border so it is hard to tell where your input focus is
+* Options selected in player select don't persist properly on second game
+* On second game: somehow had controller input on keyboard controlling two characters, although this was "lost" at some point during the game.
+* Player select: should probably take the place of the 'Start' button on main menu.
+* End game "Scoreboard" should be cleaned up a bit - how about stats for all players in a column format, and a smaller font?
+* Have not tested these changes with a controller, only keyboard.
