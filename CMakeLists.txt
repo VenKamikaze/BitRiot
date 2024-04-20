@@ -88,7 +88,7 @@ set(SOURCES ./src/AIGameView.cpp
 ./src/RmlUI/events/EventInstancer.cpp
 ./src/RmlUI/events/EventManager.cpp
 ./src/RmlUI/binders/ScoreBoardBinder.cpp
-./src/RmlUI/binders/PlayersBinder.cpp
+./src/RmlUI/binders/PlayersSelectBinder.cpp
 ./src/ExplosionEntity.cpp
 ./src/GameEngine.cpp
 ./src/GameEntity.cpp
@@ -109,7 +109,8 @@ set(SOURCES ./src/AIGameView.cpp
 ./src/MickLogger.cpp
 ./src/RmlUI/MickRmlUIElementUtil.cpp
 ./src/MickSDLAssets.cpp
-./src/MickSDLInput.cpp
+./src/MickSDLUtil.cpp
+./src/GameRunningSDLInput.cpp
 ./src/MickSDLSound.cpp
 ./src/MickUtil.cpp
 ./src/MineEntity.cpp

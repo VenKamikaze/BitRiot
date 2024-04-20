@@ -65,7 +65,7 @@ public:
 private:
 	~EventManager();
 	// The game's element context (declared in main.cpp).
-	Rml::Context* m_context = nullptr;
+	Rml::Context* context = nullptr;
 };
 
 

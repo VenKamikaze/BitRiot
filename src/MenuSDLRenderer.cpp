@@ -2,18 +2,19 @@
 
 #include "MenuSDLRenderer.h"
 #include "RmlUI/MickRmlUIElementUtil.h"
-#include "RmlUI/binders/PlayersBinder.h"
 #include "RmlUI/events/EventHandlerPlayerSelect.h"
-#include "SDL_gamecontroller.h"
-#include "SDL_keycode.h"
+#include "SDL_events.h"
+#include <RmlUi/Core/Core.h>
 #include <RmlUi/Core/ElementDocument.h>
+#include <tuple>
 
 
 using namespace std;
 
-MenuSDLRenderer::MenuSDLRenderer(SDL_Renderer* renderer, SDL_Window* screen)
+MenuSDLRenderer::MenuSDLRenderer(SDL_Renderer* renderer, SDL_Window* screen, shared_ptr<InputHandler> inputHandler)
 {
-  init(renderer, screen);
+  initGui(renderer, screen);
+  m_inputHandler = inputHandler;
 }
 
 Rml::ElementDocument* MenuSDLRenderer::loadMenu(std::string menuRmlFile, bool loadAndShow)
@@ -27,7 +28,7 @@ Rml::ElementDocument* MenuSDLRenderer::loadMenu(std::string menuRmlFile, bool lo
   return doc;
 }
 
-void MenuSDLRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
+void MenuSDLRenderer::initGui(SDL_Renderer* renderer, SDL_Window *screen)
 {
   int windowWidth, windowHeight;
   SDL_GetWindowSize(screen, &windowWidth, &windowHeight);
@@ -53,21 +54,23 @@ void MenuSDLRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
   //Rml::LoadFontFace("assets/fonts/Delicious-Italic.otf");
   //Rml::LoadFontFace("assets/fonts/Delicious-Roman.otf");
 
-  m_context = Rml::CreateContext("default",
+  context = Rml::CreateContext("default",
                                    Rml::Vector2i(windowWidth, windowHeight));
 
 #ifndef NDEBUG
-  Rml::Debugger::Initialise(m_context);
+  Rml::Debugger::Initialise(context);
 #endif
 
   // Initialise the event instancer and handlers.
   EventInstancer* event_instancer = new EventInstancer();
   Rml::Factory::RegisterEventListenerInstancer(event_instancer);
 
+  m_eHandlerPlayerSelect = make_shared<EventHandlerPlayerSelect>();
+
   EventManager::getInstance()->RegisterEventHandler("gameoptions.rml", new EventHandlerOptions());
-  EventManager::getInstance()->RegisterEventHandler("playerselect.rml", new EventHandlerPlayerSelect());
+  EventManager::getInstance()->RegisterEventHandler("playerselect.rml", m_eHandlerPlayerSelect.get());
   
-  m_playersBinder = make_unique<PlayersBinder>(m_context);
+  m_playersBinder = make_unique<PlayersSelectBinder>(context);
 
   loadMenu("mainmenu.rml");
   m_renderer = renderer;
@@ -76,7 +79,7 @@ void MenuSDLRenderer::init(SDL_Renderer* renderer, SDL_Window *screen)
 
 void MenuSDLRenderer::loadScoreBoard(shared_ptr<PlayerCharacterEntity> winner, int gameTotalLength)
 {
-  m_scoreBinder = new ScoreBoardBinder(m_context, winner, gameTotalLength);
+  m_scoreBinder = new ScoreBoardBinder(context, winner, gameTotalLength);
   Rml::ElementDocument *doc = loadMenu("scoreboard.rml", (winner != nullptr));
   if(! winner)
   {
@@ -89,9 +92,9 @@ void MenuSDLRenderer::loadScoreBoard(shared_ptr<PlayerCharacterEntity> winner, i
 
 void MenuSDLRenderer::clearScoreBoard()
 {
-  if(m_scoreBinder && m_context)
+  if(m_scoreBinder && context)
   {
-    m_scoreBinder->RemoveDataBinding(m_context);
+    m_scoreBinder->RemoveDataBinding(context);
     delete m_scoreBinder;
     m_scoreBinder = nullptr;
   }
@@ -101,9 +104,9 @@ void MenuSDLRenderer::handleWindowResize()
 {
   int windowWidth, windowHeight;
   SDL_GetWindowSize(m_screen, &windowWidth, &windowHeight);
-  if( m_context->GetDimensions().x != windowWidth || m_context->GetDimensions().y != windowHeight)
+  if( context->GetDimensions().x != windowWidth || context->GetDimensions().y != windowHeight)
   {
-    m_context->SetDimensions(Rml::Vector2i(windowWidth, windowHeight));
+    context->SetDimensions(Rml::Vector2i(windowWidth, windowHeight));
   }
 }
 
@@ -121,149 +124,172 @@ bool MenuSDLRenderer::showMenu()
 
   handleWindowResize(); // Check for adjusted window size.
   
-  m_context->Render();
+  context->Render();
   RmlUiSDL2SystemInterface* systemInterface = (RmlUiSDL2SystemInterface*) Rml::GetSystemInterface();
 
   while(SDL_PollEvent(&event))
   {
-    switch(event.type)
+    // if the player select page is open, fire off it's specific SDLEventHandler
+    if(context->GetFocusElement() && 
+      EventHandlerPlayerSelect::RML_FILENAME == context->GetFocusElement()->GetOwnerDocument()->GetSourceURL())
     {
-      case SDL_QUIT:
-        continueRenderingMenu = false;
-        MickLogger::getInstance()->debug(this, "SDL_QUIT");
-        GameSettings::getInstance()->setGameState(GameSettings::GAME_QUIT);
-        break;
-
-      case SDL_MOUSEMOTION:
-        m_context->ProcessMouseMove(event.motion.x, event.motion.y, systemInterface->GetKeyModifiers());
-        break;
-      case SDL_MOUSEBUTTONDOWN:
-        m_context->ProcessMouseButtonDown(systemInterface->TranslateMouseButton(event.button.button), systemInterface->GetKeyModifiers());
-        break;
-
-      case SDL_MOUSEBUTTONUP:
-        m_context->ProcessMouseButtonUp(systemInterface->TranslateMouseButton(event.button.button), systemInterface->GetKeyModifiers());
-        break;
-
-      case SDL_MOUSEWHEEL:
-        m_context->ProcessMouseWheel(event.wheel.y, systemInterface->GetKeyModifiers());
-        break;
-
-      case SDL_KEYDOWN:
+      continueRenderingMenu = m_eHandlerPlayerSelect->processSDLEvent(event);
+    }
+    else
+    {
+      switch(event.type)
       {
-          //printf("keydown: %d, sdl: %d\n", event.key, event.key.keysym.sym);
-          // Intercept SHIFT + ~ key stroke to toggle libRmlUi's
-          // visual debugger tool
-          MickLogger::getInstance()->debug(this, std::string("SDL_KEYDOWN, sym:").append(std::to_string(event.key.keysym.sym)));
-          if( event.key.keysym.sym == SDLK_BACKQUOTE &&
-              event.key.keysym.mod == KMOD_LSHIFT )
-          {
-#ifndef NDEBUG
-            Rml::Debugger::SetVisible( ! Rml::Debugger::IsVisible() );
-#endif
-            break;
-          }
-          else if(event.key.keysym.sym == SDLK_ESCAPE)
-          {
-            menuBackButtonHit();
-            break;
-          }
-          else if(event.key.keysym.sym == SDLK_DOWN
-                  || event.key.keysym.sym == SDLK_UP)
-          {
-            Rml::Element* focussedElement = m_context->GetFocusElement();
-            int currentTabIndex = MickRmlUIElementUtil::getTabIndex(focussedElement);
-            Rml::Element* nextElement = MickRmlUIElementUtil::getElementWithTabIndex(focussedElement->GetOwnerDocument(), (event.key.keysym.sym == SDLK_DOWN) ? ++currentTabIndex : --currentTabIndex);
-            if(nextElement)
-            {
-              nextElement->Focus();
-            }
-            break;
-          }
-
-          m_context->ProcessKeyDown(systemInterface->TranslateKey(event.key.keysym.sym), systemInterface->GetKeyModifiers());
+        case SDL_QUIT:
+          continueRenderingMenu = false;
+          MickLogger::getInstance()->debug(this, "SDL_QUIT");
+          GameSettings::getInstance()->setGameState(GameSettings::GAME_QUIT);
           break;
-      }
 
-      case SDL_CONTROLLERBUTTONDOWN:
-      case SDL_CONTROLLERBUTTONUP:
-      {
-        //event.jbutton.which, event.jbutton.button, event.jbutton.state
-        if(event.jbutton.which == 0) // only process first controller in menu.
+        case SDL_MOUSEMOTION:
+          context->ProcessMouseMove(event.motion.x, event.motion.y, systemInterface->GetKeyModifiers());
+          break;
+        case SDL_MOUSEBUTTONDOWN:
+          context->ProcessMouseButtonDown(systemInterface->TranslateMouseButton(event.button.button), systemInterface->GetKeyModifiers());
+          break;
+
+        case SDL_MOUSEBUTTONUP:
+          context->ProcessMouseButtonUp(systemInterface->TranslateMouseButton(event.button.button), systemInterface->GetKeyModifiers());
+          break;
+
+        case SDL_MOUSEWHEEL:
+          context->ProcessMouseWheel(event.wheel.y, systemInterface->GetKeyModifiers());
+          break;
+
+        case SDL_KEYDOWN:
         {
-          if(event.jbutton.state == SDL_PRESSED)
-          {
-            if(event.jbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN
-                || event.jbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP)
+            //printf("keydown: %d, sdl: %d\n", event.key, event.key.keysym.sym);
+            // Intercept SHIFT + ~ key stroke to toggle libRmlUi's
+            // visual debugger tool
+            MickLogger::getInstance()->debug(this, std::string("SDL_KEYDOWN, sym:").append(std::to_string(event.key.keysym.sym)));
+            if( event.key.keysym.sym == SDLK_BACKQUOTE &&
+                event.key.keysym.mod == KMOD_LSHIFT )
             {
-              MickLogger::getInstance()->debug(this, "Got DPAD down/up.");
-              Rml::Element* focussedElement = m_context->GetFocusElement();
+  #ifndef NDEBUG
+              Rml::Debugger::SetVisible( ! Rml::Debugger::IsVisible() );
+  #endif
+              break;
+            }
+            else if(event.key.keysym.sym == SDLK_ESCAPE)
+            {
+              MickRmlUIElementUtil::menuBackButtonTriggered(context);
+              break;
+            }
+            else if(event.key.keysym.sym == SDLK_DOWN
+                    || event.key.keysym.sym == SDLK_UP)
+            {
+              Rml::Element* focussedElement = context->GetFocusElement();
               int currentTabIndex = MickRmlUIElementUtil::getTabIndex(focussedElement);
-              Rml::Element* nextElement = MickRmlUIElementUtil::getElementWithTabIndex(focussedElement->GetOwnerDocument(), (event.jbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) ? ++currentTabIndex : --currentTabIndex);
+              Rml::Element* nextElement = MickRmlUIElementUtil::getElementWithTabIndex(focussedElement->GetOwnerDocument(), (event.key.keysym.sym == SDLK_DOWN) ? ++currentTabIndex : --currentTabIndex);
               if(nextElement)
               {
                 nextElement->Focus();
               }
+              break;
             }
-            else if (event.jbutton.button == SDL_CONTROLLER_BUTTON_A)
-            {
-              MickLogger::getInstance()->debug(this, "Got CTL A.");
-              m_context->ProcessKeyDown(systemInterface->TranslateKey(SDLK_RETURN), systemInterface->GetKeyModifiers());
-            }
-            else if (event.jbutton.button == SDL_CONTROLLER_BUTTON_B)
-            {
-              MickLogger::getInstance()->debug(this, "Got CTL B.");
-              menuBackButtonHit();
-            }
-          }
-        }
-        break;
-      }
 
-      case SDL_CONTROLLERDEVICEADDED:
-      {
-        MickLogger::getInstance()->debug(this, string("Opening game controller: ").append(to_string(event.jbutton.which)));
-        if (SDL_IsGameController(event.jbutton.which))
+            context->ProcessKeyDown(systemInterface->TranslateKey(event.key.keysym.sym), systemInterface->GetKeyModifiers());
+            break;
+        }
+
+        case SDL_CONTROLLERBUTTONDOWN:
+        case SDL_CONTROLLERBUTTONUP:
         {
-          if(SDL_GameControllerOpen(event.jbutton.which))
+          //event.jbutton.which, event.jbutton.button, event.jbutton.state
+          if(event.jbutton.which == 0) // only process first controller in menu.
           {
-            MickLogger::getInstance()->debug(this, string("Opened game controller: ").append(to_string(event.jbutton.which)));
+            if(event.jbutton.state == SDL_PRESSED)
+            {
+              if(event.jbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN
+                  || event.jbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP)
+              {
+                MickLogger::getInstance()->debug(this, "Got DPAD down/up.");
+                Rml::Element* focussedElement = context->GetFocusElement();
+                int currentTabIndex = MickRmlUIElementUtil::getTabIndex(focussedElement);
+                Rml::Element* nextElement = MickRmlUIElementUtil::getElementWithTabIndex(focussedElement->GetOwnerDocument(), (event.jbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) ? ++currentTabIndex : --currentTabIndex);
+                if(nextElement)
+                {
+                  nextElement->Focus();
+                }
+              }
+              else if (event.jbutton.button == SDL_CONTROLLER_BUTTON_A)
+              {
+                MickLogger::getInstance()->debug(this, "Got CTL A.");
+                context->ProcessKeyDown(systemInterface->TranslateKey(SDLK_RETURN), systemInterface->GetKeyModifiers());
+              }
+              else if (event.jbutton.button == SDL_CONTROLLER_BUTTON_B)
+              {
+                MickLogger::getInstance()->debug(this, "Got CTL B.");
+                MickRmlUIElementUtil::menuBackButtonTriggered(context);
+              }
+            }
           }
+          break;
         }
-        break;
-      }
-      case SDL_CONTROLLERDEVICEREMOVED:
-      {
-        MickLogger::getInstance()->debug(this, string("Gamecontroller removed: ").append(to_string(event.jbutton.which)));          break;
-        break;
-      }
 
-      default:
-        break;
+        case SDL_CONTROLLERDEVICEADDED:
+        {
+          MickLogger::getInstance()->debug(this, string("Opening game controller: ").append(to_string(event.jbutton.which)));
+          if (SDL_IsGameController(event.jbutton.which))
+          {
+            if(SDL_GameControllerOpen(event.jbutton.which))
+            {
+              MickLogger::getInstance()->debug(this, string("Opened game controller: ").append(to_string(event.jbutton.which)));
+            }
+          }
+          break;
+        }
+        case SDL_CONTROLLERDEVICEREMOVED:
+        {
+          MickLogger::getInstance()->debug(this, string("Gamecontroller removed: ").append(to_string(event.jbutton.which)));
+          break;
+        }
+
+        default:
+          break;
+      }
     }
+
   }
-  m_context->Update();
+  context->Update();
 
   return continueRenderingMenu;
 }
 
-void MenuSDLRenderer::menuBackButtonHit()
+// WIP: continue on this to enable joining / assigning players to controllers/keyboard.
+/*
+int MenuSDLRenderer::processEventForJoystick(SDL_JoystickID controllerId, SDL_JoyButtonEvent buttonEvent)
 {
-  RmlUiSDL2SystemInterface* systemInterface = (RmlUiSDL2SystemInterface*) Rml::GetSystemInterface();
-  Rml::ElementDocument *document = m_context->GetFocusElement()->GetOwnerDocument();
-  if(document)
+  if(joystickToFocussedElement.find(controllerId) != joystickToFocussedElement.end())
   {
-    MickLogger::getInstance()->debug(this, std::string("current document id: ").append(document ? document->GetId() : "null") );
-    Rml::Element* escapeActionElement = MickRmlUIElementUtil::getFirstElementWithAttribute(document, "escapeAction");
-    if(escapeActionElement)
+    Rml::Element *focussedElementForJoystick = joystickToFocussedElement.find(controllerId)->second;
+    if(focussedElementForJoystick->GetOwnerDocument() == context->GetFocusElement()->GetOwnerDocument())
     {
-      MickLogger::getInstance()->debug(this, std::string("escapeActionElement element id: ").append(escapeActionElement->GetId()) );
-      // process the element with the attribute 'escapeAction'
-      escapeActionElement->Focus();
-      m_context->ProcessKeyDown(systemInterface->TranslateKey(SDLK_RETURN), 0);
+      // we're on the right menu page, try to process the event
+      int currentTabIndex = MickRmlUIElementUtil::getTabIndex(focussedElementForJoystick);
+      Rml::Element* nextElement = MickRmlUIElementUtil::getElementWithTabIndex(focussedElementForJoystick->GetOwnerDocument(), (buttonEvent.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) ? ++currentTabIndex : --currentTabIndex);
+      if(nextElement)
+      {
+        nextElement->Focus();
+      }
     }
+    else
+    {
+      // if we're on the PlayerSelect page, and this is button 'A', treat this as a "join" event, otherwise ignore.
+    }
+    
   }
 }
+*/
+
+/**
+ * 
+ */
+
 
 MenuSDLRenderer::~MenuSDLRenderer()
 {

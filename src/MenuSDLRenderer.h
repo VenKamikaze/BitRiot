@@ -8,17 +8,23 @@
 #ifndef MENUSDLRENDERER_H_
 #define MENUSDLRENDERER_H_
 
+#include "InputHandler.h"
 #include <RmlUi/Core/ElementDocument.h>
 #include <SDL2/SDL_render.h>
-#include "RmlUI/binders/PlayersBinder.h"
+
+#include "RmlUI/binders/PlayersSelectBinder.h"
 #include "SDL_keycode.h"
+#include "SDL_joystick.h"
 #include "SDL_pixels.h"
 #include "RuntimeException.h"
 
+#include "SDL_gamecontroller.h"
+#include "SDL_keycode.h"
 #include <SDL2/SDL.h>
 
 #include <RmlUi/Core.h>
 #include <RmlUi/Core/Input.h>
+#include <memory>
 #ifndef NDEBUG
 #include <RmlUi/Debugger/Debugger.h>
 #endif
@@ -35,33 +41,45 @@
 #include "RmlUI/events/EventInstancer.h"
 #include "RmlUI/events/EventManager.h"
 #include "RmlUI/events/EventHandlerOptions.h"
+#include "RmlUI/events/EventHandlerPlayerSelect.h"
 #include "RmlUI/binders/ScoreBoardBinder.h"
 #include <iostream>
 #include <stdexcept>
 #include <string>
 
+struct ControllerPlayerSelect {
+  Rml::Element *focussedElement;
+  
+  bool isReady = false;
+  int controllerId = -1; // will be >= 0 if controller input (action1) is detected.
+  bool isKeyboardId = -1; // will be >= 0 if keyboard input (action1) is detected.
+};
+
 
 class MenuSDLRenderer
 {
   public:
-    MenuSDLRenderer(SDL_Renderer *renderer, SDL_Window *screen);
+    MenuSDLRenderer(SDL_Renderer *renderer, SDL_Window *screen, shared_ptr<InputHandler>);
     void loadScoreBoard(shared_ptr<PlayerCharacterEntity> winner, int gameTotalLength);
     void clearScoreBoard();
     bool showMenu();
-    void menuBackButtonHit();
     virtual ~MenuSDLRenderer();
 
   private:
     void handleWindowResize();
-    void init(SDL_Renderer* renderer, SDL_Window *screen);
+    void initGui(SDL_Renderer* renderer, SDL_Window *screen);
+    int playerJoin();
     int getTabIndex(Rml::Element* node);
     Rml::Element* getChildElementWithTabIndex(Rml::Element* parentNode, int tabIndex);
-    Rml::Context* m_context;
+    Rml::Context* context;
     Rml::ElementDocument* loadMenu(std::string menuRmlFile, bool loadAndShow = true);
     SDL_Window *m_screen;
     SDL_Renderer *m_renderer;
     ScoreBoardBinder *m_scoreBinder = nullptr;
-    unique_ptr<PlayersBinder> m_playersBinder = nullptr;
+    unique_ptr<PlayersSelectBinder> m_playersBinder = nullptr;
+    shared_ptr<InputHandler> m_inputHandler = nullptr;
+    std::map<int, ControllerPlayerSelect> playerIdToFocussedElement;
+    shared_ptr<EventHandlerPlayerSelect> m_eHandlerPlayerSelect;
 };
 
 #endif /* MENUSDLRENDERER_H_ */

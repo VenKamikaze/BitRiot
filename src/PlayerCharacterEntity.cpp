@@ -121,7 +121,7 @@ void PlayerCharacterEntity::onCollision(EntityType typeCollidedWith,
     if(! isControlledByAI() && attachedController != -1 )
     {
       // Try to rumble the controller if possible
-      MickSDLInput::rumbleController(attachedController, 0.5f, 200);
+      MickSDLUtil::rumbleController(attachedController, 0.5f, 200);
     }
   }
 

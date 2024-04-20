@@ -34,7 +34,31 @@
 
 #include "EventHandler.h"
 #include "GameSettings.h"
+#include "SDL_events.h"
+#include <RmlUi/Core/Core.h>
+#include <RmlUi/Core/Element.h>
+#include <RmlUi/Core/ElementDocument.h>
+#include <RmlUi/Core/ElementUtilities.h>
+#include <RmlUi/Core/Event.h>
+#include <RmlUi/Core/Elements/ElementFormControlInput.h>
+#include <RmlUi/Core/Types.h>
+#include <RmlUi/Debugger/Debugger.h>
+#include <string>
+#include "EventManager.h"
+#include "GameSettings.h"
+#include "MickLogger.h"
 #include "RmlUI/MickRmlUIElementUtil.h"
+#include "RmlUI/glue/SystemInterfaceSDL2.h"
+#include "GameRunningSDLInput.h"
+
+#include "RmlUI/binders/PlayersSelectBinder.h"
+#include "RmlUI/MickRmlUIElementUtil.h"
+#include "SDL_gamecontroller.h"
+#include "SDL_joystick.h"
+#include "SDL_keycode.h"
+
+#include "MickSDLUtil.h"
+
 
 /**
 	@author Peter Curry
@@ -43,12 +67,18 @@
 class EventHandlerPlayerSelect : public EventHandler
 {
 public:
+  static const std::string RML_FILENAME;
+	static const int PRIMARY_CONTROLLER_ID = 0;
 	EventHandlerPlayerSelect();
 	virtual ~EventHandlerPlayerSelect();
 	virtual void ProcessEvent(Rml::Event& event, const Rml::String& value);
+	void controllerJoin(SDL_JoystickID controllerId);
+	bool processSDLEvent(SDL_Event &event); // returns false when quit is hit
+  void processControllerButtonDown(SDL_JoystickID controllerId, Uint8 button);
 
 private:
 	void playerSelectPageInit(Rml::ElementDocument* bodyElement);
+	SDL_JoystickID primaryControllerId;
 };
 
 #endif

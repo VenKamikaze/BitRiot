@@ -1,5 +1,5 @@
 .strips {
-  min-height: 80vh;
+  min-height: 70vh;
   text-align: center;
   overflow: hidden;
   color: white;
@@ -9,7 +9,7 @@
   float: left;
   position: relative;
   width: 25%;
-  min-height: 80vh;
+  min-height: 70vh;
   overflow: hidden;
 }
 
@@ -45,19 +45,24 @@
   padding: 3px;
 }
 
-.stripContent img.red {
+.stripContent img {
+  border-radius: 3px;
+  border: 3px grey;
+}
+
+.stripContent img.red.playerselected {
   border-radius: 3px;
   border: 3px red;
 }
-.stripContent img.blue {
+.stripContent img.blue.playerselected {
   border-radius: 3px;
   border: 3px #6da8f5;
 }
-.stripContent img.green {
+.stripContent img.green.playerselected {
   border-radius: 3px;
   border: 3px green;
 }
-.stripContent img.yellow {
+.stripContent img.yellow.playerselected {
   border-radius: 3px;
   border: 3px yellow;
 }
@@ -113,6 +118,12 @@ p {
   float:left;
   width: 100vw;
   height: 10vh;
+}
+
+div.controller {
+  position: absolute;
+  bottom: 0;
+  right: 0;
 }
 
 .menu {

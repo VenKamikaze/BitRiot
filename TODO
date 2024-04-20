@@ -14,3 +14,6 @@ Feature:
 
 Bugs:
 2022-04-30: No way of assigning controllers to players from the menu yet, so first come first serve when the game starts.
+
+2022-05-19: SDL input processing code is duplicated all over the place and is a mess.
+Joystick ID handling is almost working in Player Select, but not throughout other parts of the game.

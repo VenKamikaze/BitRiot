@@ -1,26 +1,35 @@
 /*
- * MickSDLInput.h
+ * GameRunningSDLInput.h
  *
  *  Created on: Mar 8, 2012
  *      Author: msaun
  */
-
-#ifndef MICKSDLINPUT_H_
-#define MICKSDLINPUT_H_
+#ifndef GAMERUNNINGSDLINPUT_H_
+#define GAMERUNNINGSDLINPUT_H_
 
 #include "MickBaseInput.h"
 class InputHandler;
+#include "PlayerCharacterEntity.h"
+
+#include "MickLogger.h"
+#include "SDL.h"
+#include "SDL_error.h"
 
 #include <SDL2/SDL.h>
+#include <cstddef>
+#include <string>
 #include <map>
 #include <set>
 #include <memory>
+#include <array>
 
-class MickSDLInput : public MickBaseInput, std::enable_shared_from_this<MickSDLInput>
+
+class GameRunningSDLInput : public MickBaseInput, public std::enable_shared_from_this<GameRunningSDLInput>
 {
   public:
-    MickSDLInput(std::shared_ptr<InputHandler> inputHandler);
-    virtual ~MickSDLInput();
+    GameRunningSDLInput(std::shared_ptr<InputHandler> inputHandler);
+    static std::shared_ptr<GameRunningSDLInput> create(std::shared_ptr<InputHandler> inputHandler);
+    virtual ~GameRunningSDLInput();
 
     void resetInputEvents(); // reset input event arrays
     SDL_Event* popEvent();
@@ -30,23 +39,20 @@ class MickSDLInput : public MickBaseInput, std::enable_shared_from_this<MickSDLI
     void setKeyState(KEY k, bool down);
 
     std::set<KEY>* getKeysDown();
-    inline std::shared_ptr<InputHandler> getInputHandler()
-    {
-      return m_pInputHandler;
-    }
+    std::shared_ptr<InputHandler> getInputHandler();
 
-    void keyEvent(KEY k);
+    int getPlayerIdForKey(SDL_Keycode key);
 
-    //KEY_EVENT newEvent();
     void updateEventQueue();
 
-    static std::shared_ptr<MickSDLInput> getInstance(std::shared_ptr<InputHandler> inputHandler);
+    static std::shared_ptr<GameRunningSDLInput> getInstance();
     static bool rumbleController(SDL_JoystickID joystickID, float strength, Uint32 length);
+    static SDL_JoystickID getPrimaryJoystickID();
 
     SDL_Keycode getSDLKeycodeForKey(KEY k); // needed for libRocket key translation map
+    static map<SDL_Keycode, KEY>* reverseTranslateMap;
 
   protected:
-
     void setControllerInput(SDL_JoystickID joystickID, Uint8 button, Uint8 state);
 
     void setupKeymap();
@@ -64,4 +70,4 @@ class MickSDLInput : public MickBaseInput, std::enable_shared_from_this<MickSDLI
 };
 
 
-#endif /* MICKSDLINPUT_H_ */
+#endif /* GAMERUNNINGSDLINPUT_H_ */

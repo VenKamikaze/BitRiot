@@ -5,7 +5,8 @@
 
 /// UNIX INCLUDES
 #include "MickBaseRenderer.h"
-#include "MickSDLInput.h"
+#include "MickLogger.h"
+#include "GameRunningSDLInput.h"
 #include "MickSDLRenderer.h"
 #include "SDL_render.h"
 #include "SDL_surface.h"
@@ -86,15 +87,15 @@ int consoleInit()
     return 1;
   }
 
-  shared_ptr<MickSDLInput> input;
+  shared_ptr<GameRunningSDLInput> input;
   try
   {
     MickSDLSound::getInstance()->initAudio();
-    input = MickSDLInput::getInstance(make_shared<InputHandler>());
+    input = GameRunningSDLInput::create(make_shared<InputHandler>());
   }
   catch(const exception &e)
   {
-    std::string msg = "Could not initialise audio!";
+    std::string msg = "Could not initialise audio and/or input!";
     MickLogger::getInstance()->error(nullptr, msg);
     MickLogger::getInstance()->error(nullptr, e.what());
     throw runtime_error(msg);
@@ -173,11 +174,13 @@ int main(int argc, char* argv[])
   try
   {
     quitkey = consoleInit();
-    engine->setMenuSystem(make_unique<MenuSDLRenderer>(MickSDLRenderer::getInstance()->getRendererHandle(), MickSDLRenderer::getInstance()->getWindowHandle()));
+
+    engine->setMenuSystem(make_unique<MenuSDLRenderer>(MickSDLRenderer::getInstance()->getRendererHandle(), 
+      MickSDLRenderer::getInstance()->getWindowHandle(), GameRunningSDLInput::getInstance()->getInputHandler()));
   }
   catch(const exception &e)
   {
-    fprintf(stderr, "Exception occurred in initialisation code(): %s\n", e.what());
+    MickLogger::getInstance()->error(nullptr, string("Exception occurred in initialisation code(): ").append(e.what()));
     quitkey = -1;
   }
 

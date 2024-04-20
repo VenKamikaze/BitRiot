@@ -205,7 +205,6 @@ class MickBaseInput
       return quitEvent;
     };
 
-    virtual void keyEvent(KEY k) =0;
     virtual void updateEventQueue() =0;
 
     //virtual KEY_EVENT newEvent() =0;

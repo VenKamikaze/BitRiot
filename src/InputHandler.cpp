@@ -77,11 +77,6 @@ void InputHandler::setAvailableKeys()
   // TODO m_keyMap for players 5 and 6
 }
 
-//void InputHandler::setPlayerDead(int player, bool flag)
-//{
-//  m_playerDead.at(player) = flag;
-//}
-
 shared_ptr<PlayerCharacterEntity> InputHandler::getPlayerAttachedToController(int controllerId)
 {
   for(const auto& player : p_players)
@@ -125,7 +120,7 @@ void InputHandler::detachController(int controllerId)
 
 void InputHandler::processKeyboardInput(/*SDL_Event event*/)
 {
-  shared_ptr<MickBaseInput> input = MickSDLInput::getInstance(shared_from_this());
+  shared_ptr<MickBaseInput> input = GameRunningSDLInput::getInstance();
   input->updateEventQueue();
 
   if(input->doQuit())
@@ -269,4 +264,45 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
       } // end if action1 && action2 down
     }
   }
+}
+
+
+int InputHandler::getPlayerIdForKey(KEY k)
+{
+  for(auto iter = m_keyMap.begin(); iter != m_keyMap.end(); ++iter)
+  {
+    for(int buttonNum = ButtonName::UP_KEY; buttonNum != ButtonName::ACTION2_KEY; buttonNum++)
+    {
+      if(k == m_keyMap[iter->first][buttonNum])
+      {
+        return iter->first;
+      }
+    }
+  }
+  return -1;
+}
+
+
+int InputHandler::getPlayerIdForAction1Button(KEY k)
+{
+  for(auto iter = m_keyMap.begin(); iter != m_keyMap.end(); ++iter)
+  {
+    if(k == m_keyMap[iter->first][ACTION1_KEY])
+    {
+      return iter->first;
+    }
+  }
+  return -1;
+}
+
+int InputHandler::getPlayerIdForAction2Button(KEY k)
+{
+  for(auto iter = m_keyMap.begin(); iter != m_keyMap.end(); ++iter)
+  {
+    if(k == m_keyMap[iter->first][ACTION2_KEY])
+    {
+      return iter->first;
+    }
+  }
+  return -1;
 }

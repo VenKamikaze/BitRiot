@@ -1,7 +1,7 @@
 #include "GameEngine.h"
 #include "GameSettings.h"
 #include "MickBaseInput.h"
-#include "MickSDLInput.h"
+#include "GameRunningSDLInput.h"
 #include "MickSDLRenderer.h"
 #include "PlayerCharacterEntity.h"
 #include "SDL_timer.h"
@@ -73,10 +73,9 @@ void GameEngine::resetGame()
   // after setting initialisation parameters
   m_pPlayers.resize(numPlayers);
   
-  
   m_pEntityManager = new EntityManager();
   m_pPanel = new InfoPanel(m_surface, numPlayers, genders);
-  MickSDLInput::getInstance(m_pInputHandler)->resetInputEvents();
+  GameRunningSDLInput::getInstance()->resetInputEvents();
   m_pSpawningPool = new SpawningPool(numPlayers * 100);
   initPlayerCharacters(numPlayers, genders, playerAIs);
   m_pInputHandler->setPointers(m_pPlayers, m_pEntityManager->getDynamicMap(), m_pPanel);

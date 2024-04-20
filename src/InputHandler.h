@@ -9,10 +9,10 @@
 #include "GameSettings.h"
 #include "PlayerCharacterEntity.h"
 #include "InfoPanel.h"
-#include <SDL2/SDL.h>
-#include "MickSDLInput.h"
-#include "InputException.h"
 
+#include <SDL2/SDL.h>
+#include "GameRunningSDLInput.h"
+#include "InputException.h"
 
 class InputHandler : public std::enable_shared_from_this<InputHandler>
 {
@@ -22,10 +22,10 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
 
     void setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerCharacters, DynamicMap * dynamicMap, InfoPanel * panel);
 
-
     void processKeyboardInput();
-
-    void setPlayerDead(int player, bool flag);
+    int getPlayerIdForKey(KEY k); // get the playerId associated with this key.
+    int getPlayerIdForAction1Button(KEY k); // get player id for action1 button press, or -1 if no match
+    int getPlayerIdForAction2Button(KEY k); // get player id for action1 button press, or -1 if no match
 
     shared_ptr<PlayerCharacterEntity> getPlayerAttachedToController(int controllerId);
     shared_ptr<PlayerCharacterEntity> attachNewControllerToPlayer(int controllerId);
@@ -35,18 +35,13 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
     enum ButtonName { UP_KEY, DOWN_KEY, LEFT_KEY, RIGHT_KEY, ACTION1_KEY, ACTION2_KEY };
 
   public:
-    //int m_numPlayers;
     bool usingControllers=false;
-    //KEY m_keyMap[GameSettings::MAX_PLAYERS][NUM_ACTION_BUTTONS]; // keymap of 6 action buttons for the max players
     map<int, array<KEY, NUM_ACTION_BUTTONS>> m_keyMap; // player ID, keys available to use
 
   protected:
-
     vector<shared_ptr<PlayerCharacterEntity>> p_players; // pointers to player character entities
     DynamicMap * p_dynamicMap;
     InfoPanel * p_infoPanel;
-    //vector<bool> m_playerDead;
-    // static vectors that determine the chosen spawn entity for each human character.
     map<int, bool> m_action1Down; // player ID, action1Down
     map<int, bool> m_action2Down; // player ID, action2Down
     map<int, EntityType> m_spawnSelection; // player ID, Entity selected

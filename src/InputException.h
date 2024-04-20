@@ -34,10 +34,10 @@ namespace std
       virtual bool gotQuit() const throw()
       {
         if(type)
-	{
+        {
           return GOT_QUIT == type;
-	}
-	return false;
+	      }
+	      return false;
       };
 
   };

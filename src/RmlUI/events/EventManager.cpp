@@ -48,7 +48,7 @@ static EventManager* managerInstance = nullptr;
 
 EventManager::EventManager(Rml::Context* rmlContext)
 {
-	m_context = rmlContext;
+	context = rmlContext;
 }
 
 EventManager* EventManager::getInstance()
@@ -146,7 +146,7 @@ Rml::ElementDocument* EventManager::LoadWindow(const Rml::String& window_name, b
   
 	// Attempt to load the referenced RML document.
 	Rml::String document_path = window_name; //  Rml::String("invaders/data/") + window_name + Rml::String(".rml");
-	Rml::ElementDocument* document = m_context->LoadDocument(document_path.c_str());
+	Rml::ElementDocument* document = context->LoadDocument(document_path.c_str());
 	if (document == nullptr)
 	{
 		event_handler = old_event_handler;
