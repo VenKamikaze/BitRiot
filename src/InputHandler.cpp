@@ -29,6 +29,12 @@ void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerC
   m_action2Down.clear();
   m_spawnSelection.clear();
   m_keyMap.clear();
+  // The InputHandler is a singleton reused across games, so the key-set pool
+  // must be rebuilt each game. Without this, a previous game empties
+  // m_availableKeySets and .front()/.erase() below are undefined behaviour on
+  // the second "Play again", corrupting keyboard assignments.
+  m_availableKeySets.clear();
+  setAvailableKeys();
   for(const auto& player: playerCharacters)
   {
     m_keyMap[player->getID()] = m_availableKeySets.front();
