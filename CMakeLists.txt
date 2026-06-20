@@ -1,16 +1,10 @@
+cmake_minimum_required(VERSION 3.15)
 project(BitRiot)
-cmake_minimum_required(VERSION 3.4.3)
 
 #set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_BUILD_TYPE Debug)
-
-set(CMAKE_CXX_STANDARD 14)
-
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-comment")
-
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -ggdb -O0")
-
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Debug)
+endif()
 
 set(OpenGL_GL_PREFERENCE "GLVND")
 
@@ -130,24 +124,62 @@ set(SOURCES ./src/AIGameView.cpp
 ./src/main.cpp)
 
 
-include_directories(${SDL2_INCLUDE_DIR} ${SDL2_MIXER_INCLUDE_DIR} ${SDL2_TTF_INCLUDE_DIR} ${SDL2IMAGE_INCLUDE_DIR} ${RMLUI_HEADERS} ${PROJECT_SOURCE_DIR} ${OPENGL_INCLUDE_DIR}_
-  ${PROJECT_SOURCE_DIR}/src )
 add_executable(BitRiot ${SOURCES})
 
+target_include_directories(BitRiot PRIVATE
+  ${SDL2_INCLUDE_DIR}
+  ${SDL2_MIXER_INCLUDE_DIR}
+  ${SDL2_TTF_INCLUDE_DIR}
+  ${SDL2IMAGE_INCLUDE_DIR}
+  ${RMLUI_HEADERS}
+  ${PROJECT_SOURCE_DIR}
+  ${OPENGL_INCLUDE_DIR}
+  ${PROJECT_SOURCE_DIR}/src
+)
+
+target_compile_features(BitRiot PRIVATE cxx_std_14)
+
+target_compile_options(BitRiot PRIVATE
+  -Wall
+  -Wno-comment
+  # RmlUi 4.x headers (Types.h, robin_hood.h) use uintptr_t / UINT64_C without
+  # including <cstdint>; GCC 13+ no longer pulls it in transitively. Force it.
+  -include cstdint
+  $<$<CONFIG:Debug>:-ggdb -O0>
+  $<$<CONFIG:Release>:-O2>
+)
+
 if(MINGW)
-  target_link_libraries(BitRiot ${SDL2_LIBRARY} ${SDL2_MIXER_LIBRARY} ${SDL2_TTF_LIBRARY} ${SDL2IMAGE_LIBRARY} ${RMLUI_LIBRARIES} ${OPENGL_LIBRARIRES} shlwapi -mwindows)
+  target_link_libraries(BitRiot PRIVATE
+    ${SDL2_LIBRARY}
+    ${SDL2_MIXER_LIBRARY}
+    ${SDL2_TTF_LIBRARY}
+    ${SDL2IMAGE_LIBRARY}
+    ${RMLUI_LIBRARIES}
+    ${OPENGL_LIBRARIES}
+    shlwapi
+  )
+  target_link_options(BitRiot PRIVATE -mwindows)
 else()
-  target_link_libraries(BitRiot ${SDL2_LIBRARY} ${SDL2_MIXER_LIBRARY} ${SDL2_TTF_LIBRARY} ${SDL2IMAGE_LIBRARY} ${RMLUI_LIBRARIES} freetype ${OPENGL_LIBRARIRES})
+  target_link_libraries(BitRiot PRIVATE
+    ${SDL2_LIBRARY}
+    ${SDL2_MIXER_LIBRARY}
+    ${SDL2_TTF_LIBRARY}
+    ${SDL2IMAGE_LIBRARY}
+    ${RMLUI_LIBRARIES}
+    freetype
+    ${OPENGL_LIBRARIES}
+  )
 
   add_custom_command(
     TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ln -sf ${PROJECT_SOURCE_DIR}/data ${PROJECT_BINARY_DIR}/
-    COMMAND ln -sf ${PROJECT_SOURCE_DIR}/assets ${PROJECT_BINARY_DIR}/
+    COMMAND ${CMAKE_COMMAND} -E create_symlink ${PROJECT_SOURCE_DIR}/data ${PROJECT_BINARY_DIR}/data
+    COMMAND ${CMAKE_COMMAND} -E create_symlink ${PROJECT_SOURCE_DIR}/assets ${PROJECT_BINARY_DIR}/assets
   )
   if(RMLUI_STATIC)
     add_custom_command(
       TARGET ${PROJECT_NAME} POST_BUILD
-      COMMAND ln -sf ${PROJECT_SOURCE_DIR}/ext/RmlUi/lib/libRmlCore.a ${PROJECT_BINARY_DIR}/
+      COMMAND ${CMAKE_COMMAND} -E create_symlink ${PROJECT_SOURCE_DIR}/ext/RmlUi/lib/libRmlCore.a ${PROJECT_BINARY_DIR}/libRmlCore.a
     )
   endif()
 endif()

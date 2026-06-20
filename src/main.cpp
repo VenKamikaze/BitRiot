@@ -64,7 +64,7 @@ unique_ptr<GameEngine> engine = nullptr;
 
 // FUNCTIONS //////////////////////////////////////////////
 
-#if !(SDL_VIDEO_RENDER_OGL)
+#if !(SDL_VIDEO_OPENGL)
 #error "Only the opengl sdl backend is supported. To add support for others, see http://mdqinc.com/blog/2013/01/integrating-librocket-with-sdl-2/"
 #endif
 

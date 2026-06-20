@@ -32,7 +32,7 @@
 
 #include <SDL.h>
 
-#if !(SDL_VIDEO_RENDER_OGL)
+#if !(SDL_VIDEO_OPENGL)
     #error "Only the opengl sdl backend is supported."
 #endif
 
