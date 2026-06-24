@@ -31,7 +31,12 @@ namespace std
   } controllersData;
 
   struct Players {
-    std::vector<Player> players = {};
+    // Bound directly to the canonical GameSettings model so the menu and the
+    // game can't diverge. checkAssetAvailable() (reached via the GameSettings
+    // ctor) is plain access()-based file I/O, so forcing construction at static
+    // init here is safe. All mutations below go through GameSettings setters so
+    // the derived genders/playerAIs mirrors stay in sync (single write path).
+    std::vector<Player>& players = *std::GameSettings::getInstance()->getPlayers();
 
     Player* getPlayerForControllerId(int controllerId)
     {
@@ -57,27 +62,14 @@ namespace std
     }
 
     void toggleNumPlayers(Rml::DataModelHandle model_handle, Rml::Event& /*ev*/, const Rml::VariantList& /*arguments*/) {
-      int origNumPlayers = players.size();
-      int newPlayers = players.size();
-      if (++newPlayers > std::GameSettings::MAX_PLAYERS)
+      int newPlayers = (int) players.size() + 1;
+      if (newPlayers > std::GameSettings::MAX_PLAYERS)
       {
         newPlayers = std::GameSettings::MIN_PLAYERS; // wrap it back to the minimum
-        players.clear();
-        origNumPlayers = 0;
       }
-
-      for(int i = origNumPlayers; i < newPlayers; i++)
-      {
-        Player p;
-        p.human = (i == 0);
-        p.id = i;
-        p.team = i;
-        p.type = (i % 2 == 0) ?  MickAssets::PlayerType::MALE : MickAssets::PlayerType::FEMALE;
-        p.portrait = MickAssets::getPortraitBitmapFilename(i, p.type);
-        players.push_back(p);
-      }
-
-      std::GameSettings::getInstance()->setNumberOfPlayers(players.size());
+      // setNumberOfPlayers grows (appending defaults) or truncates the canonical
+      // model in place, preserving existing entries and their device assignments.
+      std::GameSettings::getInstance()->setNumberOfPlayers(newPlayers);
       MickLogger::getInstance()->debug(this, std::string("Players.toggleNumPlayers=").append(to_string(players.size())));
       model_handle.DirtyVariable("players");
 	  }
@@ -86,9 +78,9 @@ namespace std
       int playerId = getPlayerIdAssociatedWithEvent(ev);
 
       bool playerIdIsCurrentlyAI = players.at(playerId).human == 0;
-      players.at(playerId).human = (playerIdIsCurrentlyAI) ? 1 : 0; // if they are AI change to human and vice-versa
-
-      std::GameSettings::getInstance()->setPlayerAI(playerId, players.at(playerId).human == 0);
+      // Single write path: setPlayerAI mutates the canonical record and re-syncs
+      // the playerAIs mirror. isAI=false flips AI->human and vice-versa.
+      std::GameSettings::getInstance()->setPlayerAI(playerId, !playerIdIsCurrentlyAI);
       MickLogger::getInstance()->debug(this, std::string("Players.togglePlayerAI[").append(to_string(playerId)).append("]=").append(to_string(players.at(playerId).human)));
       model_handle.DirtyVariable("players");
 	  }
@@ -98,10 +90,11 @@ namespace std
 
       MickAssets::PlayerType newType = MickAssets::getNextPlayerType(players.at(playerId).type);
       string portaitFile = MickAssets::getPortraitBitmapFilename(playerId, newType);
-      players.at(playerId).type = newType;
+      // setPlayerGender owns the type field (+ gender mirror); portrait is a
+      // non-mirrored display field set directly on the canonical record.
+      std::GameSettings::getInstance()->setPlayerGender(playerId, newType == MickAssets::PlayerType::MALE);
       players.at(playerId).portrait = portaitFile.c_str();
 
-      std::GameSettings::getInstance()->setPlayerGender(playerId, newType == MickAssets::PlayerType::MALE);
       MickLogger::getInstance()->debug(this, std::string("Players.togglePlayerPortrait[").append(to_string(playerId)).append("]=").append(portaitFile));
       model_handle.DirtyVariable("players");
 	  }
@@ -133,7 +126,7 @@ namespace std
 
     constructor.RegisterArray<std::vector<Player>>();
 
-    constructor.Bind("players", &playersData.players);
+    constructor.Bind("players", std::GameSettings::getInstance()->getPlayers());
     constructor.BindEventCallback("toggleNumPlayers", &Players::toggleNumPlayers, &playersData);
     constructor.BindEventCallback("togglePlayerAI", &Players::togglePlayerAI, &playersData);
     constructor.BindEventCallback("togglePlayerPortrait", &Players::togglePlayerPortrait, &playersData);
@@ -164,16 +157,10 @@ namespace std
 
   void PlayersSelectBinder::mapPlayersData()
   {
-    for(int i = 0; i < GameSettings::getInstance()->getNumberOfPlayers(); i++)
-    {
-      Player p;
-      p.human = (i == 0);
-      p.id = i;
-      p.team = i;
-      p.type = (i % 2 == 0) ? MickAssets::PlayerType::MALE : MickAssets::PlayerType::FEMALE;
-      p.portrait = MickAssets::getPortraitBitmapFilename(i, p.type);
-      playersData.players.push_back(p);
-    }
+    // No-op: the canonical GameSettings model (which playersData.players now
+    // references) is already seeded with default Player records by the
+    // GameSettings constructor, and persists menu intent across games. Seeding
+    // here would duplicate those entries.
   }
 
   void PlayersSelectBinder::mapControllersData()
@@ -236,11 +223,13 @@ namespace std
 
   Player* PlayersSelectBinder::attachPlayerToController(int playerIndex, int controllerId)
   {
-    Player &player = playersData.players[playerIndex];
+    Player &player = playersData.players.at(playerIndex);
     if(! player.human && player.attachedControllerId == -1 && player.attachedKeyboardId == -1)
     {
-      player.attachedControllerId = controllerId;
-      player.human = true;
+      // Route through the canonical setters so the human-flip also re-syncs the
+      // playerAIs mirror (setPlayerController alone does not touch the mirrors).
+      std::GameSettings::getInstance()->setPlayerController(playerIndex, controllerId);
+      std::GameSettings::getInstance()->setPlayerAI(playerIndex, false); // -> human
       string imageFilename = string("gamecontroller").append(to_string(controllerId+1)).append("-ready.png");
       controllersData.getControllerFromIndex(controllerId)->imageSrc = imageFilename.c_str();
       MickLogger::getInstance()->debug(nullptr, string("attachPlayerToController: playerIndex ").append(to_string(playerIndex)).append(" setting to image: ").append(imageFilename));
@@ -259,8 +248,10 @@ namespace std
     Player *p = getPlayerAttachedToController(controllerId);
     if(p)
     {
-      p->attachedControllerId = -1;
-      p->human = false;
+      // p->id == canonical index. Route through setters so the human-flip back
+      // to AI also re-syncs the playerAIs mirror.
+      std::GameSettings::getInstance()->setPlayerController(p->id, -1);
+      std::GameSettings::getInstance()->setPlayerAI(p->id, true); // -> AI
       controllersData.getControllerFromIndex(controllerId)->imageSrc = "gamecontroller-join.png";
     }
   }

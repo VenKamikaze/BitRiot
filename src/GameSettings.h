@@ -13,6 +13,7 @@
 #include <vector>
 #include "Map.h"
 #include "MickLogger.h"
+#include "PlayerSetupStruct.h"
 
 namespace std
 {
@@ -66,27 +67,36 @@ class GameSettings
       return mapHeight;
     }
 
-    inline void setNumberOfPlayers(int allPlayers)
+    // Canonical model accessors. m_players is the single source of truth for
+    // per-player setup; genders/playerAIs are derived mirrors kept in sync by
+    // syncMirrors() so existing pointer-returning accessors stay valid.
+    inline std::vector<Player>* getPlayers()
     {
-      if(MIN_PLAYERS <= allPlayers && allPlayers <= MAX_PLAYERS)
-      {
-        numPlayers = allPlayers;
-        genders.resize(allPlayers+1);
-        playerAIs.resize(allPlayers, true);
-      }
+      return &m_players;
     }
+    inline Player* getPlayer(int playerIndex)
+    {
+      return &m_players.at(playerIndex);
+    }
+
+    // These mutate the canonical model and re-derive the mirrors. Out-of-line
+    // in the .cpp because they build Player records / iterate.
+    void setNumberOfPlayers(int allPlayers);
+    void setPlayerGender(int playerIndex, bool isMale);
+    void setPlayerAI(int playerIndex, bool isAI);
+
+    inline void setPlayerController(int playerIndex, int controllerId)
+    {
+      m_players.at(playerIndex).attachedControllerId = controllerId;
+    }
+    inline void setPlayerKeyboard(int playerIndex, int keyboardSetIndex)
+    {
+      m_players.at(playerIndex).attachedKeyboardId = keyboardSetIndex;
+    }
+
     inline void setBlockSpawnPercentage(int blockSpawnPercentage)
     {
       this->blockPercentage = blockSpawnPercentage;
-    }
-    inline void setPlayerGender(int playerIndex, bool isMale)
-    {
-      genders.at(playerIndex) = isMale;
-    }
-    inline void setPlayerAI(int playerIndex, bool isAI)
-    {
-      std::MickLogger::getInstance()->debug(this, std::string("setPlayerAI(").append(std::to_string(playerIndex)).append(",").append(std::to_string(isAI)).append(")"));
-      playerAIs.at(playerIndex) = isAI;
     }
 
     inline GAME_STATE getGameState()
@@ -109,10 +119,16 @@ class GameSettings
 
   private:
     ~GameSettings();
+    // Rewrites the genders/playerAIs mirror vectors from the canonical
+    // m_players. Call after any mutation of m_players.
+    void syncMirrors();
+
     GAME_STATE gameState;
 
     int numPlayers = 4;
     int blockPercentage = 55;
+    // Canonical per-player setup. Genders/playerAIs below are derived mirrors.
+    std::vector<Player> m_players;
     std::vector<bool> genders;
     std::vector<bool> playerAIs;
 
