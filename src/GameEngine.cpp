@@ -311,6 +311,17 @@ void GameEngine::initPlayerCharacters(unsigned int numPlayers, std::vector<bool>
     }
     m_pPlayers.at(i - 1) = m_pEntityManager->getPlayerPointer(i);
 
+    // Phase 2.3: seed the live entity from the canonical menu-intent model.
+    // Entities are 1-based (uniqueID == i); the canonical model is 0-based, so
+    // player i maps to getPlayer(i - 1). For keyboard-only play this writes the
+    // default -1 (no-op); the menu controller-join choice only becomes visible
+    // here once a gamepad is attached. NOTE: until 2.4 switches InputHandler to
+    // keyboard-by-id, a controller player is still non-AI so setPointers also
+    // pops a keyset for them -> they respond to both pad and keyboard. Benign
+    // (distinct key sets, no collision); 2.4 closes it.
+    Player* setup = GameSettings::getInstance()->getPlayer(i - 1);
+    m_pPlayers.at(i - 1)->attachedController = setup->attachedControllerId;
+
     // set image filename with "extension"
     stringstream ss;
     ss << "assets/bitmaps/player" << i;
