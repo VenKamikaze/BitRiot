@@ -29,19 +29,55 @@ void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerC
   m_action2Down.clear();
   m_spawnSelection.clear();
   m_keyMap.clear();
-  // The InputHandler is a singleton reused across games, so the key-set pool
-  // must be rebuilt each game. Without this, a previous game empties
-  // m_availableKeySets and .front()/.erase() below are undefined behaviour on
-  // the second "Play again", corrupting keyboard assignments.
+  // The InputHandler is a singleton reused across games, so the fixed key-set
+  // table must be rebuilt each game (see Phase 1). Phase 2.4: m_availableKeySets
+  // is now an indexable [0..N) lookup of the four fixed sets, no longer a
+  // consume-on-assign pool.
   m_availableKeySets.clear();
   setAvailableKeys();
+
+  std::GameSettings * settings = std::GameSettings::getInstance();
+
   for(const auto& player: playerCharacters)
   {
-    m_keyMap[player->getID()] = m_availableKeySets.front();
-    m_availableKeySets.erase(m_availableKeySets.begin());
-    m_action1Down.insert(std::pair<int, bool>(player->getID(), false));
-    m_action2Down.insert(std::pair<int, bool>(player->getID(), false));
-    m_spawnSelection.insert(std::pair<int, EntityType>(player->getID(), BLOCK));
+    const int id = player->getID();        // 1-based entity id (m_keyMap key)
+    const int canonicalIndex = id - 1;     // 0-based canonical model index
+
+    m_action1Down.insert(std::pair<int, bool>(id, false));
+    m_action2Down.insert(std::pair<int, bool>(id, false));
+    m_spawnSelection.insert(std::pair<int, EntityType>(id, BLOCK));
+
+    // Keyboard sets go only to human players without a controller: AI players
+    // are never driven by the keyboard, and controller players use the pad.
+    if(player->isControlledByAI() || player->attachedController != -1)
+    {
+      continue;
+    }
+
+    // Phase 2.4: assign the keyboard set by the stored attachedKeyboardId
+    // (0-based index into the four fixed sets) instead of popping a pool.
+    Player * setup = settings->getPlayer(canonicalIndex);
+    int keyboardSetIndex = setup->attachedKeyboardId;
+
+    // Mandatory default seeding: a human keyboard player with no stored set
+    // gets a deterministic set by player index, written back into the canonical
+    // model so it stays authoritative (and idempotent across "Play again").
+    // Without this, keyboard-only play (the common case) has no key map.
+    if(keyboardSetIndex < 0)
+    {
+      keyboardSetIndex = canonicalIndex;
+      settings->setPlayerKeyboard(canonicalIndex, keyboardSetIndex);
+    }
+
+    if(keyboardSetIndex >= 0 && keyboardSetIndex < (int) m_availableKeySets.size())
+    {
+      m_keyMap[id] = m_availableKeySets.at(keyboardSetIndex);
+    }
+    else
+    {
+      MickLogger::getInstance()->debug(this, string("setPointers: player ").append(to_string(id))
+        .append(" has out-of-range keyboard set index ").append(to_string(keyboardSetIndex)).append(" - no keys assigned"));
+    }
   }
 }
 
@@ -138,7 +174,11 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
   {
     for(const auto& player : p_players)
     {
-      if ((!player) || (!player->isAlive()) || (player->isControlledByAI()) )
+      // Skip AI players and controller players: only human keyboard players are
+      // driven here. The attachedController check closes the Phase 2.3
+      // intermediate state where a controller player (still non-AI) would
+      // otherwise respond to both the pad and a keyboard set.
+      if ((!player) || (!player->isAlive()) || (player->isControlledByAI()) || (player->attachedController != -1))
       {
         continue;
       }

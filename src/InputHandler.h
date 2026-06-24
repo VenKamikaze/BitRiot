@@ -48,7 +48,7 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
   
   private:
     void setAvailableKeys();
-    vector<array<KEY, NUM_ACTION_BUTTONS>> m_availableKeySets; // pop from here as we add human players, recreate on new InputHandler.
+    vector<array<KEY, NUM_ACTION_BUTTONS>> m_availableKeySets; // fixed table of key sets, indexed by attachedKeyboardId (rebuilt each game).
 };
 
 
