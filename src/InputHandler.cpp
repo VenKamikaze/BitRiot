@@ -29,6 +29,9 @@ void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerC
   m_action2Down.clear();
   m_spawnSelection.clear();
   m_keyMap.clear();
+  // Phase 2.7: each game starts with no in-progress join selectors. The
+  // InfoPanel is recreated per game so its indicators reset alongside.
+  m_pendingJoins.clear();
   // The InputHandler is a singleton reused across games, so the fixed key-set
   // table must be rebuilt each game (see Phase 1). Phase 2.4: m_availableKeySets
   // is now an indexable [0..N) lookup of the four fixed sets, no longer a
@@ -136,20 +139,283 @@ shared_ptr<PlayerCharacterEntity> InputHandler::getPlayerAttachedToController(in
   return nullptr;
 }
 
-shared_ptr<PlayerCharacterEntity> InputHandler::attachNewControllerToPlayer(int controllerId)
+shared_ptr<PlayerCharacterEntity> InputHandler::findPlayerByTeam(int team)
 {
-  for (int i = p_players.size()-1; i >= 0; i--)
+  // Player vector is 0-based; entity team is the 1-based slot (see setPointers).
+  int idx = team - 1;
+  if (idx >= 0 && idx < (int) p_players.size())
   {
-    shared_ptr<PlayerCharacterEntity> player = p_players.at(i);
-    if(player && player->isAlive() && player->attachedController == -1)
-    {
-      player->attachedController=controllerId;
-      player->m_controlledByAI=false; // FIXME duplication as we already have a playerAI flag in gamesettings...
-      MickLogger::getInstance()->debug(this, string("Attaching controller to player: ").append(to_string(i)));
-      return player;
-    }
+    return p_players.at(idx);
   }
   return nullptr;
+}
+
+// Take over the chosen 1-based slot with a controller (Phase 2.7). Live entity
+// only - NOT the canonical model (GameSettings), which is the menu seed the next
+// round re-seeds from, so a mid-game hot-join must not persist into "Play again".
+void InputHandler::takeOverSlotWithController(int team, int controllerId)
+{
+  shared_ptr<PlayerCharacterEntity> player = findPlayerByTeam(team);
+  if (player)
+  {
+    player->attachedController = controllerId;
+    player->m_controlledByAI = false; // FIXME duplication as we already have a playerAI flag in gamesettings...
+    MickLogger::getInstance()->debug(this, string("Controller ").append(to_string(controllerId))
+      .append(" took over player slot: ").append(to_string(team)));
+  }
+}
+
+// Take over the chosen 1-based slot with a keyboard set (Phase 2.7). Giving the
+// (ex-AI) entity a keyMap entry is what makes it respond to that keyboard set;
+// processKeyboardInput then drives it like any other human keyboard player. The
+// action1/action2/spawn maps already hold an entry for every entity (seeded for
+// all players, AI included, in setPointers). Live entity only - see above.
+void InputHandler::takeOverSlotWithKeyboard(int team, int keyboardSetIndex)
+{
+  shared_ptr<PlayerCharacterEntity> player = findPlayerByTeam(team);
+  if (player && keyboardSetIndex >= 0 && keyboardSetIndex < (int) m_availableKeySets.size())
+  {
+    player->attachedController = -1;
+    player->m_controlledByAI = false;
+    m_keyMap[player->getID()] = m_availableKeySets.at(keyboardSetIndex);
+    MickLogger::getInstance()->debug(this, string("Keyboard set ").append(to_string(keyboardSetIndex))
+      .append(" took over player slot: ").append(to_string(team)));
+  }
+}
+
+int InputHandler::findPendingJoinIndex(bool isController, int deviceId)
+{
+  for (int i = 0; i < (int) m_pendingJoins.size(); i++)
+  {
+    if (m_pendingJoins.at(i).isController == isController && m_pendingJoins.at(i).deviceId == deviceId)
+    {
+      return i;
+    }
+  }
+  return -1;
+}
+
+// 1-based slots of players that can still be taken over: alive, AI-controlled,
+// no controller attached, and not already highlighted by a different joiner.
+// The joiner at excludePendingIndex keeps its own current target in the list.
+vector<int> InputHandler::getTakeableSlots(int excludePendingIndex)
+{
+  vector<int> slots;
+  for (const auto& player : p_players)
+  {
+    if (!player || !player->isAlive() || !player->isControlledByAI() || player->attachedController != -1)
+    {
+      continue;
+    }
+    int team = player->getTeam();
+
+    bool targetedByOther = false;
+    for (int i = 0; i < (int) m_pendingJoins.size(); i++)
+    {
+      if (i != excludePendingIndex && m_pendingJoins.at(i).targetSlot == team)
+      {
+        targetedByOther = true;
+        break;
+      }
+    }
+    if (!targetedByOther)
+    {
+      slots.push_back(team);
+    }
+  }
+  return slots;
+}
+
+bool InputHandler::openJoin(bool isController, int deviceId)
+{
+  vector<int> slots = getTakeableSlots(-1);
+  if (slots.empty())
+  {
+    // Nothing to take over (no alive AI). Still consume the trigger so it does
+    // not leak into gameplay; the selector simply does not appear.
+    return true;
+  }
+
+  PendingJoin pj;
+  pj.isController = isController;
+  pj.deviceId = deviceId;
+  pj.targetSlot = slots.front();
+  m_pendingJoins.push_back(pj);
+
+  p_infoPanel->setJoinIndicator(pj.targetSlot, InfoPanel::JOIN_NOTREADY);
+  MickLogger::getInstance()->debug(this, string("Join selector opened on slot ").append(to_string(pj.targetSlot)));
+  return true;
+}
+
+void InputHandler::navigateJoin(int pendingIndex, int direction)
+{
+  if (pendingIndex < 0 || pendingIndex >= (int) m_pendingJoins.size())
+  {
+    return;
+  }
+  PendingJoin& pj = m_pendingJoins.at(pendingIndex);
+
+  vector<int> slots = getTakeableSlots(pendingIndex);
+  if (slots.empty())
+  {
+    return;
+  }
+
+  // find the current target's position (default to the first if it has gone)
+  int current = 0;
+  for (int i = 0; i < (int) slots.size(); i++)
+  {
+    if (slots.at(i) == pj.targetSlot)
+    {
+      current = i;
+      break;
+    }
+  }
+  int next = ((current + direction) % (int) slots.size() + (int) slots.size()) % (int) slots.size();
+  int newSlot = slots.at(next);
+  if (newSlot != pj.targetSlot)
+  {
+    p_infoPanel->setJoinIndicator(pj.targetSlot, InfoPanel::JOIN_NONE);
+    pj.targetSlot = newSlot;
+    p_infoPanel->setJoinIndicator(pj.targetSlot, InfoPanel::JOIN_NOTREADY);
+  }
+}
+
+void InputHandler::confirmJoin(int pendingIndex)
+{
+  if (pendingIndex < 0 || pendingIndex >= (int) m_pendingJoins.size())
+  {
+    return;
+  }
+  PendingJoin pj = m_pendingJoins.at(pendingIndex); // copy before erase
+
+  // Re-validate: the highlighted slot may have died or been taken since the
+  // selector opened. getTakeableSlots(pendingIndex) keeps pj's own target if
+  // it is still eligible.
+  vector<int> slots = getTakeableSlots(pendingIndex);
+  bool stillTakeable = false;
+  for (int s : slots)
+  {
+    if (s == pj.targetSlot) { stillTakeable = true; break; }
+  }
+
+  if (stillTakeable)
+  {
+    if (pj.isController)
+    {
+      takeOverSlotWithController(pj.targetSlot, pj.deviceId);
+    }
+    else
+    {
+      takeOverSlotWithKeyboard(pj.targetSlot, pj.deviceId);
+    }
+    p_infoPanel->setJoinIndicator(pj.targetSlot, InfoPanel::JOIN_READY);
+  }
+  else
+  {
+    // target no longer valid - drop the indicator, no takeover
+    p_infoPanel->setJoinIndicator(pj.targetSlot, InfoPanel::JOIN_NONE);
+  }
+
+  m_pendingJoins.erase(m_pendingJoins.begin() + pendingIndex);
+}
+
+void InputHandler::cancelJoin(int pendingIndex)
+{
+  if (pendingIndex < 0 || pendingIndex >= (int) m_pendingJoins.size())
+  {
+    return;
+  }
+  p_infoPanel->setJoinIndicator(m_pendingJoins.at(pendingIndex).targetSlot, InfoPanel::JOIN_NONE);
+  m_pendingJoins.erase(m_pendingJoins.begin() + pendingIndex);
+}
+
+bool InputHandler::processJoinKeyboardEvent(KEY k)
+{
+  ButtonName button;
+  int setIndex = getKeyboardSetForKey(k, button);
+  if (setIndex < 0)
+  {
+    return false; // not one of our keyboard-set keys
+  }
+
+  int pendingIndex = findPendingJoinIndex(false, setIndex);
+
+  if (button == ACTION1_KEY)
+  {
+    if (pendingIndex >= 0)
+    {
+      confirmJoin(pendingIndex);
+      return true;
+    }
+    if (!isKeyboardSetBound(setIndex))
+    {
+      return openJoin(false, setIndex);
+    }
+    return false; // set drives a live player -> let gameplay handle it
+  }
+
+  if (button == ACTION2_KEY)
+  {
+    if (pendingIndex >= 0)
+    {
+      cancelJoin(pendingIndex);
+      return true;
+    }
+    return false;
+  }
+
+  if (button == UP_KEY || button == DOWN_KEY)
+  {
+    if (pendingIndex >= 0)
+    {
+      navigateJoin(pendingIndex, (button == UP_KEY) ? -1 : +1);
+      return true;
+    }
+    return false;
+  }
+
+  return false; // left/right do nothing in the selector
+}
+
+bool InputHandler::processJoinControllerEvent(int controllerId, Uint8 button)
+{
+  int pendingIndex = findPendingJoinIndex(true, controllerId);
+
+  if (button == SDL_CONTROLLER_BUTTON_START)
+  {
+    if (pendingIndex >= 0)
+    {
+      confirmJoin(pendingIndex);
+    }
+    else
+    {
+      openJoin(true, controllerId);
+    }
+    return true;
+  }
+
+  // Action button cancels (mirrors keyboard action2).
+  if (button == SDL_CONTROLLER_BUTTON_B || button == SDL_CONTROLLER_BUTTON_Y)
+  {
+    if (pendingIndex >= 0)
+    {
+      cancelJoin(pendingIndex);
+    }
+    return true;
+  }
+
+  if (button == SDL_CONTROLLER_BUTTON_DPAD_UP || button == SDL_CONTROLLER_BUTTON_DPAD_DOWN)
+  {
+    if (pendingIndex >= 0)
+    {
+      navigateJoin(pendingIndex, (button == SDL_CONTROLLER_BUTTON_DPAD_UP) ? -1 : +1);
+    }
+    return true;
+  }
+
+  // Any other button from an unbound controller is eaten (it has no player yet).
+  return true;
 }
 
 void InputHandler::detachController(int controllerId)
@@ -160,6 +426,24 @@ void InputHandler::detachController(int controllerId)
     {
       MickLogger::getInstance()->debug(this, string("Detached controller from player: ").append(to_string(player->getTeam())));
       player->attachedController = -1;
+      // Phase 2.6: on unplug, only a player WITHOUT a keymap should revert to CPU.
+      // A controller take-over (now via the Phase 2.7 selector, AI-only) leaves
+      // the entity with no m_keyMap entry, so on unplug it would be
+      // attachedController==-1 AND non-AI -> not skipped by processKeyboardInput
+      // but has no keys -> frozen. Reverting it to AI lets
+      // PlayerCharacterEntity::update() resume the bot (self-heals empty
+      // goal/instruction lists; keys off the flag at PlayerCharacterEntity.cpp:68).
+      // The m_keyMap-presence guard is kept as defensive code: 2.7 takes over AI
+      // slots only (getTakeableSlots filters isControlledByAI), so a controller can
+      // no longer hijack a human keyboard player - but should that ever change, a
+      // keyboard player (which HAS a keymap) must keep its keys, not become a bot.
+      // We deliberately do NOT write the canonical model (GameSettings): it is the
+      // menu seed the next round re-seeds from, so a mid-game hot-join must not
+      // persist into the next "Play again".
+      if (m_keyMap.find(player->getID()) == m_keyMap.end())
+      {
+        player->m_controlledByAI = true;
+      }
     }
   }
 }
@@ -349,6 +633,44 @@ int InputHandler::getKeyboardSetForActionKey(KEY k)
     }
   }
   return -1;
+}
+
+int InputHandler::getKeyboardSetForKey(KEY k, ButtonName & outButton)
+{
+  // Like getKeyboardSetForActionKey but matches ANY button in a set and reports
+  // which button it was - used by the Phase 2.7 join selector to map a raw
+  // keydown to (set, button) without touching the per-game m_keyMap.
+  for (int i = 0; i < (int) m_availableKeySets.size(); i++)
+  {
+    for (int b = UP_KEY; b <= ACTION2_KEY; b++)
+    {
+      if (m_availableKeySets.at(i)[b] == k)
+      {
+        outButton = (ButtonName) b;
+        return i;
+      }
+    }
+  }
+  return -1;
+}
+
+bool InputHandler::isKeyboardSetBound(int setIndex)
+{
+  // A set is "bound" if some live player is driven by it. The ACTION1 key is
+  // unique per set, so it identifies the set within m_keyMap.
+  if (setIndex < 0 || setIndex >= (int) m_availableKeySets.size())
+  {
+    return false;
+  }
+  KEY action1 = m_availableKeySets.at(setIndex)[ACTION1_KEY];
+  for (const auto& entry : m_keyMap)
+  {
+    if (entry.second[ACTION1_KEY] == action1)
+    {
+      return true;
+    }
+  }
+  return false;
 }
 
 int InputHandler::getPlayerIdForAction1Button(KEY k)

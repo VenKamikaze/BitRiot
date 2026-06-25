@@ -153,17 +153,20 @@ void GameRunningSDLInput::setControllerInput(SDL_JoystickID joystickID, Uint8 bu
   shared_ptr<PlayerCharacterEntity> attachedPlayer = m_pInputHandler->getPlayerAttachedToController(joystickID);
   if (!attachedPlayer)
   {
-    GameRunningSDLInput::rumbleController(joystickID, 0.75f, 300);
-    attachedPlayer = m_pInputHandler->attachNewControllerToPlayer(joystickID);
-    if (attachedPlayer)
+    // Phase 2.7: an unbound controller no longer auto-takes-over on any button.
+    // START opens (then confirms) a CPU-takeover selector; dpad navigates; B/Y
+    // cancels. Button presses are routed on press only and always eaten (this
+    // controller has no player yet).
+    bool pressed = (state == SDL_PRESSED);
+    if (pressed)
     {
-      MickLogger::getInstance()->info(this, std::string("Attached controller: ").append(to_string(joystickID)).append(" to player: ").append(to_string(attachedPlayer->getTeam())));
+      if (button == SDL_CONTROLLER_BUTTON_START)
+      {
+        GameRunningSDLInput::rumbleController(joystickID, 0.75f, 300);
+      }
+      m_pInputHandler->processJoinControllerEvent(joystickID, button);
     }
-    else
-    {
-      MickLogger::getInstance()->warn(this, std::string("No free players to attach controller: ").append(to_string(joystickID)) );
-    }
-    return; //eat attaching button press
+    return; //eat presses from a controller with no player
   }
 
   if(! attachedPlayer->isAlive())
@@ -230,11 +233,24 @@ void GameRunningSDLInput::updateEventQueue()
         quitEvent = true;
       }
 
+      auto keyIt = reverseTranslateMap->find(event.key.keysym.sym);
+      if (keyIt == reverseTranslateMap->end())
+      {
+        continue; // unmapped key - nothing to do
+      }
       MickEvent myevent;
       myevent.type = A_KEY_IS_DOWN;
-      myevent.key  = reverseTranslateMap->find(event.key.keysym.sym)->second;
+      myevent.key  = keyIt->second;
       //printf("keydown: %d, sdl: %d\n", myevent.key, event.key.keysym.sym);
       //newEvents.push(myevent);
+
+      // Phase 2.7: a discrete (non-repeat) keydown may drive the mid-game join
+      // selector. Guard on repeat == 0 so a held key does not run open->confirm
+      // by itself. If consumed, do not feed it to gameplay key state.
+      if (event.key.repeat == 0 && m_pInputHandler->processJoinKeyboardEvent(myevent.key))
+      {
+        continue;
+      }
 
       setKeyState(myevent.key, true);
     }

@@ -196,21 +196,114 @@ User chose to **centralise**: `GameSettings` owns one authoritative
      **Static-analysis fix — controller path, NOT verified (no gamepad). Flag for
      user gamepad test.** Kept separate from the keyboard change so they test
      independently.
-6. **2.6 Hot-join write-back (MID-GAME).** `attachNewControllerToPlayer` /
+6. **2.6 Hot-join write-back (MID-GAME). ✅ DONE (build-verified, NOT committed,
+   gamepad-gated for user test).** `attachNewControllerToPlayer` /
    `detachController` (`InputHandler.cpp`) update the live entity when a
-   **controller is plugged in/out during play**; also update the canonical model
-   to hold the invariant for the current round (does NOT persist to next "Play
-   again" — see decision below). Needs a **gamepad** to verify.
-7. **2.7 Mid-game CPU-takeover selector (deferred; pairs with 2.6, NOT 2.5).**
-   When a player hot-joins **mid-game**, they need a **selector indicator** to
-   choose *which CPU player* to take over from — rather than the current implicit
-   highest-index-free-alive scan (`attachNewControllerToPlayer`,
-   `InputHandler.cpp`). **Considered bundling with 2.5 and decided against:** 2.5
-   is a *player-select menu* feature (pre-game, RmlUi); 2.7 is an *in-game* HUD
-   selector on the live entities during play — different screen, different code
-   path, different render layer. 2.7's natural sibling is **2.6** (both mid-game
-   hot-join, both need a gamepad). Keep 2.7 as its own item, scheduled with/after
-   2.6. Net-new UX, not required for the centralise refactor.
+   **controller is plugged in/out during play**.
+   - **CORRECTION to the original plan (advisor-confirmed, discriminating check
+     done): 2.6 does NOT write the canonical model (`GameSettings`).** The plan's
+     "also update the canonical model" wording assumed a live-model-vs-menu-seed
+     split that does not exist in code — there is ONE model (`GameSettings`) and it
+     IS the menu seed. `resetGame()` re-reads device/AI state out of it every "Play
+     again" (`getPlayerAIs()` L53 → `initPlayerCharacters`; `getPlayer(i-1)->`
+     `attachedControllerId` L322-323). Grep confirmed **no reader of the per-player
+     device/AI fields during `GAME_RUNNING`** (only `resetGame`/`initPlayerCharacters`
+     /`setPointers` + the pre-game menu binder). So writing `GameSettings` mid-round
+     has zero current-round benefit and only causes persistence — which violates the
+     recorded no-persist decision. The live `PlayerCharacterEntity` list IS the
+     current-round model and the existing attach code already mutates it.
+   - **The actual 2.6 fix is on the live entity:** `detachController` previously
+     only set `attachedController = -1`, leaving a taken-over CPU entity `-1` AND
+     non-AI → `processKeyboardInput` stops skipping it but it has no keymap →
+     **player freezes** instead of reverting to CPU. Fix: on unplug, revert to AI
+     (`m_controlledByAI = true`) **only when the entity has no `m_keyMap` entry.**
+   - **Why conditional (regression the unconditional version caused):**
+     `attachNewControllerToPlayer` only checks `attachedController == -1`, NOT
+     `isControlledByAI()`, so when no CPU slot is free a plugged controller
+     **hijacks a human keyboard player** (highest-index alive). E.g. P1 WASD + P2
+     arrows, plug pad → grabs P2; unplug → an *unconditional* AI-revert would turn
+     P2 into a bot (regression — pre-2.6 P2 kept its keymap and resumed keyboard).
+     `m_keyMap` presence is the correct discriminator: CPU/ menu-controller player =
+     no keymap → revert to AI (avoids freeze); hijacked human = has keymap → resume
+     keyboard. (Do NOT use `getPlayerAIs()` — it would mark the menu-controller
+     player non-AI and re-introduce the freeze.) `update()` keys off the flag at
+     `PlayerCharacterEntity.cpp:68` and self-heals empty goal/instruction lists.
+     `attachNewControllerToPlayer` is otherwise complete; annotated w/ no-persist note.
+   - **OPEN design question — RESOLVED by 2.7 (CPU-only):** "should hot-join hijack
+     a *human*, or only CPU?" 2.7's `getTakeableSlots` filters `isControlledByAI()`,
+     so takeover now targets **AI players only** — a controller can no longer
+     hijack a human keyboard player. Consequence: `detachController`'s "hijacked
+     human keeps its keymap → resume keyboard" branch is now **dead but kept as
+     defensive code** (its comment is updated to say so); the old auto-scan
+     `attachNewControllerToPlayer` it referenced is **removed**.
+   - **Gamepad repro for user:** plug a pad in mid-game → takes over highest-index
+     free alive CPU player; **unplug → that player reverts to CPU (no longer
+     freezes)**; also test the 2-human + 1-pad hijack/unplug path (P2 should resume
+     keyboard, not become a bot); finish round → "Play again" re-seeds from menu
+     intent (hot-join does NOT carry over). Build here; commit only after user
+     gamepad play-test.
+7. **2.7 Mid-game CPU-takeover selector. ✅ DONE (build + analysis-verified, NOT
+   committed). Needs user play-test (keyboard) AND gamepad play-test (controller)
+   — same verification tier as 2.4/2.6; the selector code never ran here (the
+   smoke-test stops at the RmlUi menu and there is no headless menu→game key-
+   injection harness — prior phases rightly skipped building one).** Replaces the old
+   implicit highest-index-free-alive auto-scan with an explicit on-portrait
+   selector. **Considered bundling with 2.5 and decided against:** 2.5 is a
+   *player-select menu* feature (pre-game, RmlUi); 2.7 is an *in-game* HUD
+   selector on the live entities during play — different screen/code path/render
+   layer. Sibling is **2.6** (both mid-game hot-join). Net-new UX.
+   - **Trigger / controls (advisor-confirmed, edge-triggered off discrete *-DOWN
+     events, NOT the level-polled gameplay loop):**
+     - **Open** = controller START / an UNBOUND keyboard set's ACTION1 key
+       (LCTRL/RCTRL/KP_PLUS/`[`). A `gamecontrollerX-notready.png` icon appears
+       right of a targeted AI portrait.
+     - **Navigate** = controller dpad up/down / the set's UP/DOWN keys — cycles
+       through alive AI players free to take over.
+     - **Confirm** = same trigger again (START / set ACTION1). Icon flips to
+       `gamecontrollerX-ready.png` and the device takes the character over.
+     - **Cancel** = controller B/Y / the set's ACTION2 key. Icon disappears, no
+       takeover.
+   - **Takeover mechanism (the testable crux):** `attachNewControllerToPlayer`
+     auto-scan **removed**; replaced by `takeOverSlotWithController(team,ctrlId)`
+     (sets `attachedController`+`m_controlledByAI=false`) and
+     `takeOverSlotWithKeyboard(team,setIdx)` (**sets `m_keyMap[entityId]` = the
+     joining set** + `m_controlledByAI=false` — THIS is what makes the ex-AI
+     respond to e.g. the numpad; fully testable here). The joiner controls with
+     the device they pressed. 2.6's conditional detach-revert is unchanged.
+   - **Selector state** lives in `InputHandler::m_pendingJoins` (one `PendingJoin`
+     per device → supports several joiners at once); cleared each game in
+     `setPointers`. Rendering via `InfoPanel::setJoinIndicator(team,state)` +
+     cached, IMG_Load'd, tile-scaled icons (`InfoPanel.cpp`). Input wired in
+     `GameRunningSDLInput`: KEYDOWN branch (guarded `event.key.repeat==0` so a held
+     key can't run open→confirm; consumed events skip `setKeyState` so the confirm
+     press can't leak into item-placement) and `setControllerInput` (unbound
+     controllers route to the selector and eat all presses).
+   - **Defaults taken (advisor-OK; react after seeing it):** icon number **X = the
+     targeted slot's number** (always 1..4, matches the portrait beside it);
+     **ready icon persists** for the round as a "device-controlled" badge;
+     selector state is **per-device**; **confirm re-validates** the target is
+     still alive+AI+free (handles two joiners racing one slot, or the target
+     dying mid-select).
+   - **SPEC DIVERGENCE to decide (icon position):** spec says "right hand side of
+     the **player portrait**"; it is placed at the panel's far-right top
+     (`WIDTH - TILE_WIDTH - 4`, ~4 tiles from the face), NOT immediately adjacent.
+     Reason: the cell *immediately* right of the portrait is free for an AI slot
+     **pre**-takeover (item-selection indicator is human-only), but once a human
+     takes the slot over the persistent READY badge would **collide** with that
+     new human's item indicator. Far-right dodges both that and the health bar
+     (lower row). If you prefer literal adjacency, accept the post-takeover
+     overlap (or hide the READY badge during item placement). **User to decide
+     after seeing it.**
+   - **BEHAVIOUR CHANGE to flag:** START opening the selector **replaces** the old
+     auto-attach-on-any-button (2.6) — plugging in / pressing a pad no longer
+     auto-takes-over; you must press START then choose. Handoff says that's
+     intended.
+   - **Keyboard repro (testable here):** 2 human + 2 AI game; in-game tap KP_PLUS
+     → notready icon by an AI portrait; numpad 8/5 shift target; KP_PLUS again →
+     ready icon + numpad now drives that ex-AI; KP_MINUS = cancel. Run
+     `build/BitRiot`, NOT stale `target/`.
+   - **Controller repro (user, gamepad):** START opens, dpad navigates, START
+     confirms, B/Y cancels.
 
 ### Decided: hot-join does NOT persist into next "Play again" (confirmed)
 A mid-game controller hot-join does **not** carry into the next round.
@@ -244,6 +337,26 @@ menu-seed.
 - `GameSettings`: `MAX_PLAYERS=4` (TODO 6), `MIN_PLAYERS=2`,
   `GAME_STATE {GAME_INIT, MENU_RUNNING, GAME_RUNNING, GAME_QUIT}`.
 - `GameSettings`/most classes live in `namespace std` (legacy quirk).
+
+## Side fix this session: health-bar "stray line" artifact
+**✅ DONE (build-verified, NOT committed, needs VISUAL confirmation).**
+- **FALSE START (reverted):** first attempt moved the **under-player** map bar
+  (`InfoPanel.cpp`, `DRAW_HEALTH_UNDER_PLAYERS` block) from `entityY + TILE_WIDTH
+  + 2` up to the bottom of the player's own tile. **User said wrong area + the
+  shift was unwanted → fully REVERTED** to the original `+ Map::TILE_WIDTH + 2`.
+  The TODO's TILE_WIDTH-vs-HEIGHT hypothesis is still disproven (both == 32), but
+  that bar was NOT the artifact.
+- **REAL FIX (`Map::renderTileTo`, Map.cpp):** the artifact is in the **right-hand
+  InfoPanel** (static portrait health bars). Panel BG tiles are drawn by
+  `renderTileTo`, which blits only a **31×31** source (`TILE_WIDTH-1`, a workaround
+  for a garbage bitmap edge) and — unlike `Map::render` (Map.cpp:166) — did **not**
+  black-fill the cell first. The InfoPanel reuses `m_surface` across frames, so the
+  1px seam between every panel tile retained **stale content (prior-frame health-bar
+  colour)** → coloured "stray lines between the tile sprites". Fix: black-fill the
+  exact `TILE_WIDTH × TILE_HEIGHT` cell before the blit (mirrors `Map::render`).
+  Scope: `renderTileTo` has exactly ONE caller (`InfoPanel::drawBGTiles`), so the
+  change touches only the panel; the map uses the separate `Map::render` (already
+  black-fills). **Needs user visual confirmation in the right panel.**
 
 ## Out of scope (separate follow-ups, not now)
 - P1 focus-highlight (blue border) — RmlUi focus/CSS issue in

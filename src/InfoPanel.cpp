@@ -1,6 +1,7 @@
 
 #include "InfoPanel.h"
 #include "GameSettings.h"
+#include <SDL2/SDL_image.h>
 #include <cstddef>
 
 static const unsigned int TRANSPARENT_COLOR = (255 << 8) + (255 << 0);
@@ -56,6 +57,50 @@ InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, std::vector<bool>* ma
   {
     SDL_SetColorKey( m_faceSurfaces[i], SDL_TRUE, SDL_MapRGB(m_faceSurfaces[i]->format, 0, 255, 255) );
   }
+
+  // Phase 2.7: load the per-slot join indicator icons (scaled to one tile so
+  // they sit neatly beside the portrait). Icon number matches the slot it
+  // labels, so it always reads as "the controller on this player".
+  for (int i = 0; i < GameSettings::MAX_PLAYERS; i++)
+  {
+    m_joinIndicator[i] = JOIN_NONE;
+    m_joinIconNotReady[i] = nullptr;
+    m_joinIconReady[i] = nullptr;
+  }
+  for (int i = 0; i < numPlayers; i++)
+  {
+    stringstream notReady, ready;
+    notReady << "assets/menu/gamecontroller" << (i + 1) << "-notready.png";
+    ready    << "assets/menu/gamecontroller" << (i + 1) << "-ready.png";
+    m_joinIconNotReady[i] = loadScaledIcon(notReady.str().c_str(), Map::TILE_WIDTH, Map::TILE_HEIGHT);
+    m_joinIconReady[i]    = loadScaledIcon(ready.str().c_str(),    Map::TILE_WIDTH, Map::TILE_HEIGHT);
+  }
+}
+
+// Load a (PNG) icon and scale it once into a cached surface that alpha-blends
+// onto the panel. Returns nullptr on failure (rendering then simply skips it).
+SDL_Surface* InfoPanel::loadScaledIcon(const char* path, int w, int h)
+{
+  SDL_Surface* original = IMG_Load(path);
+  if (!original)
+  {
+    return nullptr;
+  }
+
+  SDL_Surface* scaled = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_RGBA32);
+  if (!scaled)
+  {
+    SDL_FreeSurface(original);
+    return nullptr;
+  }
+
+  // Copy raw RGBA while scaling, then enable blending for the cached surface so
+  // the transparent background blends over the panel at blit time.
+  SDL_SetSurfaceBlendMode(original, SDL_BLENDMODE_NONE);
+  SDL_BlitScaled(original, nullptr, scaled, nullptr);
+  SDL_SetSurfaceBlendMode(scaled, SDL_BLENDMODE_BLEND);
+  SDL_FreeSurface(original);
+  return scaled;
 }
 
 InfoPanel::~InfoPanel()
@@ -71,6 +116,19 @@ InfoPanel::~InfoPanel()
     {
       SDL_FreeSurface(m_faceSurfaces[i]);
       m_faceSurfaces[i] = nullptr;
+    }
+  }
+  for (int i = 0; i < GameSettings::MAX_PLAYERS; i++)
+  {
+    if (m_joinIconNotReady[i])
+    {
+      SDL_FreeSurface(m_joinIconNotReady[i]);
+      m_joinIconNotReady[i] = nullptr;
+    }
+    if (m_joinIconReady[i])
+    {
+      SDL_FreeSurface(m_joinIconReady[i]);
+      m_joinIconReady[i] = nullptr;
     }
   }
 }
@@ -96,6 +154,15 @@ void InfoPanel::setSelection(EntityType type, int team)
   {
     // ok to set array
     playerSelection[team] = type;
+  }
+}
+
+void InfoPanel::setJoinIndicator(int team, JoinState state)
+{
+  team--; // 1-based slot -> 0-based array index (see setSelection)
+  if (0 <= team && team < GameSettings::MAX_PLAYERS)
+  {
+    m_joinIndicator[team] = state;
   }
 }
 
@@ -180,13 +247,6 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
     }
 
 
-    // TODO fix graphical artifact: each player's under-character health bar
-    // leaves a small stray line between the drawn square (tile) sprites - a thin
-    // line appears for every health bar, sometimes offset from the player into
-    // open tiles. Suspect the Y math below uses Map::TILE_WIDTH (and offsetY
-    // scaled by TILE_WIDTH/2) instead of Map::TILE_HEIGHT, so the 3px bar is
-    // mispositioned vertically when TILE_WIDTH != TILE_HEIGHT; also check the
-    // full-tile-width black background rect isn't bleeding onto adjacent tiles.
     if (DRAW_HEALTH_UNDER_PLAYERS)
     {
       if (m_playerPointers.at(i) && m_playerPointers.at(i)->isAlive())
@@ -234,7 +294,22 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
       }
     }
 
-
+    // Phase 2.7: draw the join indicator icon to the right of the portrait.
+    // The health bar lives on the lower portrait row and the item-selection
+    // indicator at the inner column, so the far-right of the top row is clear.
+    if (m_joinIndicator[i] != JOIN_NONE)
+    {
+      SDL_Surface* icon = (m_joinIndicator[i] == JOIN_READY) ? m_joinIconReady[i] : m_joinIconNotReady[i];
+      if (icon)
+      {
+        SDL_Rect iconRect;
+        iconRect.x = WIDTH - Map::TILE_WIDTH - 4;
+        iconRect.y = yOffset + (Map::TILE_HEIGHT / 2);
+        iconRect.w = icon->w;
+        iconRect.h = icon->h;
+        SDL_BlitSurface(icon, nullptr, m_surface, &iconRect);
+      }
+    }
 
   }
 
