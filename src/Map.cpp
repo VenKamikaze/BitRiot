@@ -188,6 +188,18 @@ void Map::renderTileTo(SDL_Surface* dest, int atX, int atY, StaticTile tileType)
   destRect.y = atY;
   destRect.h = atY + TILE_HEIGHT;
 
+  // Clean the full tile cell to black before blitting. The blit below copies only
+  // a 31x31 source (TILE_WIDTH-1 x TILE_HEIGHT-1) - a deliberate workaround for a
+  // garbage edge in the tile bitmaps (see Map::render) - so it leaves a 1px seam
+  // on the right/bottom of every tile. The InfoPanel reuses its m_surface across
+  // frames (drawBGTiles redraws tiles each frame but only over the 31px area), so
+  // without this fill those seams retain stale content - e.g. a previous frame's
+  // health-bar colour - and show as coloured "stray lines" between the panel's
+  // tile sprites. Map::render already does the equivalent fill; renderTileTo did
+  // not. Fill the exact cell (TILE_WIDTH x TILE_HEIGHT) so the seam is clean black.
+  SDL_Rect bgRect = { atX, atY, Map::TILE_WIDTH, Map::TILE_HEIGHT };
+  SDL_FillRect(dest, &bgRect, 0);
+
   //dest->Blt(&destRect, m_staticSurface[tileType], &sourceRect, DDBLT_WAIT, NULL);
   //dest->Draw(&destRect, m_staticSurface[tileType], &sourceRect, DDBLT_WAIT, NULL);
   SDL_BlitSurface(m_staticSurface[tileType], &sourceRect, dest, &destRect);
