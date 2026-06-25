@@ -180,6 +180,13 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
     }
 
 
+    // TODO fix graphical artifact: each player's under-character health bar
+    // leaves a small stray line between the drawn square (tile) sprites - a thin
+    // line appears for every health bar, sometimes offset from the player into
+    // open tiles. Suspect the Y math below uses Map::TILE_WIDTH (and offsetY
+    // scaled by TILE_WIDTH/2) instead of Map::TILE_HEIGHT, so the 3px bar is
+    // mispositioned vertically when TILE_WIDTH != TILE_HEIGHT; also check the
+    // full-tile-width black background rect isn't bleeding onto adjacent tiles.
     if (DRAW_HEALTH_UNDER_PLAYERS)
     {
       if (m_playerPointers.at(i) && m_playerPointers.at(i)->isAlive())
