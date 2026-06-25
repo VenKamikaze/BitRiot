@@ -82,18 +82,14 @@ User chose to **centralise**: `GameSettings` owns one authoritative
   gamepad-gated).
 - **2.4/crash-fix/selection-fix real-play: CONFIRMED OK by user (2026-06-25).**
   That outstanding confirmation is now closed.
-- **2.1 + 2.2 were DONE and PLAY-TESTED in the real menu+game** (keyboard). A
-  4-player game with a chosen human slot + AI rest works; in-game faces and AI
-  flags match menu intent; **"Play again" re-seeds correctly and keyboard still
-  works on the 2nd+ match.** No commits made (per process constraints).
 - **GOTCHA that cost a session:** there is a **stale `target/BitRiot`** binary in
   the tree with the OLD input bugs. The live build is **`build/BitRiot`** (built
   via the command below). Always run/verify against `build/` — a game-2
   "keyboard dead" report turned out to be the old `target/` binary, not a real
   regression. Consider deleting/ignoring `target/` to avoid the trap.
-- **Next up: 2.3** (seed device fields at GAME_INIT). Controller paths (2.3
-  controller seed, 2.5 keyboard-join, 2.6 hot-join, and the `+1` bug below) still
-  need a **gamepad** the dev machine lacks — flag for user testing.
+- **Gamepad-pending items** (dev machine has no pad — flag for user testing):
+  the 2.3 controller seed, the 2.5 `+1` controller-join fix, and all of 2.6
+  (mid-game hot-join). Keyboard paths verify here.
 - Throwaway headless unit test for the 2.1 setter logic lived at
   `build/test_gamesettings.cpp` (28/28 passed; deleted — `build/` is regenerable).
   Re-creatable by linking CMake's objects minus `main.cpp.o` if needed again.
@@ -261,52 +257,40 @@ menu-seed.
   in-game control matches; hot-join take-over of a CPU player still works.
 - Build each phase before declaring done.
 
-## Suggested first action next session (starting 2.5)
-**0. Outstanding real-play confirmation (does NOT block starting 2.5 — 2.5 is
-independent menu code).** The 2.4 keyboard-by-id work + its crash fix (`ca8577f`)
-+ the selection-indicator fix (`52aa54c`) are build-verified + startup
-smoke-tested only; they need one real-play pass to close: play as player 3
-(numpad) → during play, hold action+direction and confirm the item-selection
-icon shows on the **green** player's row → finish the round → **Play again** →
-expect no crash AND numpad still drives green. If a regression surfaces, fix
-before layering 2.5 on top.
+## Suggested first action next session (starting 2.6)
+**Everything through 2.5 is committed and play-tested (keyboard paths).** 2.6 is
+mid-game controller hot-join, so it is **gamepad-gated** — the dev machine has no
+pad. Build + analysis here; flag for the user to play-test with a controller.
 
 **1. Orient (read these first):**
-- `EventHandlerPlayerSelect::processSDLEvent` (`EventHandlerPlayerSelect.cpp`):
-  the `SDL_KEYDOWN` case (~L291) and the commented keyboard stub (~L305-313).
-- `processControllerJoin` / `EventHandlerPlayerSelect.cpp:91` — the working
-  controller-join analogue and the `+1` off-by-one to resolve.
+- `InputHandler::attachNewControllerToPlayer` / `detachController`
+  (`InputHandler.cpp`) — the live hot-join/-leave paths that mutate the
+  `PlayerCharacterEntity` (attachedController, m_controlledByAI) when a pad is
+  plugged in/out **during play**. Currently they touch only the live entity, not
+  the canonical model.
+- `GameRunningSDLInput::setControllerInput` / `updateEventQueue`
+  (`GameRunningSDLInput.cpp`) — where controller add/remove events drive the
+  above during a running game.
 - `PlayersSelectBinder::attachPlayerToController` /
-  `getPlayerForControllerId` (`PlayersSelectBinder.cpp`) — the canonical-model
-  write path the keyboard-join should mirror (add the keyboard equivalent,
-  e.g. `attachPlayerToKeyboard` writing `attachedKeyboardId` via
-  `GameSettings::setPlayerKeyboard`, flipping the slot to human).
-- `InputHandler::getPlayerIdForAction1Button/Action2Button` and
-  `getPlayerIdForKey` — how a native key maps to a keyboard set (the stub
-  references the never-built `MickSDLInput::getPlayerIdForAction1Key`).
+  `attachPlayerToKeyboard` (`PlayersSelectBinder.cpp`) — the canonical-model
+  write path (`GameSettings::setPlayerController`/`setPlayerKeyboard` +
+  `setPlayerAI`); 2.6 should update the model the same way, **for the current
+  round only**.
 
-**2. Build 2.5:** in the `SDL_KEYDOWN` handler, when a keypress matches a
-keyboard set not yet bound to a slot, bind it to a free slot: write
-`attachedKeyboardId` through the GameSettings setters (single write path, mirrors
-stay synced) and flip that slot to human — mirroring controller-join. Then fix
-the `+1` at L91 (gamepad-gated; see step 5 entry — don't blind-fix).
+**2. Build 2.6:** have `attachNewControllerToPlayer`/`detachController` also write
+the canonical model (so the player↔device invariant holds for the live round),
+routing through the GameSettings setters. **Decision already recorded (do NOT
+re-litigate): a mid-game hot-join does NOT persist into the next "Play again"** —
+GameSettings reflects menu intent and the game re-seeds each round, so 2.6 updates
+the live model for the current round only. Index per-player vectors by
+`getTeam()-1` (the 1-based slot), never `getID()` (the non-resetting global entity
+id — see Key facts).
 
 **3. Decision recorded:** 2.7 (mid-game CPU-takeover selector) is **NOT** bundled
-with 2.5 — different screen (in-game HUD vs player-select menu) and code path. It
-pairs with 2.6. See the 2.5/2.7 phase entries above.
+with 2.6's plumbing — it is the in-game HUD selector layered on top, its own item.
+Schedule with/after 2.6. See the 2.6/2.7 phase entries above.
 
-**4. Verify:** keyboard-join keypress→bind is partly testable headless against
-`build/BitRiot`; the `+1` fix and controller-join need user gamepad testing.
-Build after each change.
-
-Then start **2.5**: implement the stubbed keyboard-join in
-`EventHandlerPlayerSelect` (stub ~L256, ~L305-313) — a keypress binds a free
-keyboard set to a free slot and writes `attachedKeyboardId` (the field 2.4 now
-consumes), routing through the GameSettings setters. **Also resolve the `+1`
-off-by-one** at `EventHandlerPlayerSelect.cpp:91` here (see 2.2 note — it now
-throws via `.at()` on the last column; fix depends on controller-join
-semantics). Controller-join + the `+1` fix need a **gamepad** to verify; the
-keyboard-join keypress path may be partly headless-testable.
-
-Note: 2.1/2.2 are uncommitted. Decide with the user whether to commit the
-2.1+2.2 work (now play-tested) before building 2.3 on top, or keep accumulating.
+**4. Verify:** 2.6 needs a **gamepad** — build here, then hand the user a repro
+(plug a pad in mid-game → it takes over a CPU player; unplug → that player reverts
+to CPU; finish round → "Play again" re-seeds from menu intent, hot-join does NOT
+carry over). Build after each change; commit only once the user has play-tested.
