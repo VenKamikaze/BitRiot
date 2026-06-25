@@ -42,6 +42,7 @@ class GameRunningSDLInput : public MickBaseInput, public std::enable_shared_from
     std::shared_ptr<InputHandler> getInputHandler();
 
     int getPlayerIdForKey(SDL_Keycode key);
+    int getKeyboardSetForActionKey(SDL_Keycode key); // keyboard-set index for an action keypress, or -1 (player-select keyboard-join)
 
     void updateEventQueue();
 

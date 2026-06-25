@@ -335,6 +335,22 @@ int InputHandler::getPlayerIdForKey(KEY k)
 }
 
 
+int InputHandler::getKeyboardSetForActionKey(KEY k)
+{
+  // Searches the fixed key-set table (always 4 sets, built in the ctor and
+  // rebuilt each game by setPointers), NOT m_keyMap which is only populated at
+  // game start. This lets the player-select menu identify which keyboard set an
+  // action keypress (e.g. LCTRL/RCTRL/KP_PLUS/[) belongs to, before any game.
+  for(int i = 0; i < (int) m_availableKeySets.size(); i++)
+  {
+    if(m_availableKeySets.at(i)[ACTION1_KEY] == k || m_availableKeySets.at(i)[ACTION2_KEY] == k)
+    {
+      return i;
+    }
+  }
+  return -1;
+}
+
 int InputHandler::getPlayerIdForAction1Button(KEY k)
 {
   for(auto iter = m_keyMap.begin(); iter != m_keyMap.end(); ++iter)

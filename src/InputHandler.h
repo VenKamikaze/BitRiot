@@ -26,6 +26,7 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
     int getPlayerIdForKey(KEY k); // get the playerId associated with this key.
     int getPlayerIdForAction1Button(KEY k); // get player id for action1 button press, or -1 if no match
     int getPlayerIdForAction2Button(KEY k); // get player id for action1 button press, or -1 if no match
+    int getKeyboardSetForActionKey(KEY k); // get the fixed keyboard-set index whose action1/action2 key is k, or -1. Used by the player-select menu (keyboard-join); searches the fixed m_availableKeySets table, not the per-game m_keyMap.
 
     shared_ptr<PlayerCharacterEntity> getPlayerAttachedToController(int controllerId);
     shared_ptr<PlayerCharacterEntity> attachNewControllerToPlayer(int controllerId);

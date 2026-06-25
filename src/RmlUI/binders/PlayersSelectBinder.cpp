@@ -243,6 +243,33 @@ namespace std
     return nullptr; // no free slots ?!
   }
 
+  Player* PlayersSelectBinder::attachPlayerToKeyboard(int keyboardSetId)
+  {
+    // Phase 2.5: keyboard-join. Bind keyboard set N directly to player slot N
+    // (not first-free): this matches the InputHandler default-seeding convention
+    // (set index == slot index) so the menu and the game can't pick different
+    // slots for the same set, and gives the traditional WASD=P1 / arrows=P2 /
+    // numpad=P3 / IJKL=P4 mapping. A slot already owning a controller or another
+    // keyboard set is left untouched.
+    if(keyboardSetId < 0 || keyboardSetId >= (int) playersData.players.size())
+    {
+      return nullptr;
+    }
+    Player &player = playersData.players.at(keyboardSetId);
+    if(player.attachedControllerId == -1 && player.attachedKeyboardId == -1)
+    {
+      // Route through the canonical setters so the human-flip re-syncs the
+      // playerAIs mirror (mirrors attachPlayerToController's write path).
+      std::GameSettings::getInstance()->setPlayerKeyboard(keyboardSetId, keyboardSetId);
+      std::GameSettings::getInstance()->setPlayerAI(keyboardSetId, false); // -> human
+      MickLogger::getInstance()->debug(nullptr, string("attachPlayerToKeyboard: bound keyboard set ").append(to_string(keyboardSetId)).append(" to player slot ").append(to_string(keyboardSetId)));
+      Rml::GetContext("default")->GetDataModel("playersSelect").GetModelHandle().DirtyVariable("players");
+      return &player;
+    }
+    MickLogger::getInstance()->debug(nullptr, string("attachPlayerToKeyboard: player slot ").append(to_string(keyboardSetId)).append(" already has a device; ignoring keyboard-join"));
+    return nullptr;
+  }
+
   void PlayersSelectBinder::detachPlayerFromController(int controllerId)
   {
     Player *p = getPlayerAttachedToController(controllerId);

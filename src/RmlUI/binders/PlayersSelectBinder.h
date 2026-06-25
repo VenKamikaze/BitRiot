@@ -45,6 +45,7 @@ namespace std
       static void controllerDeviceRemoved(int controllerId);
       static Player* getPlayerAttachedToController(int controllerId);
       static Player* attachPlayerToController(int playerIndex, int controllerId);
+      static Player* attachPlayerToKeyboard(int keyboardSetId); // bind keyboard set N to player slot N (keyboard-join); returns the player or nullptr if the slot is taken / out of range
       static void detachPlayerFromController(int controllerId);
     private:
       bool setupDataBinding(Rml::Context* context);

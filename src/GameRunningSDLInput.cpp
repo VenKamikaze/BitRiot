@@ -50,6 +50,19 @@ int GameRunningSDLInput::getPlayerIdForKey(SDL_Keycode key)
   return m_pInputHandler->getPlayerIdForKey(reverseTranslateMap->find(key)->second);
 }
 
+int GameRunningSDLInput::getKeyboardSetForActionKey(SDL_Keycode key)
+{
+  // Translate the native SDL keycode to our KEY enum, then ask the InputHandler
+  // which fixed keyboard set it belongs to. Guard the lookup (unlike
+  // getPlayerIdForKey above): the menu can receive any key, not just mapped ones.
+  auto it = reverseTranslateMap->find(key);
+  if(it == reverseTranslateMap->end())
+  {
+    return -1;
+  }
+  return m_pInputHandler->getKeyboardSetForActionKey(it->second);
+}
+
 void GameRunningSDLInput::resetInputEvents()
 {
   keysCurrentlyDown.clear();

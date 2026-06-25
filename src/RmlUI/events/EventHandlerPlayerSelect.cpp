@@ -88,7 +88,13 @@ void EventHandlerPlayerSelect::controllerJoin(SDL_JoystickID controllerId)
 					MickRmlUIElementUtil::setFocusElementForController(joinElement, controllerId, true);
 				  joinElement->Click(); // set to Human
 					MickRmlUIElementUtil::setPlayerChosenForControllerId(joinElement, controllerId);
-					PlayersSelectBinder::attachPlayerToController(atoi(el->GetAttribute("playerId")->Get<Rml::String>().c_str()) + 1, controllerId);
+					// The article column's playerId attribute is already the 0-based
+					// canonical player index that attachPlayerToController expects, and
+					// the free-column scan above skips the default-human slot 0 (it
+					// carries the "selected" class). The previous "+ 1" therefore bound
+					// one slot past the column found and threw .at(4) on the last column.
+					// NOTE: controller path - static-analysis fix, needs a gamepad pass.
+					PlayersSelectBinder::attachPlayerToController(atoi(el->GetAttribute("playerId")->Get<Rml::String>().c_str()), controllerId);
 					break;
 				}
 			}
@@ -302,15 +308,21 @@ bool EventHandlerPlayerSelect::processSDLEvent(SDL_Event& event)
 					event.key.keysym.sym == SDLK_DOWN ? MickRmlUIElementUtil::focusNextElement(context) : MickRmlUIElementUtil::focusPrevElement(context);
 					break;
 				}
-				/*else if(MickSDLInput::getInstance()->getPlayerIdForAction1Key(nativeKey) > -1)
+				else
 				{
-          int playerId = MickSDLInput::getInstance()->getPlayerIdForAction1Key(nativeKey);
+					// Phase 2.5 keyboard-join: an action key from one of the fixed
+					// keyboard sets (e.g. LCTRL/RCTRL/KP_PLUS/[) binds that set to its
+					// player slot and flips the slot to Human (mirrors controllerJoin).
+					// The set's action keys are not menu-nav keys, so non-matches fall
+					// through to ProcessKeyDown unchanged.
+					int keyboardSet = GameRunningSDLInput::getInstance()->getKeyboardSetForActionKey(event.key.keysym.sym);
+					if(keyboardSet > -1)
+					{
+						MickLogger::getInstance()->debug(this, std::string("EHPS keyboard-join for set:").append(std::to_string(keyboardSet)));
+						PlayersSelectBinder::attachPlayerToKeyboard(keyboardSet);
+						break;
+					}
 				}
-				else if(MickSDLInput::getInstance()->getPlayerIdForAction2Key(nativeKey) > -1)
-				{
-					int playerId = MickSDLInput::getInstance()->getPlayerIdForAction2Key(nativeKey);
-				}
-        */
 				context->ProcessKeyDown(systemInterface->TranslateKey(event.key.keysym.sym), systemInterface->GetKeyModifiers());
 				break;
 		}
