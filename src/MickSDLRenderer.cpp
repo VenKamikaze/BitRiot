@@ -10,6 +10,7 @@
 #include "SDL.h"
 #include "SDL_render.h"
 #include "SDL_video.h"
+#include <algorithm>
 
 
 using namespace std;
@@ -99,7 +100,31 @@ void MickSDLRenderer::init(WindowMetadata windowMetadata)
 void MickSDLRenderer::pushCpuBufferToHardwareBuffer()
 {
   SDL_UpdateTexture(getPrimaryTextureHandle(), nullptr, getSurfaceBackBufferHandle()->pixels, getSurfaceBackBufferHandle()->pitch);
+  // Clear to black so letterbox/pillarbox bars are black (default draw colour can
+  // be left over from elsewhere).
+  SDL_SetRenderDrawColor(getRendererHandle(), 0, 0, 0, 255);
   SDL_RenderClear(getRendererHandle());
+
+  if (m_preserveAspect)
+  {
+    int outW = 0, outH = 0;
+    SDL_GetRendererOutputSize(getRendererHandle(), &outW, &outH);
+    int contentW = getSurfaceBackBufferHandle()->w;
+    int contentH = getSurfaceBackBufferHandle()->h;
+    if (outW > 0 && outH > 0 && contentW > 0 && contentH > 0)
+    {
+      // Fit the content within the window, preserving aspect ratio, centred.
+      double scale = std::min((double) outW / contentW, (double) outH / contentH);
+      SDL_Rect dest;
+      dest.w = (int) (contentW * scale);
+      dest.h = (int) (contentH * scale);
+      dest.x = (outW - dest.w) / 2;
+      dest.y = (outH - dest.h) / 2;
+      SDL_RenderCopy(getRendererHandle(), getPrimaryTextureHandle(), nullptr, &dest);
+      return;
+    }
+  }
+
   SDL_RenderCopy(getRendererHandle(), getPrimaryTextureHandle(), nullptr, nullptr);
 }
 

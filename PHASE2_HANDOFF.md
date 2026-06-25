@@ -407,7 +407,44 @@ menu-seed.
 Queued by the user (2026-06-25), in order. These start once the input-refactor
 phases (through 2.8) settle. Carry forward the same process constraints (separate
 branch, no commit until asked, build each step).
-1. **Fullscreen toggle while a game is running**, via the **'Options'** menu.
+1. **Fullscreen + Preserve-aspect-ratio toggles**, via the **'Options'** menu.
+   ✅ DONE + PLAY-TESTED OK (user, 2026-06-25) + COMMITTED.
+   - **Scope decided with user: Options-menu toggles only.** The Options menu is
+     reachable from the main menu / between rounds, NOT during active gameplay
+     (there is no in-game pause/options overlay). A true mid-gameplay toggle was
+     deferred as a separate, larger follow-up.
+   - **Fullscreen design: the live SDL window is the single source of truth** —
+     `EventHandlerOptions::isFullscreen()` reads `SDL_GetWindowFlags() &
+     SDL_WINDOW_FULLSCREEN_DESKTOP`; no `GameSettings` field added. Avoids the
+     `initFlags` static-init-order trap and makes the existing `-f` CLI flag
+     auto-reflected in the label. Toggle via `SDL_SetWindowFullscreen`. No
+     texture/surface recreation — the renderer scales the back buffer via
+     `SDL_RenderCopy` and the RmlUi menu rescales in
+     `MenuSDLRenderer::handleWindowResize`.
+   - **Preserve-aspect design (IMPORTANT — the obvious approach is WRONG):**
+     `SDL_RenderSetLogicalSize` does NOT work here — it transforms the **entire
+     SDL_Renderer**, which the RmlUi menu shares, so enabling it pushed the menu
+     **off-screen** (zoomed to top-left). Confirmed in play-test. The menu renders
+     via `context->Render()` (its own GL path); the game renders via
+     `MickSDLRenderer::pushCpuBufferToHardwareBuffer` (`SDL_RenderCopy` of the
+     texture). So the letterbox is applied **only to the game blit**: a `bool
+     m_preserveAspect` flag on `MickSDLRenderer` (`setPreserveAspect`/
+     `isPreserveAspect`) makes `pushCpuBufferToHardwareBuffer` compute a centred,
+     aspect-preserving dest `SDL_Rect` (scale = min(outW/contentW, outH/contentH),
+     content size = back-buffer w/h) and clear the surround to black. Flag default
+     **false** (= stretch, matching prior behaviour). The renderer owns the flag
+     (it owns the blit); `EventHandlerOptions` just toggles it.
+   - **Touch points:** `assets/menu/gameoptions.rml` (`fullscreen` tabindex 4 +
+     `preserveaspect` tabindex 5 buttons, Back bumped to 6); `EventHandlerOptions.{h,cpp}`
+     (`toggleFullscreen`/`isFullscreen`, `togglePreserveAspect`/`isPreserveAspect`;
+     label appends in `OptionsPageInit`; dispatch on `value=="fullscreen"` /
+     `"preserveaspect"` — the `fullscreen` branch reused the dead duplicate
+     `blocktilepercent` branch); `MickSDLRenderer.{h,cpp}` (the flag + letterbox
+     logic in `pushCpuBufferToHardwareBuffer`, `#include <algorithm>` for `std::min`).
+   - **Repro:** Options → Fullscreen On ⇒ window fullscreen + label "On"; Preserve
+     Aspect On ⇒ game keeps proportions with black bars AND the menu stays fully
+     visible; Preserve Aspect Off ⇒ game stretches to fill. `-f` launch ⇒ Options
+     shows "Fullscreen: On" on first load.
 2. **Map width & height toggles** in the **'Options'** menu — let the user expand
    the map size *before* a game starts. (`GameSettings::getMapHeight()` /
    `getMapWidth()` already feed `InfoPanel`/`Map` sizing; the toggles must drive

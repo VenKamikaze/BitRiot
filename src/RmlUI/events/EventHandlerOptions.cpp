@@ -38,6 +38,7 @@
 #include "EventManager.h"
 #include "GameSettings.h"
 #include "MickLogger.h"
+#include "MickSDLRenderer.h"
 #include "RmlUI/MickRmlUIElementUtil.h"
 
 EventHandlerOptions::EventHandlerOptions()
@@ -64,6 +65,55 @@ void EventHandlerOptions::changeBlockTilePercentage(Rml::Event* event)
   if (event)
   {
     MickRmlUIElementUtil::replaceEndStringInTextNode(event->GetTargetElement(), std::to_string(blockSpawnPct));
+  }
+}
+
+// The live SDL window is the single source of truth for fullscreen state.
+bool EventHandlerOptions::isFullscreen()
+{
+  SDL_Window* window = MickSDLRenderer::getInstance()->getWindowHandle();
+  return window != nullptr && (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN_DESKTOP);
+}
+
+void EventHandlerOptions::toggleFullscreen(Rml::Event* event)
+{
+  SDL_Window* window = MickSDLRenderer::getInstance()->getWindowHandle();
+  if (window == nullptr)
+    return;
+
+  bool goFullscreen = !isFullscreen();
+  // FULLSCREEN_DESKTOP keeps the desktop resolution; the renderer scales the
+  // back buffer to the window via SDL_RenderCopy, so no texture recreation is
+  // needed. The RmlUi menu rescales itself in MenuSDLRenderer::handleWindowResize.
+  if (SDL_SetWindowFullscreen(window, goFullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0) != 0)
+  {
+    std::MickLogger::getInstance()->error(this, std::string("SDL_SetWindowFullscreen failed: ").append(SDL_GetError()));
+    return;
+  }
+
+  if (event)
+  {
+    MickRmlUIElementUtil::replaceEndStringInTextNode(event->GetTargetElement(), goFullscreen ? "On" : "Off");
+  }
+}
+
+// The renderer holds the authoritative preserve-aspect flag (it owns the game
+// blit). We cannot use SDL_RenderSetLogicalSize because that would also transform
+// the RmlUi menu (which shares the SDL_Renderer) and push it off-screen; instead
+// the renderer letterboxes only the game's RenderCopy dest rect.
+bool EventHandlerOptions::isPreserveAspect()
+{
+  return MickSDLRenderer::getInstance()->isPreserveAspect();
+}
+
+void EventHandlerOptions::togglePreserveAspect(Rml::Event* event)
+{
+  bool preserve = !isPreserveAspect();
+  MickSDLRenderer::getInstance()->setPreserveAspect(preserve);
+
+  if (event)
+  {
+    MickRmlUIElementUtil::replaceEndStringInTextNode(event->GetTargetElement(), preserve ? "On" : "Off");
   }
 }
 
@@ -95,6 +145,14 @@ void EventHandlerOptions::OptionsPageInit(Rml::ElementDocument* bodyElement)
       {
         MickRmlUIElementUtil::appendTextToTextNode(element, mapHeight);
       }
+      else if (element->GetId() == "fullscreen")
+      {
+        MickRmlUIElementUtil::appendTextToTextNode(element, isFullscreen() ? "On" : "Off");
+      }
+      else if (element->GetId() == "preserveaspect")
+      {
+        MickRmlUIElementUtil::appendTextToTextNode(element, isPreserveAspect() ? "On" : "Off");
+      }
     }
   }
 }
@@ -110,8 +168,12 @@ void EventHandlerOptions::ProcessEvent(Rml::Event& event, const Rml::String& val
   {
     changeBlockTilePercentage(&event);
   }
-  else if (value == "blocktilepercent")
+  else if (value == "fullscreen")
   {
-    changeBlockTilePercentage(&event);
+    toggleFullscreen(&event);
+  }
+  else if (value == "preserveaspect")
+  {
+    togglePreserveAspect(&event);
   }
 }

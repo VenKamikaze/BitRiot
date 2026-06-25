@@ -50,6 +50,14 @@ public:
 
 private:
 	void changeBlockTilePercentage(Rml::Event* event);
+	void toggleFullscreen(Rml::Event* event);
+	void togglePreserveAspect(Rml::Event* event);
+	// Reads the live SDL window flags (the authoritative fullscreen state) rather
+	// than caching a copy, so the label stays correct even when launched with -f.
+	bool isFullscreen();
+	// True when the renderer has a logical size set (aspect-preserving letterbox);
+	// the renderer itself is the source of truth via SDL_RenderGetLogicalSize.
+	bool isPreserveAspect();
 	void OptionsPageInit(Rml::ElementDocument* bodyElement);
 };
 
