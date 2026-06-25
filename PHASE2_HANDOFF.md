@@ -82,6 +82,13 @@ User chose to **centralise**: `GameSettings` owns one authoritative
   gamepad-gated).
 - **2.4/crash-fix/selection-fix real-play: CONFIRMED OK by user (2026-06-25).**
   That outstanding confirmation is now closed.
+- **2.8 keyboard hot-join indicator DONE + keyboard-play-tested OK (2026-06-25),
+  NOT committed.** Single recoloured keyboard asset on the InfoPanel (gray while
+  selecting → player colour on takeover + persistent badge for keyboard players).
+  **Two open follow-ups:** icon is too large (shrink, size TBD) and controller
+  hot-join should be ported to the same colour-key recolour. See step 2.8 below.
+  After 2.8 the input-refactor work pauses for the new feature roadmap (see
+  **Next up** near the end).
 - **GOTCHA that cost a session:** there is a **stale `target/BitRiot`** binary in
   the tree with the OLD input bugs. The live build is **`build/BitRiot`** (built
   via the command below). Always run/verify against `build/` — a game-2
@@ -304,6 +311,44 @@ User chose to **centralise**: `GameSettings` owns one authoritative
      `build/BitRiot`, NOT stale `target/`.
    - **Controller repro (user, gamepad):** START opens, dpad navigates, START
      confirms, B/Y cancels.
+8. **2.8 Keyboard hot-join indicator (recoloured single asset). ✅ DONE
+   (build-verified, NOT committed) + PLAY-TESTED OK for keyboard hot-join (user,
+   2026-06-25).** Adds a keyboard icon to the InfoPanel that recolours ONE source
+   asset (`assets/menu/keyboard-64w.png`, 64×35) per state. Mirrors
+   `EntityRenderer`'s colour-key idea but **adapted to a 2-tone black-on-white
+   silhouette** (the asset is NOT a highlight/base/shadow palette): source
+   luminance → alpha (white = the transparency "colour key" → transparent, black
+   → opaque target colour, anti-alias greys → partial), and every pixel is
+   painted the target colour. Method `InfoPanel::makeKeyboardIcon(r,g,b,maxW,maxH)`
+   (static) + `makeTeamKeyboardIcon(slot)`.
+   - **States:** light gray `(200,200,200)` while a keyboard hot-join is
+     *selecting* a slot (`JOIN_NOTREADY`); the slot's **team colour** once taken
+     over (`JOIN_READY`) — colour read from `EntityRenderer::TEAM_BASE_COLOR[slot+1]`
+     (same table the sprites use). Also a **persistent player-coloured badge for
+     players who start on keyboard**, set in `InputHandler::setPointers` at the
+     point the keymap is assigned (human + no controller).
+   - **Lazy team-colour build (timing trap):** `TEAM_BASE_COLOR` is zero-filled
+     until `EntityRenderer`'s ctor runs, and the InfoPanel is constructed FIRST —
+     so the team-coloured icons are built on first render, NOT in the ctor (the
+     gray icon IS ctor-built — it is colour-independent). Cached: one gray +
+     one per slot, freed in the dtor.
+   - **Device threading:** new `InfoPanel::JoinDevice {CONTROLLER, KEYBOARD}`
+     param on `setJoinIndicator`; keyboard joins pass KEYBOARD (derived from
+     `pj.isController` in openJoin/navigateJoin/confirmJoin). Controllers keep
+     their existing `gamecontrollerX-*.png` icons.
+   - **Sizing:** 64×35 (~1.85:1) gets a 2-tile-wide box, scaled proportionally
+     (→ 58×32) so it does not squash into the square 32×32 tile; right-aligned by
+     `icon->w` (`WIDTH - icon->w - 4`).
+   - **OPEN follow-ups (user-flagged 2026-06-25, fix later):**
+     - **Keyboard icon is too LARGE** — shrink it. Appropriate size TBD (user
+       unsure yet; the 2-tile box / proportional scale is the knob —
+       `makeKeyboardIcon` maxW/maxH args and the gray-icon call in the ctor +
+       `makeTeamKeyboardIcon`).
+     - **Controller hot-join should use the SAME colour-key recolour.** Today
+       controllers use static per-slot `gamecontrollerX-notready/-ready.png`.
+       Port them to the single-asset recolour (gray while selecting → player
+       colour on takeover) so both device types behave identically. Will need a
+       controller source asset analogous to `keyboard-64w.png`.
 
 ### Decided: hot-join does NOT persist into next "Play again" (confirmed)
 A mid-game controller hot-join does **not** carry into the next round.
@@ -357,6 +402,27 @@ menu-seed.
   Scope: `renderTileTo` has exactly ONE caller (`InfoPanel::drawBGTiles`), so the
   change touches only the panel; the map uses the separate `Map::render` (already
   black-fills). **Needs user visual confirmation in the right panel.**
+
+## Next up (new feature roadmap — beyond the input refactor)
+Queued by the user (2026-06-25), in order. These start once the input-refactor
+phases (through 2.8) settle. Carry forward the same process constraints (separate
+branch, no commit until asked, build each step).
+1. **Fullscreen toggle while a game is running**, via the **'Options'** menu.
+2. **Map width & height toggles** in the **'Options'** menu — let the user expand
+   the map size *before* a game starts. (`GameSettings::getMapHeight()` /
+   `getMapWidth()` already feed `InfoPanel`/`Map` sizing; the toggles must drive
+   those + the canonical model.)
+3. **6-player capability** — `GameSettings::MAX_PLAYERS` 4 → 6 (the existing
+   `// TODO 6` at the MAX_PLAYERS gotcha). The **2 extra players (5 & 6) must be
+   game-controller-only** — there is not enough room on a keyboard for more sets
+   (only 4 keyboard sets exist; see Key facts). So slots 5–6 never get a keyboard
+   set; they are controller/AI only.
+   - Needs **new character models** for players 5 & 6. The user will source them
+     later; **in the meantime RE-USE players 1 and 2's character models** for 5 & 6.
+   - Touches a lot of `[MAX_PLAYERS]`-sized arrays + the team-colour tables
+     (`EntityRenderer` has 5 team colours = `MAX_PLAYERS + 1`); expanding to 6
+     players means 7 teams there. Audit every fixed-size `[GameSettings::MAX_PLAYERS]`
+     / `NUM_TEAMS` array and the per-team colour palettes when raising the cap.
 
 ## Out of scope (separate follow-ups, not now)
 - P1 focus-highlight (blue border) — RmlUi focus/CSS issue in

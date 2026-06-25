@@ -38,7 +38,14 @@ class InfoPanel
     // READY once they have taken the character over (persists as a
     // "device-controlled" badge for the rest of the round).
     enum JoinState { JOIN_NONE, JOIN_NOTREADY, JOIN_READY };
-    void setJoinIndicator(int team, JoinState state); // team is 1-based
+
+    // Which kind of device owns the indicator. Controllers keep the existing
+    // per-slot gamecontroller PNGs; keyboards use the single recoloured
+    // keyboard asset (see makeKeyboardIcon).
+    enum JoinDevice { JOIN_DEVICE_CONTROLLER, JOIN_DEVICE_KEYBOARD };
+
+    void setJoinIndicator(int team, JoinState state,
+                          JoinDevice device = JOIN_DEVICE_CONTROLLER); // team is 1-based
 
     void renderSurfaceTo(SDL_Surface* dest, int x, int y);
 
@@ -52,8 +59,28 @@ class InfoPanel
     SDL_Surface* m_joinIconNotReady[GameSettings::MAX_PLAYERS];
     SDL_Surface* m_joinIconReady[GameSettings::MAX_PLAYERS];
     JoinState m_joinIndicator[GameSettings::MAX_PLAYERS];
+    JoinDevice m_joinDevice[GameSettings::MAX_PLAYERS];
+
+    // Keyboard indicator: one source asset recoloured per use. Mirrors
+    // EntityRenderer's colour-key idea, but the keyboard is a 2-tone
+    // black-on-white silhouette, so it is tinted by luminance->alpha (white ->
+    // transparent, black -> opaque colour) rather than swapping a 3-shade
+    // palette. Light gray while a keyboard hot-join is choosing a slot; the
+    // slot's team colour once taken over (also the persistent "human is on
+    // keyboard" badge).
+    static const char* KEYBOARD_ICON_PATH;
+    SDL_Surface* m_kbIconGray;                            // shared, state-independent
+    SDL_Surface* m_kbIconTeam[GameSettings::MAX_PLAYERS]; // per-slot, built lazily
 
     static SDL_Surface* loadScaledIcon(const char* path, int w, int h);
+
+    // Recolour the keyboard asset to (r,g,b) and scale to fit a maxW x maxH box
+    // preserving aspect ratio. Caller owns the returned surface (nullptr on
+    // failure). Static: depends only on the file and the target colour.
+    static SDL_Surface* makeKeyboardIcon(Uint8 r, Uint8 g, Uint8 b, int maxW, int maxH);
+    // Keyboard tinted to slot's team base colour (0-based slot). Read lazily so
+    // the team-colour table is populated by then (see implementation).
+    SDL_Surface* makeTeamKeyboardIcon(int slot);
 
     void drawTextGDI(const char * text, int x, int y,
                      Uint32 color, SDL_Surface* dest);

@@ -1,10 +1,15 @@
 
 #include "InfoPanel.h"
 #include "GameSettings.h"
+#include "EntityRenderer.h"
 #include <SDL2/SDL_image.h>
+#include <algorithm>
 #include <cstddef>
 
 static const unsigned int TRANSPARENT_COLOR = (255 << 8) + (255 << 0);
+
+// Single keyboard asset, recoloured at load time (see makeKeyboardIcon).
+const char* InfoPanel::KEYBOARD_ICON_PATH = "assets/menu/keyboard-64w.png";
 
 int InfoPanel::WIDTH =PANEL_TILE_WIDTH * Map::TILE_WIDTH;
 int InfoPanel::HEIGHT=13 * Map::TILE_HEIGHT; //unknown here
@@ -64,8 +69,10 @@ InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, std::vector<bool>* ma
   for (int i = 0; i < GameSettings::MAX_PLAYERS; i++)
   {
     m_joinIndicator[i] = JOIN_NONE;
+    m_joinDevice[i] = JOIN_DEVICE_CONTROLLER;
     m_joinIconNotReady[i] = nullptr;
     m_joinIconReady[i] = nullptr;
+    m_kbIconTeam[i] = nullptr;
   }
   for (int i = 0; i < numPlayers; i++)
   {
@@ -75,6 +82,14 @@ InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, std::vector<bool>* ma
     m_joinIconNotReady[i] = loadScaledIcon(notReady.str().c_str(), Map::TILE_WIDTH, Map::TILE_HEIGHT);
     m_joinIconReady[i]    = loadScaledIcon(ready.str().c_str(),    Map::TILE_WIDTH, Map::TILE_HEIGHT);
   }
+
+  // The "selecting a slot" keyboard icon is light gray and state-independent, so
+  // build it once here. The team-coloured variants are built lazily at render
+  // time: the team-colour table lives on EntityRenderer and is only filled by
+  // its constructor, which has not necessarily run yet (the InfoPanel is built
+  // before any EntityRenderer). The keyboard is ~1.85:1, so it gets a 2-tile
+  // wide box and is scaled proportionally to avoid squashing.
+  m_kbIconGray = makeKeyboardIcon(200, 200, 200, 2 * Map::TILE_WIDTH, Map::TILE_HEIGHT);
 }
 
 // Load a (PNG) icon and scale it once into a cached surface that alpha-blends
@@ -101,6 +116,81 @@ SDL_Surface* InfoPanel::loadScaledIcon(const char* path, int w, int h)
   SDL_SetSurfaceBlendMode(scaled, SDL_BLENDMODE_BLEND);
   SDL_FreeSurface(original);
   return scaled;
+}
+
+// Recolour the single keyboard asset to (r,g,b). The asset is a black-on-white
+// silhouette (black frame + key grid, white keys/background), so rather than
+// swapping a 3-shade palette like EntityRenderer, treat source luminance as an
+// alpha mask: white (the transparency "colour key") -> fully transparent, black
+// -> fully opaque target colour, anti-alias greys -> partial alpha. Every pixel
+// is painted the target colour, giving a clean tinted keyboard lattice that
+// alpha-blends onto the panel. Scaled proportionally to fit maxW x maxH.
+SDL_Surface* InfoPanel::makeKeyboardIcon(Uint8 r, Uint8 g, Uint8 b, int maxW, int maxH)
+{
+  SDL_Surface* original = IMG_Load(KEYBOARD_ICON_PATH);
+  if (!original)
+  {
+    return nullptr;
+  }
+
+  SDL_Surface* src = SDL_ConvertSurfaceFormat(original, SDL_PIXELFORMAT_RGBA32, 0);
+  SDL_FreeSurface(original);
+  if (!src)
+  {
+    return nullptr;
+  }
+
+  if (SDL_MUSTLOCK(src))
+  {
+    SDL_LockSurface(src);
+  }
+  for (int y = 0; y < src->h; ++y)
+  {
+    for (int x = 0; x < src->w; ++x)
+    {
+      Uint8 pr, pg, pb, pa;
+      SDL_GetRGBA(SDLHelper::GetPixel(src, x, y), src->format, &pr, &pg, &pb, &pa);
+      int luminance = (pr * 30 + pg * 59 + pb * 11) / 100; // 0 (black) .. 255 (white)
+      Uint8 alpha = (Uint8)(255 - luminance);
+      if (pa < alpha)
+      {
+        alpha = pa; // never less transparent than the source pixel already was
+      }
+      SDLHelper::PutPixel(src, x, y, SDL_MapRGBA(src->format, r, g, b, alpha));
+    }
+  }
+  if (SDL_MUSTLOCK(src))
+  {
+    SDL_UnlockSurface(src);
+  }
+
+  double scale = std::min((double) maxW / src->w, (double) maxH / src->h);
+  int w = (int)(src->w * scale);
+  int h = (int)(src->h * scale);
+
+  SDL_Surface* scaled = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_RGBA32);
+  if (!scaled)
+  {
+    SDL_FreeSurface(src);
+    return nullptr;
+  }
+  SDL_SetSurfaceBlendMode(src, SDL_BLENDMODE_NONE);
+  SDL_BlitScaled(src, nullptr, scaled, nullptr);
+  SDL_SetSurfaceBlendMode(scaled, SDL_BLENDMODE_BLEND);
+  SDL_FreeSurface(src);
+  return scaled;
+}
+
+// Keyboard tinted to the team base colour of a 0-based slot. The colour comes
+// from the same table the player sprites use (EntityRenderer::TEAM_BASE_COLOR,
+// indexed by team = slot + 1, matching renderSurfaceTo's er->render(..., i + 1)).
+// That table is filled lazily by EntityRenderer's constructor, so this is only
+// ever called at render time, by when at least one EntityRenderer exists.
+SDL_Surface* InfoPanel::makeTeamKeyboardIcon(int slot)
+{
+  Uint8 r, g, b;
+  SDL_GetRGB(EntityRenderer::TEAM_BASE_COLOR[slot + 1], m_surface->format, &r, &g, &b);
+  return makeKeyboardIcon(r, g, b, 2 * Map::TILE_WIDTH, Map::TILE_HEIGHT);
 }
 
 InfoPanel::~InfoPanel()
@@ -130,6 +220,16 @@ InfoPanel::~InfoPanel()
       SDL_FreeSurface(m_joinIconReady[i]);
       m_joinIconReady[i] = nullptr;
     }
+    if (m_kbIconTeam[i])
+    {
+      SDL_FreeSurface(m_kbIconTeam[i]);
+      m_kbIconTeam[i] = nullptr;
+    }
+  }
+  if (m_kbIconGray)
+  {
+    SDL_FreeSurface(m_kbIconGray);
+    m_kbIconGray = nullptr;
   }
 }
 
@@ -157,12 +257,13 @@ void InfoPanel::setSelection(EntityType type, int team)
   }
 }
 
-void InfoPanel::setJoinIndicator(int team, JoinState state)
+void InfoPanel::setJoinIndicator(int team, JoinState state, JoinDevice device)
 {
   team--; // 1-based slot -> 0-based array index (see setSelection)
   if (0 <= team && team < GameSettings::MAX_PLAYERS)
   {
     m_joinIndicator[team] = state;
+    m_joinDevice[team] = device;
   }
 }
 
@@ -299,11 +400,33 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
     // indicator at the inner column, so the far-right of the top row is clear.
     if (m_joinIndicator[i] != JOIN_NONE)
     {
-      SDL_Surface* icon = (m_joinIndicator[i] == JOIN_READY) ? m_joinIconReady[i] : m_joinIconNotReady[i];
+      SDL_Surface* icon = nullptr;
+      if (m_joinDevice[i] == JOIN_DEVICE_KEYBOARD)
+      {
+        // Light gray while choosing a slot; team colour once taken over (also
+        // the persistent badge for a human already on keyboard). The team icon
+        // is built on first use - see makeTeamKeyboardIcon for the timing.
+        if (m_joinIndicator[i] == JOIN_READY)
+        {
+          if (!m_kbIconTeam[i])
+          {
+            m_kbIconTeam[i] = makeTeamKeyboardIcon(i);
+          }
+          icon = m_kbIconTeam[i];
+        }
+        else
+        {
+          icon = m_kbIconGray;
+        }
+      }
+      else
+      {
+        icon = (m_joinIndicator[i] == JOIN_READY) ? m_joinIconReady[i] : m_joinIconNotReady[i];
+      }
       if (icon)
       {
         SDL_Rect iconRect;
-        iconRect.x = WIDTH - Map::TILE_WIDTH - 4;
+        iconRect.x = WIDTH - icon->w - 4; // right-aligned; keyboard icon is wider than a tile
         iconRect.y = yOffset + (Map::TILE_HEIGHT / 2);
         iconRect.w = icon->w;
         iconRect.h = icon->h;

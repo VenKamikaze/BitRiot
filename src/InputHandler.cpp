@@ -80,6 +80,15 @@ void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerC
     if(keyboardSetIndex >= 0 && keyboardSetIndex < (int) m_availableKeySets.size())
     {
       m_keyMap[id] = m_availableKeySets.at(keyboardSetIndex);
+      // This slot reached here only if it is a human with no controller, i.e. a
+      // keyboard player. Show a persistent (player-coloured) keyboard badge so
+      // the InfoPanel indicates who is on keyboard - same JOIN_READY state a
+      // mid-game keyboard takeover ends in.
+      if (p_infoPanel)
+      {
+        p_infoPanel->setJoinIndicator(player->getTeam(), InfoPanel::JOIN_READY,
+          InfoPanel::JOIN_DEVICE_KEYBOARD);
+      }
     }
     else
     {
@@ -242,7 +251,8 @@ bool InputHandler::openJoin(bool isController, int deviceId)
   pj.targetSlot = slots.front();
   m_pendingJoins.push_back(pj);
 
-  p_infoPanel->setJoinIndicator(pj.targetSlot, InfoPanel::JOIN_NOTREADY);
+  p_infoPanel->setJoinIndicator(pj.targetSlot, InfoPanel::JOIN_NOTREADY,
+    pj.isController ? InfoPanel::JOIN_DEVICE_CONTROLLER : InfoPanel::JOIN_DEVICE_KEYBOARD);
   MickLogger::getInstance()->debug(this, string("Join selector opened on slot ").append(to_string(pj.targetSlot)));
   return true;
 }
@@ -277,7 +287,8 @@ void InputHandler::navigateJoin(int pendingIndex, int direction)
   {
     p_infoPanel->setJoinIndicator(pj.targetSlot, InfoPanel::JOIN_NONE);
     pj.targetSlot = newSlot;
-    p_infoPanel->setJoinIndicator(pj.targetSlot, InfoPanel::JOIN_NOTREADY);
+    p_infoPanel->setJoinIndicator(pj.targetSlot, InfoPanel::JOIN_NOTREADY,
+      pj.isController ? InfoPanel::JOIN_DEVICE_CONTROLLER : InfoPanel::JOIN_DEVICE_KEYBOARD);
   }
 }
 
@@ -309,7 +320,8 @@ void InputHandler::confirmJoin(int pendingIndex)
     {
       takeOverSlotWithKeyboard(pj.targetSlot, pj.deviceId);
     }
-    p_infoPanel->setJoinIndicator(pj.targetSlot, InfoPanel::JOIN_READY);
+    p_infoPanel->setJoinIndicator(pj.targetSlot, InfoPanel::JOIN_READY,
+      pj.isController ? InfoPanel::JOIN_DEVICE_CONTROLLER : InfoPanel::JOIN_DEVICE_KEYBOARD);
   }
   else
   {
