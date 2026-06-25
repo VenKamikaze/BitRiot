@@ -75,7 +75,7 @@ User chose to **centralise**: `GameSettings` owns one authoritative
     getID()-as-slot assumption; bounds-guarded so it silently no-opped (cosmetic
     in-game item-selection icon) in game 2+ rather than crashing. Now passes the
     1-based slot `getTeam()`. Cosmetic; needs user real-play to confirm.
-- **2.5 DONE + COMMITTED (`e749147`) + PLAY-TESTED OK (2026-06-25)** — menu keyboard-join.
+- **2.5 DONE + COMMITTED (`b40b2c4`) + PLAY-TESTED OK (2026-06-25)** — menu keyboard-join.
   The `+1` off-by-one fix at `EventHandlerPlayerSelect.cpp:91` rode in the same
   commit but is **static-analysis only, gamepad-gated** (controller path
   unverified). **Next up: 2.6** (mid-game controller hot-join write-back —
@@ -167,7 +167,7 @@ User chose to **centralise**: `GameSettings` owns one authoritative
    1-based player slot), NOT `getID()`. `getID()` is a non-resetting global
    entity id (`EntityFactory::m_idCount`, ~1980 by game 2) usable only as an
    opaque map key — using it as a model index crashed on "Play again".
-5. **2.5 Build menu keyboard-join (net-new). ✅ DONE + COMMITTED (`e749147`) +
+5. **2.5 Build menu keyboard-join (net-new). ✅ DONE + COMMITTED (`b40b2c4`) +
    PLAY-TESTED** (user real-play confirmed OK 2026-06-25: RCTRL/KP-PLUS/`[` each
    flip the right slot to Human and play on that set, P1 still WASD). The `+1`
    controller fix rode in the same commit and is still **gamepad-unverified**.
