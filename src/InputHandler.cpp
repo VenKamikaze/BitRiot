@@ -40,8 +40,13 @@ void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerC
 
   for(const auto& player: playerCharacters)
   {
-    const int id = player->getID();        // 1-based entity id (m_keyMap key)
-    const int canonicalIndex = id - 1;     // 0-based canonical model index
+    // getID() is a globally-unique entity id from EntityFactory's running
+    // counter (the factory is a never-reset singleton), NOT a player slot - by
+    // the 2nd game it is ~1980+. It is only safe here as an opaque key for the
+    // m_keyMap / m_action* maps (consistent with processKeyboardInput). The
+    // canonical model is indexed by player slot, which is getTeam() (1-based).
+    const int id = player->getID();                   // opaque unique entity id (map key)
+    const int canonicalIndex = player->getTeam() - 1; // 0-based player slot -> model index
 
     m_action1Down.insert(std::pair<int, bool>(id, false));
     m_action2Down.insert(std::pair<int, bool>(id, false));
