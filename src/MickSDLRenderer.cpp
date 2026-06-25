@@ -97,6 +97,60 @@ void MickSDLRenderer::init(WindowMetadata windowMetadata)
   initialised = true;
 }
 
+void MickSDLRenderer::resize(int contentWidth, int contentHeight)
+{
+  // Note: this frees+recreates the back buffer mid-frame (the main loop locks it
+  // around consoleMain). That is safe only because these software SDL surfaces
+  // report SDL_MUSTLOCK==false, so the loop's lock/unlock are no-ops. If the back
+  // buffer ever becomes a surface that must be locked, this needs revisiting.
+  SDL_SetWindowSize(m_windowHandle, contentWidth, contentHeight);
+
+  Uint32 pixel_format = SDL_GetWindowPixelFormat(m_windowHandle);
+
+  // Recreate the primary texture at the new size.
+  if (m_textureHandle != nullptr)
+  {
+    SDL_DestroyTexture(m_textureHandle);
+    m_textureHandle = nullptr;
+  }
+  m_textureHandle = SDL_CreateTexture(m_rendererHandle, pixel_format, SDL_TEXTUREACCESS_STREAMING,
+                                      contentWidth, contentHeight);
+  if (m_textureHandle == nullptr)
+  {
+    std::string msg = "Failed to recreate primary SDL texture on resize!";
+    MickLogger::getInstance()->error(this, msg);
+    throw new runtime_error(msg);
+  }
+
+  // Recreate the back-buffer surface at the new size, preserving bit depth.
+  int bpp = (m_surfaceBackBufferHandle != nullptr) ? m_surfaceBackBufferHandle->format->BitsPerPixel : 32;
+  if (m_surfaceBackBufferHandle != nullptr)
+  {
+    SDL_FreeSurface(m_surfaceBackBufferHandle);
+    m_surfaceBackBufferHandle = nullptr;
+  }
+
+  int depth = 0;
+  Uint32 rmask = 0, gmask = 0, bmask = 0, amask = 0;
+  SDL_PixelFormatEnumToMasks(pixel_format, &depth, &rmask, &gmask, &bmask, &amask);
+
+  m_surfaceBackBufferHandle = SDL_CreateRGBSurface(0, contentWidth, contentHeight, bpp,
+                                                   rmask, gmask, bmask, amask);
+  if (m_surfaceBackBufferHandle == nullptr)
+  {
+    std::string msg = "Failed to recreate primary SDL surface on resize!";
+    MickLogger::getInstance()->error(this, msg);
+    throw new runtime_error(msg);
+  }
+
+  SDL_Rect clientArea;
+  clientArea.x = 0;
+  clientArea.y = 0;
+  clientArea.w = contentWidth - 1;
+  clientArea.h = contentHeight - 1;
+  SDL_SetClipRect(m_surfaceBackBufferHandle, &clientArea);
+}
+
 void MickSDLRenderer::pushCpuBufferToHardwareBuffer()
 {
   SDL_UpdateTexture(getPrimaryTextureHandle(), nullptr, getSurfaceBackBufferHandle()->pixels, getSurfaceBackBufferHandle()->pitch);

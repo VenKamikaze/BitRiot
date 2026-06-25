@@ -46,6 +46,10 @@ class GameEngine
 
     unsigned int m_gameStartedAtTicks = 0;
     void resetGame();
+    // Pre-game: if the menu changed the map size, push GameSettings dims into the
+    // Map statics and resize the window/back-buffer/texture + rebuild the static
+    // map. No-op when dimensions are unchanged.
+    void applyMapDimensionsIfChanged();
     void initPlayerCharacters(unsigned int numPlayers, std::vector<bool>* malePlayers, std::vector<bool>* playerAIs);
     void seedBlocksOnMap(int blockPercentage);
     void uninitialise();

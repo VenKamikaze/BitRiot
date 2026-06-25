@@ -445,10 +445,55 @@ branch, no commit until asked, build each step).
      Aspect On ⇒ game keeps proportions with black bars AND the menu stays fully
      visible; Preserve Aspect Off ⇒ game stretches to fill. `-f` launch ⇒ Options
      shows "Fullscreen: On" on first load.
-2. **Map width & height toggles** in the **'Options'** menu — let the user expand
-   the map size *before* a game starts. (`GameSettings::getMapHeight()` /
-   `getMapWidth()` already feed `InfoPanel`/`Map` sizing; the toggles must drive
-   those + the canonical model.)
+2. **Map width & height toggles** in the **'Options'** menu — expand the map size
+   *before* a game starts. ✅ DONE (build-verified + startup smoke; NOT committed).
+   **Needs user PLAY-TEST** — the resize only fires on starting a game with changed
+   dims via the menu, not headless-driveable here.
+   - **Key insight (de-risks it): the engine is already size-agnostic** — the `-b`
+     big-map flag (25×19) proves spawn/wall/render logic adapts. Per-game objects
+     (`EntityManager`, `InfoPanel`, `SpawningPool`, `DynamicMap`) are re-`new`'d each
+     `resetGame()` and read current dims. The ONLY new work was resizing the
+     **startup-once** resources after launch.
+   - **Bounds (decided with user): width 13–33, height 11–25, step 2.** Step 2 keeps
+     dimensions ODD (the outer-wall + pillar layout in `Map::init` assumes odd).
+     Constants in `GameSettings.h` (`MIN/MAX_MAP_WIDTH/HEIGHT`, `MAP_SIZE_STEP`).
+     Toggles wrap MAX→MIN like the block-% button. **User picked the larger cap —
+     at 33×25 the window may exceed the desktop in windowed mode; view via
+     fullscreen + preserve-aspect.**
+   - **Flow:** menu buttons (`mapwidth`/`mapheight`, already in `gameoptions.rml`,
+     now wired) only write `GameSettings::mapWidth/mapHeight`. The resize is applied
+     at **GAME_INIT** by `GameEngine::applyMapDimensionsIfChanged()` (guarded on
+     "changed"): pushes dims into `Map::MAP_WIDTH/HEIGHT` (GameSettings canonical,
+     statics derived), calls `MickSDLRenderer::resize(contentW, contentH)`
+     (recreates back-buffer surface + texture, `SDL_SetWindowSize`; keeps
+     window/renderer + preserve-aspect flag so RmlUi is undisturbed), re-points
+     `GameEngine::m_surface` (old buffer was freed), and re-runs `Map::init` to
+     rebuild walls. `Map::init` got a **free-before-realloc** guard so re-running it
+     doesn't leak the static map / tile surfaces.
+   - **Why resize at GAME_INIT not live in menu:** roadmap says "before a game
+     starts"; the menu just shows numbers. Bonus: the preserve-aspect letterbox
+     reads content size from the back buffer, so it auto-adapts to the new size.
+   - **`-b` flag fixed (advisor-caught regression):** `GameSettings` is constructed
+     **pre-main** (file-scope `playersData` binder in `PlayersSelectBinder.cpp:101`
+     calls `getInstance()`), so it captured `mapWidth=17` before `-b`'s runtime
+     `Map::MAP_WIDTH=25` ran. Without a fix, the new GAME_INIT guard would see
+     17≠25 and shrink `-b` back to 17×13. Fix: `-b` now also calls
+     `setMapWidth(25)/setMapHeight(19)` (`main.cpp`) so model + statics agree. Bonus:
+     fixes the pre-existing render-25/logic-17 split `-b` always had.
+   - **Touch points:** `GameSettings.h` (consts + `setMapWidth/Height`);
+     `EventHandlerOptions.{h,cpp}` (`changeMapWidth/Height` + dispatch on
+     `mapwidth`/`mapheight`; `OptionsPageInit` already appended the labels);
+     `MickSDLRenderer.{h,cpp}` (`resize`); `GameEngine.{h,cpp}`
+     (`applyMapDimensionsIfChanged` + call in GAME_INIT); `Map.cpp` (init leak fix);
+     `main.cpp` (`-b` model sync).
+   - **Pre-existing, left alone:** `Map::~Map()` uses `delete` not `delete[]` on
+     `m_staticMap` (the new init leak-fix correctly uses `delete[]`).
+   - **PLAY-TEST repro:** Options → bump Map Width and/or Height → Back → start a
+     game ⇒ window/map grow, walls symmetric, all 4 corner spawns reachable, info
+     panel still right-aligned. Then: shrink dims + start again (2nd resize catches
+     leaks/stale pointers); start a game with NO change (no-op path); compose with
+     Fullscreen + Preserve Aspect (letterbox should track the new aspect ratio);
+     check wrap MAX→MIN. Verify in `build/BitRiot`, NOT stale `target/`.
 3. **6-player capability** — `GameSettings::MAX_PLAYERS` 4 → 6 (the existing
    `// TODO 6` at the MAX_PLAYERS gotcha). The **2 extra players (5 & 6) must be
    game-controller-only** — there is not enough room on a keyboard for more sets

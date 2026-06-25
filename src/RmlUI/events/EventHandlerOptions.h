@@ -50,6 +50,8 @@ public:
 
 private:
 	void changeBlockTilePercentage(Rml::Event* event);
+	void changeMapWidth(Rml::Event* event);
+	void changeMapHeight(Rml::Event* event);
 	void toggleFullscreen(Rml::Event* event);
 	void togglePreserveAspect(Rml::Event* event);
 	// Reads the live SDL window flags (the authoritative fullscreen state) rather

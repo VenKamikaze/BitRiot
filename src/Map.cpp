@@ -36,8 +36,21 @@ void Map::setStaticTileAt(int x, int y, Map::StaticTile staticTile)
 
 void Map::init(SDL_Surface* sdl_primary)
 {
-
-
+  // init() can be re-run when the map is resized pre-game, so free any existing
+  // allocations first to avoid leaking the previous static map / tile surfaces.
+  if (m_staticMap)
+  {
+    delete[] m_staticMap;
+    m_staticMap = nullptr;
+  }
+  for (int i = 0; i < NUM_STATIC_TILES; ++i)
+  {
+    if (m_staticSurface[i])
+    {
+      SDL_FreeSurface(m_staticSurface[i]);
+      m_staticSurface[i] = nullptr;
+    }
+  }
 
   m_staticMap=new StaticTile[MAP_WIDTH*MAP_HEIGHT];
 

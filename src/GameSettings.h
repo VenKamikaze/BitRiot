@@ -99,6 +99,17 @@ class GameSettings
       this->blockPercentage = blockSpawnPercentage;
     }
 
+    // Map size is changed pre-game via the Options menu; GameEngine pushes these
+    // into Map::MAP_WIDTH/HEIGHT and resizes the window/buffers at GAME_INIT.
+    inline void setMapWidth(int width)
+    {
+      this->mapWidth = width;
+    }
+    inline void setMapHeight(int height)
+    {
+      this->mapHeight = height;
+    }
+
     inline GAME_STATE getGameState()
     {
       return gameState;
@@ -113,6 +124,14 @@ class GameSettings
 
     static const int MAX_BLOCK_PCT = 75;
     static const int MIN_BLOCK_PCT = 20;
+
+    // Map dimensions step by 2 so they stay ODD (the outer-wall + pillar layout in
+    // Map::init assumes odd width/height). Bounds chosen with the user.
+    static const int MIN_MAP_WIDTH = 13;
+    static const int MAX_MAP_WIDTH = 33;
+    static const int MIN_MAP_HEIGHT = 11;
+    static const int MAX_MAP_HEIGHT = 25;
+    static const int MAP_SIZE_STEP = 2;
 
     static const int NORMAL_TICKS_SPEED = 33;
     static const int FAST_TICKS_SPEED = 5; // quick games for debugging purposes

@@ -25,6 +25,12 @@ class MickSDLRenderer : public MickBaseRenderer<SDL_Window, SDL_Renderer, SDL_Su
     virtual ~MickSDLRenderer();
     void init(WindowMetadata windowMetadata);
     void pushCpuBufferToHardwareBuffer(); // copies the SDL_Surface to the SDL_Texture and then renders.
+    // Recreates the back-buffer surface + primary texture at a new content size and
+    // resizes the window. Used when the map dimensions change pre-game. Keeps the
+    // window + renderer (and the preserve-aspect flag) intact so RmlUi is undisturbed.
+    // Callers MUST re-fetch getSurfaceBackBufferHandle() afterwards (the old pointer
+    // is freed).
+    void resize(int contentWidth, int contentHeight);
     static MickSDLRenderer* getInstance();
 
     // When true, the game view is letterboxed to preserve its native aspect ratio

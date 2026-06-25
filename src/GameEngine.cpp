@@ -44,6 +44,35 @@ void GameEngine::uninitialise()
   m_pInputHandler = nullptr;
 }
 
+void GameEngine::applyMapDimensionsIfChanged()
+{
+  int newWidth = GameSettings::getInstance()->getMapWidth();
+  int newHeight = GameSettings::getInstance()->getMapHeight();
+
+  if (Map::MAP_WIDTH == newWidth && Map::MAP_HEIGHT == newHeight)
+  {
+    return; // nothing to do
+  }
+
+  // GameSettings is canonical; the Map statics are derived from it.
+  Map::MAP_WIDTH = newWidth;
+  Map::MAP_HEIGHT = newHeight;
+
+  // Resize the startup-once resources (window, back-buffer surface, texture) to the
+  // new content size. InfoPanel::WIDTH is the fixed side-panel width.
+  int contentWidth = (newWidth * Map::TILE_WIDTH) + InfoPanel::WIDTH;
+  int contentHeight = newHeight * Map::TILE_HEIGHT;
+
+  MickSDLRenderer* renderer = MickSDLRenderer::getInstance();
+  renderer->resize(contentWidth, contentHeight);
+
+  // The old back buffer was freed in resize(); re-point our handle.
+  m_surface = renderer->getSurfaceBackBufferHandle();
+
+  // Rebuild the static map (walls/pillars) at the new size against the new surface.
+  Map::getInstance()->init(m_surface);
+}
+
 void GameEngine::resetGame()
 {
   int numHumanPlayers = GameSettings::getInstance()->getNumberOfHumanPlayers();
@@ -103,6 +132,7 @@ bool GameEngine::runEngine()
     case GameSettings::GAME_INIT:
     {
       menuSystem->clearScoreBoard(); // does nothing if scoreboard does not exist.
+      applyMapDimensionsIfChanged();
       resetGame();
       GameSettings::getInstance()->setGameState(GameSettings::GAME_RUNNING);
       m_gameStartedAtTicks = SDL_GetTicks();

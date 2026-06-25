@@ -117,6 +117,33 @@ void EventHandlerOptions::togglePreserveAspect(Rml::Event* event)
   }
 }
 
+void EventHandlerOptions::changeMapWidth(Rml::Event* event)
+{
+  int width = std::GameSettings::getInstance()->getMapWidth();
+  // Step by 2 (keep odd); wrap MAX -> MIN. Applied at GAME_INIT, not live.
+  width = (width >= std::GameSettings::MAX_MAP_WIDTH)
+            ? std::GameSettings::MIN_MAP_WIDTH
+            : width + std::GameSettings::MAP_SIZE_STEP;
+  std::GameSettings::getInstance()->setMapWidth(width);
+  if (event)
+  {
+    MickRmlUIElementUtil::replaceEndStringInTextNode(event->GetTargetElement(), std::to_string(width));
+  }
+}
+
+void EventHandlerOptions::changeMapHeight(Rml::Event* event)
+{
+  int height = std::GameSettings::getInstance()->getMapHeight();
+  height = (height >= std::GameSettings::MAX_MAP_HEIGHT)
+             ? std::GameSettings::MIN_MAP_HEIGHT
+             : height + std::GameSettings::MAP_SIZE_STEP;
+  std::GameSettings::getInstance()->setMapHeight(height);
+  if (event)
+  {
+    MickRmlUIElementUtil::replaceEndStringInTextNode(event->GetTargetElement(), std::to_string(height));
+  }
+}
+
 void EventHandlerOptions::OptionsPageInit(Rml::ElementDocument* bodyElement)
 {
   if (bodyElement == NULL)
@@ -175,5 +202,13 @@ void EventHandlerOptions::ProcessEvent(Rml::Event& event, const Rml::String& val
   else if (value == "preserveaspect")
   {
     togglePreserveAspect(&event);
+  }
+  else if (value == "mapwidth")
+  {
+    changeMapWidth(&event);
+  }
+  else if (value == "mapheight")
+  {
+    changeMapHeight(&event);
   }
 }

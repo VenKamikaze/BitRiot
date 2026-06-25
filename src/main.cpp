@@ -153,6 +153,13 @@ static void setInitFlags(int argc, char* argv[])
       case 'b':
         Map::MAP_WIDTH=25;
         Map::MAP_HEIGHT=19;
+        // Keep the canonical model in sync. GameSettings is constructed pre-main
+        // (a file-scope binder forces it), so it already captured the default 17x13;
+        // without this the GAME_INIT resize guard would see a mismatch and shrink
+        // the map back to 17x13, defeating -b (and it also fixes the pre-existing
+        // render-25/logic-17 split).
+        GameSettings::getInstance()->setMapWidth(25);
+        GameSettings::getInstance()->setMapHeight(19);
         break;
       default :  /* h */
         show_opts(argv[0]);
