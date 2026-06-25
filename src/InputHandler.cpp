@@ -188,7 +188,8 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
         continue;
       }
 
-      int i = player->getID();
+      int i = player->getID();           // opaque unique entity id: m_keyMap / m_action* key
+      int slot = player->getTeam();      // 1-based player slot: InfoPanel row (see setSelection)
 
       //static bool action1Down[GameSettings::MAX_PLAYERS] = { false, false, false, false };
       //static bool action2Down[4] = { false, false, false, false };
@@ -235,28 +236,28 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
           if (input->isKeyDown(m_keyMap[i][UP_KEY]))
           {
             m_spawnSelection[i] = BOMB;
-            p_infoPanel->setSelection(BOMB, i + 1);
+            p_infoPanel->setSelection(BOMB, slot);
           }
           else if (input->isKeyDown(m_keyMap[i][DOWN_KEY]))
           {
             m_spawnSelection[i] = BLOCK;
-            p_infoPanel->setSelection(BLOCK, i + 1);
+            p_infoPanel->setSelection(BLOCK, slot);
           }
           else if (input->isKeyDown(m_keyMap[i][LEFT_KEY]))
           {
             m_spawnSelection[i] = MINE;
-            p_infoPanel->setSelection(MINE, i + 1);
+            p_infoPanel->setSelection(MINE, slot);
           }
           else if (input->isKeyDown(m_keyMap[i][RIGHT_KEY]))
           {
             m_spawnSelection[i] = ROCKET_SPIN;
-            p_infoPanel->setSelection(ROCKET_SPIN, i + 1);
+            p_infoPanel->setSelection(ROCKET_SPIN, slot);
           }
 
           // for no direction press
           if (m_spawnSelection[i] == BLOCK)
           {
-            p_infoPanel->setSelection(BLOCK, i + 1);
+            p_infoPanel->setSelection(BLOCK, slot);
           }
 
           if (input->isKeyReleased(m_keyMap[i][ACTION1_KEY]))
@@ -270,7 +271,7 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
 
             m_action1Down[i] = false;
             m_spawnSelection[i] = BLOCK;
-            p_infoPanel->setSelection(PLAYER_CHARACTER, i + 1);
+            p_infoPanel->setSelection(PLAYER_CHARACTER, slot);
           }
           // end if action1Down == true
         }
@@ -295,7 +296,7 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
             m_spawnSelection[i] = EGG4;
           }
 
-          p_infoPanel->setSelection(m_spawnSelection[i], i + 1);
+          p_infoPanel->setSelection(m_spawnSelection[i], slot);
 
 
           if (input->isKeyReleased(m_keyMap[i][ACTION2_KEY]))
@@ -308,7 +309,7 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
 
             m_action2Down[i] = false;
             m_spawnSelection[i] = BLOCK;
-            p_infoPanel->setSelection(PLAYER_CHARACTER, i + 1);
+            p_infoPanel->setSelection(PLAYER_CHARACTER, slot);
           }
 
         }
