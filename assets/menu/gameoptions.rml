@@ -14,7 +14,8 @@
 	      <button class="tabbed" id="mapheight" tabindex="3" onclick="mapheight">Map Height: </button><br />
 	      <button class="tabbed" id="fullscreen" tabindex="4" onclick="fullscreen">Fullscreen: </button><br />
 	      <button class="tabbed" id="preserveaspect" tabindex="5" onclick="preserveaspect">Preserve Aspect Ratio: </button><br />
-	      <button class="tabbed" id="back" tabindex="6" escapeAction="1" onclick="open mainmenu.rml">Back</button><br />
+	      <button class="tabbed" id="npcspawner" tabindex="6" onclick="npcspawner">NPC Spawner: </button><br />
+	      <button class="tabbed" id="back" tabindex="7" escapeAction="1" onclick="open mainmenu.rml">Back</button><br />
       </div>
     </div>
 		

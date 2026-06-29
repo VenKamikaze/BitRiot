@@ -99,6 +99,19 @@ class GameSettings
       this->blockPercentage = blockSpawnPercentage;
     }
 
+    // NPC Spawner toggle (Options menu). When off, the purple CPU spawning pool
+    // stops dripping enemy eggs but still spawns power-ups (EN+/IQ+). The pool
+    // re-reads this live each tick, so it applies immediately and persists across
+    // "Play again" (never reset by resetGame). Default on.
+    inline bool isNpcSpawnerEnabled()
+    {
+      return npcSpawnerEnabled;
+    }
+    inline void setNpcSpawnerEnabled(bool enabled)
+    {
+      this->npcSpawnerEnabled = enabled;
+    }
+
     // Map size is changed pre-game via the Options menu; GameEngine pushes these
     // into Map::MAP_WIDTH/HEIGHT and resizes the window/buffers at GAME_INIT.
     inline void setMapWidth(int width)
@@ -146,6 +159,7 @@ class GameSettings
 
     int numPlayers = 4;
     int blockPercentage = 55;
+    bool npcSpawnerEnabled = true; // NPC Spawner toggle; default on.
     // Canonical per-player setup. Genders/playerAIs below are derived mirrors.
     std::vector<Player> m_players;
     std::vector<bool> genders;

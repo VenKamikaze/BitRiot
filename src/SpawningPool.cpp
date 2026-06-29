@@ -65,6 +65,16 @@ void SpawningPool::update()
 
     type = getRandomType();
 
+    // NPC Spawner toggle: when disabled, suppress enemy eggs but still let
+    // power-ups (EN+/IQ+) through. Eggs are the only non-power-up types
+    // getRandomType() returns. Return before deducting points so the pool stays
+    // full and power-ups keep flowing at their normal rate.
+    if (!GameSettings::getInstance()->isNpcSpawnerEnabled()
+        && type != ENPLUS_POWERUP && type != IQPLUS_POWERUP)
+    {
+      return;
+    }
+
     if (type == EGG5)
     {
       flags = getRobotFlags();

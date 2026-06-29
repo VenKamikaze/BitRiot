@@ -494,7 +494,34 @@ branch, no commit until asked, build each step).
      leaks/stale pointers); start a game with NO change (no-op path); compose with
      Fullscreen + Preserve Aspect (letterbox should track the new aspect ratio);
      check wrap MAX→MIN. Verify in `build/BitRiot`, NOT stale `target/`.
-3. **6-player capability** — `GameSettings::MAX_PLAYERS` 4 → 6 (the existing
+3. **NPC Spawner toggle (Options menu).** ✅ DONE (build-verified + startup
+   smoke-test; NOT committed). **Needs user PLAY-TEST** — the in-game effect
+   (purple spawner stops dripping enemies, power-ups keep coming) isn't headless-
+   driveable. Requested by the user (2026-06-25) *ahead of* 6-player capability.
+   - **What it does:** Options → "NPC Spawner: On/Off" (default **On**). Off stops
+     the purple team-0 CPU `SpawningPool` from spawning enemy **eggs**, while
+     **power-ups (EN+/IQ+) still spawn**.
+   - **Locus = `SpawningPool::update()`** (the only spawner-level egg path, team 0).
+     After `type = getRandomType()`, if `!isNpcSpawnerEnabled() && type !=`
+     `ENPLUS_POWERUP && type != IQPLUS_POWERUP` → `return` **before** the point
+     deduction. Eggs are the only non-power-up types `getRandomType()` returns;
+     returning pre-deduction keeps `m_pointsLeft` full so power-ups keep flowing at
+     normal rate until `m_ENsLeft` naturally exhausts (existing behaviour).
+     Player-laid eggs (`PlayerCharacterEntity`) are intentional and untouched.
+   - **State:** plain singleton bool `GameSettings::npcSpawnerEnabled = true`
+     (`isNpcSpawnerEnabled`/`setNpcSpawnerEnabled`). Static-init safe (no SDL/file
+     I/O). The pool re-reads it **live each tick**, so the toggle applies
+     immediately and **persists across "Play again"** (never reset by resetGame) —
+     no extra plumbing.
+   - **Touch points:** `GameSettings.h` (field + accessors); `SpawningPool.cpp`
+     (the gate in `update()`); `EventHandlerOptions.{h,cpp}` (`toggleNpcSpawner` +
+     dispatch on `"npcspawner"` + `OptionsPageInit` label); `gameoptions.rml`
+     (`npcspawner` button tabindex 6, **Back bumped to 7**).
+   - **PLAY-TEST repro:** Options → NPC Spawner Off → start a game ⇒ no new purple
+     enemies appear, but EN+ power-ups still drip; toggle On ⇒ enemies resume.
+     Confirm the Off state survives "Play again". Verify in `build/BitRiot`, NOT
+     stale `target/`.
+4. **6-player capability** — `GameSettings::MAX_PLAYERS` 4 → 6 (the existing
    `// TODO 6` at the MAX_PLAYERS gotcha). The **2 extra players (5 & 6) must be
    game-controller-only** — there is not enough room on a keyboard for more sets
    (only 4 keyboard sets exist; see Key facts). So slots 5–6 never get a keyboard

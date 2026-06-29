@@ -50,6 +50,7 @@ public:
 
 private:
 	void changeBlockTilePercentage(Rml::Event* event);
+	void toggleNpcSpawner(Rml::Event* event);
 	void changeMapWidth(Rml::Event* event);
 	void changeMapHeight(Rml::Event* event);
 	void toggleFullscreen(Rml::Event* event);

@@ -68,6 +68,19 @@ void EventHandlerOptions::changeBlockTilePercentage(Rml::Event* event)
   }
 }
 
+// NPC Spawner toggle. The purple CPU spawning pool re-reads this live each tick,
+// so it applies immediately and persists across "Play again". Power-ups still
+// spawn while it is Off; only enemy eggs are suppressed.
+void EventHandlerOptions::toggleNpcSpawner(Rml::Event* event)
+{
+  bool enabled = !std::GameSettings::getInstance()->isNpcSpawnerEnabled();
+  std::GameSettings::getInstance()->setNpcSpawnerEnabled(enabled);
+  if (event)
+  {
+    MickRmlUIElementUtil::replaceEndStringInTextNode(event->GetTargetElement(), enabled ? "On" : "Off");
+  }
+}
+
 // The live SDL window is the single source of truth for fullscreen state.
 bool EventHandlerOptions::isFullscreen()
 {
@@ -164,6 +177,10 @@ void EventHandlerOptions::OptionsPageInit(Rml::ElementDocument* bodyElement)
       {
         MickRmlUIElementUtil::appendTextToTextNode(element, blockTilePct);
       }
+      else if (element->GetId() == "npcspawner")
+      {
+        MickRmlUIElementUtil::appendTextToTextNode(element, std::GameSettings::getInstance()->isNpcSpawnerEnabled() ? "On" : "Off");
+      }
       else if (element->GetId() == "mapwidth")
       {
         MickRmlUIElementUtil::appendTextToTextNode(element, mapWidth);
@@ -194,6 +211,10 @@ void EventHandlerOptions::ProcessEvent(Rml::Event& event, const Rml::String& val
   else if (value == "blocktilepercent")
   {
     changeBlockTilePercentage(&event);
+  }
+  else if (value == "npcspawner")
+  {
+    toggleNpcSpawner(&event);
   }
   else if (value == "fullscreen")
   {
