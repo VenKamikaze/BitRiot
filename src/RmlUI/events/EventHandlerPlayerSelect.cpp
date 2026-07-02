@@ -64,10 +64,30 @@ void EventHandlerPlayerSelect::ProcessEvent(Rml::Event& event, const Rml::String
 
 		if (values.empty())
 			return;
+
+		// Fired by <body onload="psinit">: re-read map dims + recompute the start
+		// gate so a Map Height change made in Options is reflected on return here.
+		if (values[0] == "psinit")
+		{
+			PlayersSelectBinder::refreshMapConfig();
+			// Auto-attach the primary pad to slot 0 (Bug 1), seed device-less
+			// humans a free keyboard set, and drop stale controller ids - then
+			// show whatever that seeded so a post-game revisit reflects it.
+			PlayersSelectBinder::normalizeAssignments();
+			PlayersSelectBinder::refreshDeviceLabels();
+		}
 }
 
 void EventHandlerPlayerSelect::controllerJoin(SDL_JoystickID controllerId)
 {
+	if(PlayersSelectBinder::getPlayerAttachedToController(controllerId) != nullptr)
+	{
+		// This pad already owns a slot (e.g. via normalizeAssignments' Bug-1
+		// auto-attach, or a previous join) - nothing to do.
+		MickLogger::getInstance()->debug(nullptr, string("EHPS.cJ: controller ").append(to_string(controllerId)).append(" already owns a slot; ignoring join"));
+		return;
+	}
+
 	Rml::ElementList eList;
 	Rml::Context *context = Rml::GetContext("default");
 	context->GetFocusElement()->GetOwnerDocument()->GetElementsByTagName(eList, "article");

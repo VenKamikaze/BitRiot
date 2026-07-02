@@ -66,6 +66,14 @@
   border-radius: 3px;
   border: 3px yellow;
 }
+.stripContent img.cyan.playerselected {
+  border-radius: 3px;
+  border: 3px #17c8d2;
+}
+.stripContent img.orange.playerselected {
+  border-radius: 3px;
+  border: 3px #dd7817;
+}
 
 .stripContent img:hover {
   /* image-color: rgb(150,150,200);*/
@@ -107,6 +115,14 @@ p {
   color: yellow;
 }
 
+.cyan {
+  color: #17c8d2;
+}
+
+.orange {
+  color: #dd7817;
+}
+
 .header-container {
   float: left;
   margin-top: 2vh;
@@ -128,5 +144,33 @@ div.controller {
 
 .menu {
   font-size: 18pt;
+}
+
+.mapsize {
+  font-size: 12pt;
+  color: #cccccc;
+}
+
+.warning {
+  display: block;
+  font-size: 12pt;
+  font-weight: bold;
+  color: #ff6666;
+  padding-top: 0.5em;
+}
+
+/* Start button greyed out while the map is too short for the player count. */
+button.disabled {
+  color: #777777;
+}
+
+/* The Control button's label now cycles through CPU / Keyboard 1-4 / Pad N
+   (cyclePlayerControl) instead of just CPU/Human - "Keyboard 4" is the
+   longest label, so keep it on one line and give it a bit more room than the
+   old CPU/Human toggle needed, especially at 6 narrow player columns. */
+.joinplayer {
+  white-space: nowrap;
+  font-size: 11pt;
+  padding: 4px 8px;
 }
 

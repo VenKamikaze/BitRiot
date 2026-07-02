@@ -6,26 +6,28 @@
     <link rel="stylesheet" type="text/rcss" href="playerselect.rcss"/>
   </head>
 
-  <body class="background">
+  <body class="background" onload="psinit">
 
     <div data-model="playersSelect">
 
       <div id="header" class="header-container">
         <div class="menu">
-          <button row="0" col="0" class="tabbed" id="quickstart" tabindex="1" onclick="start" onkeydown="start">Start Game</button><br />
+          <button row="0" col="0" class="tabbed" id="quickstart" tabindex="1" data-class-disabled="!canStart" onclick="start" onkeydown="start">Start Game</button><br />
           <button row="1" col="0" class="tabbed" id="totalplayers" tabindex="2" data-event-click="toggleNumPlayers" data-event-keydown="toggleNumPlayers">Total Players: {{players.size}}</button><br />
+          <span class="mapsize">Map: {{mapWidth}} x {{mapHeight}}</span><br />
+          <span class="warning" data-if="!canStart">{{playerLimitMsg}}</span>
         </div>
       </div>
 
 		
       <section class="strips">
-        <article data-for="player : players" class="strip" data-attr-col="it_index" data-attr-id="'article-' + it_index" data-attr-playerId="player.id">
+        <article data-for="player : players" class="strip" data-attr-style="'width:' + (100 / players.size) + '%'" data-attr-col="it_index" data-attr-id="'article-' + it_index" data-attr-playerId="player.id">
           <div class="stripContent">
-            <h1 data-attr-id="'h1-' + player.id" data-class-red="it_index == 0" data-class-blue="it_index == 1" data-class-green="it_index == 2" data-class-yellow="it_index == 3">Player {{player.id + 1}}</h1>
+            <h1 data-attr-id="'h1-' + player.id" data-class-red="it_index == 0" data-class-blue="it_index == 1" data-class-green="it_index == 2" data-class-yellow="it_index == 3" data-class-cyan="it_index == 4" data-class-orange="it_index == 5">Player {{player.id + 1}}</h1>
             <!-- We'll do teams later --> <!-- <h1 data-attr-col="it_index" data-attr-playerId="player.id" data-class-red="it_index == 0" data-class-blue="it_index == 1" data-class-green="it_index == 2" data-class-yellow="it_index == 3">Team {{player.team + 1}}</h1> -->
             <!-- player 1 is selected by default on loading of this page -->
-            <img data-attr-id="'img-id-' + player.id" class="tabbed" data-attr-col="it_index" row="2" data-attr-playerId="player.id" data-class-playerselected="it_index == 0" data-class-red="it_index == 0" data-class-blue="it_index == 1" data-class-green="it_index == 2" data-class-yellow="it_index == 3" data-event-click="togglePlayerPortrait" data-event-keydown="togglePlayerPortrait" data-attr-src="player.portrait" data-attr-tabindex="(it_index * 2) + 3" />
-            <p>Control: <button data-attr-id="'btn-ai-' + player.id" class="tabbed joinplayer" data-attr-col="it_index" row="3" data-attr-playerId="player.id" data-attr-tabindex="(it_index *2) + 4" data-event-keydown="togglePlayerAI" data-event-click="togglePlayerAI" data-rml="player.human == 1 ? 'Human' : 'CPU'" /></p>
+            <img data-attr-id="'img-id-' + player.id" class="tabbed" data-attr-col="it_index" row="2" data-attr-playerId="player.id" data-class-playerselected="it_index == 0" data-class-red="it_index == 0" data-class-blue="it_index == 1" data-class-green="it_index == 2" data-class-yellow="it_index == 3" data-class-cyan="it_index == 4" data-class-orange="it_index == 5" data-event-click="togglePlayerPortrait" data-event-keydown="togglePlayerPortrait" data-attr-src="player.portrait" data-attr-tabindex="(it_index * 2) + 3" />
+            <p>Control: <button data-attr-id="'btn-ai-' + player.id" class="tabbed joinplayer" data-attr-col="it_index" row="3" data-attr-playerId="player.id" data-attr-tabindex="(it_index *2) + 4" data-event-keydown="cyclePlayerControl" data-event-click="cyclePlayerControl" data-rml="player.deviceLabel" /></p>
           </div>
         </article>
       </section>
@@ -39,7 +41,7 @@
         </div>
       </div>
       <div class="controller" data-for="controller : controllers" data-attr-controllerId="controller.index">
-        <img data-attr-style="'padding-right:' + it_index * 44 + 'px'" height="40px" width="40px" data-attr-col="it_index" data-class-red="controller.index == 0" data-class-blue="controller.index == 1" data-class-green="controller.index == 2" data-class-yellow="controller.index == 3" data-attr-src="controller.imageSrc"  />
+        <img data-attr-style="'padding-right:' + it_index * 44 + 'px'" height="40px" width="40px" data-attr-col="it_index" data-class-red="controller.index == 0" data-class-blue="controller.index == 1" data-class-green="controller.index == 2" data-class-yellow="controller.index == 3" data-class-cyan="controller.index == 4" data-class-orange="controller.index == 5" data-attr-src="controller.imageSrc"  />
       </div>
     </div>
   </body>

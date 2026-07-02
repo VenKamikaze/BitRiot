@@ -123,6 +123,53 @@ class GameSettings
       this->mapHeight = height;
     }
 
+    // Minimum map HEIGHT (in tiles) needed to fit numPlayers InfoPanel portraits.
+    // Portraits stack vertically: player N's portrait bottom sits at 3*N tiles
+    // (InfoPanel yOffset = ((i*3)+1), spanning 2 tiles), and the panel is
+    // mapHeight tiles tall. Rounded up to an odd value (map dims are always odd).
+    // Width never constrains player count. Single source of truth for the
+    // player-select gate, the on-screen message, and the start-game guard.
+    inline int requiredMapHeightFor(int numberOfPlayers)
+    {
+      int needed = 3 * numberOfPlayers;
+      if (needed % 2 == 0) needed++; // keep odd, matching the map-size step
+      return needed;
+    }
+
+    // The game may start unless (a) more than MAX_KEYBOARD_PLAYERS players are
+    // configured on a map too short to show all their portraits, or (b) a
+    // controller-only slot (index >= MAX_KEYBOARD_PLAYERS) is set to human
+    // with no device attached - it would sit frozen at game start (defense in
+    // depth: the player-select UI shouldn't be able to reach this state, but
+    // this is the single source of truth for the start gate).
+    inline bool canStartGame()
+    {
+      if (hasUndrivableHuman())
+      {
+        return false;
+      }
+      if (numPlayers <= MAX_KEYBOARD_PLAYERS)
+      {
+        return true;
+      }
+      return mapHeight >= requiredMapHeightFor(numPlayers);
+    }
+
+    // True if some controller-only slot (index >= MAX_KEYBOARD_PLAYERS) is
+    // human with neither a keyboard set nor a controller attached.
+    inline bool hasUndrivableHuman()
+    {
+      for(int i = MAX_KEYBOARD_PLAYERS; i < numPlayers; i++)
+      {
+        Player &p = m_players.at(i);
+        if(p.human && p.attachedControllerId == -1 && p.attachedKeyboardId == -1)
+        {
+          return true;
+        }
+      }
+      return false;
+    }
+
     inline GAME_STATE getGameState()
     {
       return gameState;
@@ -132,8 +179,13 @@ class GameSettings
       this->gameState = state;
     }
 
-    static const int MAX_PLAYERS = 4; // TODO 6;
+    static const int MAX_PLAYERS = 6;
     static const int MIN_PLAYERS = 2; // 2 player characters minimum plus the default purple non player PC.
+    // Only the first 4 player slots can be keyboard-driven (there are exactly 4
+    // fixed keyboard sets). Slots 5 & 6 (index >= 4) are controller-only: they
+    // go human via a controller (menu controller-join or the in-game takeover),
+    // never via the keyboard "Control: CPU/Human" toggle.
+    static const int MAX_KEYBOARD_PLAYERS = 4;
 
     static const int MAX_BLOCK_PCT = 75;
     static const int MIN_BLOCK_PCT = 20;

@@ -15,7 +15,6 @@ using namespace std;
 
 static map<KEY, SDL_Keycode>* translateMap;
 map<SDL_Keycode, KEY>* GameRunningSDLInput::reverseTranslateMap = new map<SDL_Keycode, KEY>();
-static map<SDL_JoystickID, SDL_Haptic*>* hapticDevices;
 
 static shared_ptr<GameRunningSDLInput> s_instance = nullptr;
 
@@ -28,7 +27,6 @@ GameRunningSDLInput::GameRunningSDLInput(shared_ptr<InputHandler> inputHandler) 
   aKeyIsUp = false;
   quitEvent = false;
   translateMap = new map<KEY, SDL_Keycode>();
-  hapticDevices = new map<SDL_JoystickID, SDL_Haptic*>();
   setupKeymap();
   setupControllers();
 }
@@ -176,36 +174,47 @@ void GameRunningSDLInput::setControllerInput(SDL_JoystickID joystickID, Uint8 bu
 
   int i = attachedPlayer->getID();
   bool pressed=state==SDL_PRESSED;
-  KEY keyIndex=KEY_UNKNOWN;
+
+  // Drive the entity directly via a private per-player button table (see
+  // InputHandler::setControllerButtonState) instead of translating through
+  // the keyboard m_keyMap/keysCurrentlyDown machinery: every KEY_ enum value
+  // already corresponds to a real physical key (GameRunningSDLInput::setupKeymap),
+  // so there is no free "virtual" tag a controller press could safely borrow.
+  InputHandler::ButtonName buttonName;
+  bool matched = true;
 
   if (button==SDL_CONTROLLER_BUTTON_A || button==SDL_CONTROLLER_BUTTON_X)
   {
-    keyIndex=m_pInputHandler->m_keyMap[i][InputHandler::ACTION1_KEY];
+    buttonName=InputHandler::ACTION1_KEY;
   }
-  if (button==SDL_CONTROLLER_BUTTON_B || button==SDL_CONTROLLER_BUTTON_Y)
+  else if (button==SDL_CONTROLLER_BUTTON_B || button==SDL_CONTROLLER_BUTTON_Y)
   {
-    keyIndex=m_pInputHandler->m_keyMap[i][InputHandler::ACTION2_KEY];
+    buttonName=InputHandler::ACTION2_KEY;
   }
-  if (button==SDL_CONTROLLER_BUTTON_DPAD_UP)
+  else if (button==SDL_CONTROLLER_BUTTON_DPAD_UP)
   {
-    keyIndex=m_pInputHandler->m_keyMap[i][InputHandler::UP_KEY];
+    buttonName=InputHandler::UP_KEY;
   }
-  if (button==SDL_CONTROLLER_BUTTON_DPAD_DOWN)
+  else if (button==SDL_CONTROLLER_BUTTON_DPAD_DOWN)
   {
-    keyIndex=m_pInputHandler->m_keyMap[i][InputHandler::DOWN_KEY];
+    buttonName=InputHandler::DOWN_KEY;
   }
-  if (button==SDL_CONTROLLER_BUTTON_DPAD_LEFT)
+  else if (button==SDL_CONTROLLER_BUTTON_DPAD_LEFT)
   {
-    keyIndex=m_pInputHandler->m_keyMap[i][InputHandler::LEFT_KEY];
+    buttonName=InputHandler::LEFT_KEY;
   }
-  if (button==SDL_CONTROLLER_BUTTON_DPAD_RIGHT)
+  else if (button==SDL_CONTROLLER_BUTTON_DPAD_RIGHT)
   {
-    keyIndex=m_pInputHandler->m_keyMap[i][InputHandler::RIGHT_KEY];
+    buttonName=InputHandler::RIGHT_KEY;
   }
-  if (keyIndex!=KEY_UNKNOWN)
+  else
   {
-    setKeyState(keyIndex,pressed); //TODO: mapping directly into the keyboard array, but this is not the best
-    //but will require a refactor of processKeyboardInput() to fix
+    matched = false;
+  }
+
+  if (matched)
+  {
+    m_pInputHandler->setControllerButtonState(i, buttonName, pressed);
   }
 }
 
@@ -271,14 +280,8 @@ void GameRunningSDLInput::updateEventQueue()
     {
       MickLogger::getInstance()->debug(this, string("Gamecontroller removed: ").append(to_string(event.jbutton.which)));
       m_pInputHandler->detachController(event.jbutton.which);
-      if( hapticDevices->find(event.jbutton.which) != hapticDevices->end() )
-      {
-        SDL_Haptic* haptic = hapticDevices->find(event.jbutton.which)->second;
-        SDL_HapticClose(haptic);
-        haptic = nullptr;
-        hapticDevices->erase(event.jbutton.which);
-        MickLogger::getInstance()->debug(this, string("Haptics removed: ").append(to_string(event.jbutton.which)));
-      }
+      MickSDLUtil::closeHaptic(event.jbutton.which);
+      MickLogger::getInstance()->debug(this, string("Haptics removed: ").append(to_string(event.jbutton.which)));
     }
     else if (event.type == SDL_QUIT)
     {

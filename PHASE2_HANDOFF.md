@@ -494,8 +494,8 @@ branch, no commit until asked, build each step).
      leaks/stale pointers); start a game with NO change (no-op path); compose with
      Fullscreen + Preserve Aspect (letterbox should track the new aspect ratio);
      check wrap MAX→MIN. Verify in `build/BitRiot`, NOT stale `target/`.
-3. **NPC Spawner toggle (Options menu).** ✅ DONE (build-verified + startup
-   smoke-test; NOT committed). **Needs user PLAY-TEST** — the in-game effect
+3. **NPC Spawner toggle (Options menu).** ✅ DONE + COMMITTED (`03adfa3`;
+   build-verified + startup smoke-test). **Needs user PLAY-TEST** — the in-game effect
    (purple spawner stops dripping enemies, power-ups keep coming) isn't headless-
    driveable. Requested by the user (2026-06-25) *ahead of* 6-player capability.
    - **What it does:** Options → "NPC Spawner: On/Off" (default **On**). Off stops
@@ -521,17 +521,100 @@ branch, no commit until asked, build each step).
      enemies appear, but EN+ power-ups still drip; toggle On ⇒ enemies resume.
      Confirm the Off state survives "Play again". Verify in `build/BitRiot`, NOT
      stale `target/`.
-4. **6-player capability** — `GameSettings::MAX_PLAYERS` 4 → 6 (the existing
-   `// TODO 6` at the MAX_PLAYERS gotcha). The **2 extra players (5 & 6) must be
-   game-controller-only** — there is not enough room on a keyboard for more sets
-   (only 4 keyboard sets exist; see Key facts). So slots 5–6 never get a keyboard
-   set; they are controller/AI only.
-   - Needs **new character models** for players 5 & 6. The user will source them
-     later; **in the meantime RE-USE players 1 and 2's character models** for 5 & 6.
-   - Touches a lot of `[MAX_PLAYERS]`-sized arrays + the team-colour tables
-     (`EntityRenderer` has 5 team colours = `MAX_PLAYERS + 1`); expanding to 6
-     players means 7 teams there. Audit every fixed-size `[GameSettings::MAX_PLAYERS]`
-     / `NUM_TEAMS` array and the per-team colour palettes when raising the cap.
+4. **6-player capability** — ✅ STEPS 1–6 IMPLEMENTED (2026-06-29, branch
+   `feature/six-players`; build-verified + startup smoke-test, NOT committed).
+   **Needs user PLAY-TEST** (keyboard: pick 6 → cyan/orange AI bots spawn
+   mid-top/-bottom; small map → gate message + Start disabled; raise Map Height
+   in Options → Start re-enables. Controller takeover of slots 5/6 is
+   gamepad-gated.) Decisions were locked with the user first. `GameSettings::MAX_PLAYERS` 4 → 6. The **2 extra players
+   (5 & 6) are game-controller-only** — only 4 keyboard sets exist (see Key
+   facts), so slots 5–6 never get a keyboard set. New character models will be
+   sourced later; **for now RE-USE players 1 & 2's models** for 5 & 6.
+
+   **DECISIONS (user, 2026-06-29):** team 5 = **cyan**, team 6 = **orange**;
+   reuse models by **copying the asset files** (not remapping in code); slots 5/6
+   stay **AI-in-menu, human only via in-game controller hot-join** (2.7 selector)
+   — Human toggle no-op'd for them in the menu; map size **gates** the player
+   count (NOT auto-bump) with **on-screen feedback** on the player-select screen.
+
+   **Orientation already done (do not re-derive):**
+   - Spawn placement is ALREADY 6-aware: `GameEngine.cpp:297-324` has `case 5/6`
+     (mid-top / mid-bottom edges). `playerselect.rcss` already has `.strip#4/#5`.
+   - `build/assets` is a **symlink** to source `assets/` — copying files into
+     `assets/bitmaps/` is enough, no build change.
+   - Player-select `playersSelect` data model is created ONCE
+     (`MenuSDLRenderer.cpp:73`, `m_playersBinder`) and persists across screen
+     loads. The doc reloads on navigation; `gameoptions.rml` refreshes via
+     `<body onload="changebuttons">` → `EventHandlerOptions::OptionsPageInit`.
+     `playerselect.rml` `<body>` has NO onload yet — add one (see step 5.5).
+   - `start` is handled in `EventManager.cpp:101-108` (sets GAME_INIT) — guard
+     there for the gate.
+   - Only map **HEIGHT** constrains player count: portraits stack vertically at
+     `yOffset = ((i*3)+1)` tiles (`InfoPanel.cpp:288`), so player N's portrait
+     bottom = `3N` tiles vs panel height = `mapHeight`. Width never blocks. Valid
+     heights are odd (step 2 from 11): **5 players need ≥15, 6 players need ≥19.**
+
+   **STEPS (build green after each; never regress 4-player):**
+   1. **Cap + colour tables (the build-breaking core).** `GameSettings.h`
+      MAX_PLAYERS 4→6 (drop `// TODO 6`) → cascades `NUM_TEAMS` 5→7
+      (`EntityRenderer.h:17`). **LANDMINE:** `EntityRenderer.cpp:14-16` defines the
+      three colour arrays with 5-element literals `{0,0,0,0,0}` against the now-7
+      declared bound — extend all three to 7 elements AND add init assignments
+      (`:24-40`) for team 5 = cyan, team 6 = orange (saturated base / pastel
+      highlight / dark shadow, like existing). Suggested RGB — cyan base
+      `(23,200,210)` hi `(166,240,247)` sh `(16,142,150)`; orange base
+      `(221,120,23)` hi `(247,200,150)` sh `(158,84,16)`. Runs 4-player unchanged
+      after this.
+   2. **Assets (copy files).** In `assets/bitmaps/`: `player1{male,female,
+      maleface,femaleface}.bmp` → `player5*`, `player2*` → `player6*` (8 files).
+   3. **Player-select menu colours.** `playerselect.rml`: add
+      `data-class-cyan="it_index == 4"` / `data-class-orange="it_index == 5"` on
+      the `<h1>`, portrait `<img>` (+ its `playerselected` border) and the
+      controller row. `playerselect.rcss`: add `.cyan`/`.orange` + the
+      `img.cyan/orange.playerselected` borders. Colours must match step 1.
+      "Total Players" toggle already routes through `setNumberOfPlayers` (bounded
+      by MAX_PLAYERS) — allows 6 with no code change.
+   4. **Controller-only enforcement for slots 5/6.** `makeDefaultPlayer` already
+      defaults them AI. No-op the Human toggle for `playerIndex >= 4` in
+      `PlayersSelectBinder::togglePlayerAI` so they can't become a keyboardless
+      frozen human; they go human only via the 2.7 in-game controller takeover.
+      (Out-of-range guard at `InputHandler.cpp:80` is the backstop.) **Future
+      work (user):** add explicit per-character keyboard-vs-gamepad + index
+      display in the player-select menu with per-control uniqueness; then switch
+      slots 5/6 to "allow Human, require a pad".
+   5. **Gate Start on map size, with on-screen feedback (the new UX).** Show map
+      width + height on the player-select screen; if `players > 4` and height is
+      too small, show a message stating the required minimum height and DISABLE
+      Start until players drops to ≤4 or height is raised in Options.
+      - Add `GameSettings::requiredMapHeightFor(numPlayers)` (5→15, 6→19, else
+        13) + `canStartGame()` — single source of truth shared by binder,
+        message, and the EventManager guard.
+      - `PlayersSelectBinder`: bind scalars `mapWidth`/`mapHeight` + computed
+        `canStart` (bool) + `playerLimitMsg` (string) into the persistent
+        `playersSelect` model; add `refreshMapConfig()` (re-reads dims,
+        recomputes, DirtyVariables) called from `toggleNumPlayers` AND on page
+        show.
+      - Refresh-on-show: add `<body onload="psinit">` to `playerselect.rml`;
+        route `psinit` through `EventHandlerPlayerSelect::ProcessEvent` (today a
+        no-op) → `refreshMapConfig()`. Mirrors the Options `onload` pattern.
+      - `playerselect.rml`: a `{{mapWidth}}×{{mapHeight}}` display, a
+        `data-if="!canStart"` message block, and Start gets
+        `data-class-disabled="!canStart"`.
+      - **Hard guard (defense in depth):** `EventManager.cpp:101` `start` branch
+        refuses GAME_INIT unless `canStartGame()` (visual disable alone won't
+        stop a click/Enter). `playerselect.rcss`: disabled-button + message
+        styling.
+   6. **Audit / minor cosmetics.** Clamps `GameEngine.cpp:283` (NUM_TEAMS) and
+      `InfoPanel.cpp:25` (MAX_PLAYERS) now permit 6 — fine. Block-team-colour
+      *zones* (`GameEngine.cpp:247-263`) only ring the 4 corners; players 5/6
+      (mid-edge) get no coloured block ring — purely cosmetic, leave + note. The
+      `for(i<4)` loops in `PlayerCharacterEntity` are 4-DIRECTION loops, not
+      players — untouched.
+   7. **Build + verify.** Keyboard play-test: 4-player regression + pick 6 → AI
+      bots 5/6 spawn mid-top/mid-bottom in cyan/orange w/ matching portraits;
+      with a small map the gate message shows + Start disabled; raise height in
+      Options → Start re-enables. Controller takeover of 5/6 is **gamepad-gated**
+      → flag for user. Verify in `build/BitRiot`, NOT stale `target/`.
 
 ## Out of scope (separate follow-ups, not now)
 - P1 focus-highlight (blue border) — RmlUi focus/CSS issue in

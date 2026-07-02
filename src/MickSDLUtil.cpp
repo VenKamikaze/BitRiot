@@ -10,7 +10,11 @@
 
 using namespace std;
 
-static map<SDL_JoystickID, SDL_Haptic*>* hapticDevices;
+map<SDL_JoystickID, SDL_Haptic*>& MickSDLUtil::hapticDevices()
+{
+  static map<SDL_JoystickID, SDL_Haptic*> devices;
+  return devices;
+}
 
 MickSDLUtil::MickSDLUtil()
 {
@@ -58,21 +62,27 @@ bool MickSDLUtil::rumbleController(SDL_JoystickID joystickID, float strength, Ui
   bool newDevice = false;
   bool rumbled = false;
 
-  if( hapticDevices->find(joystickID) != hapticDevices->end() )
+  auto& devices = hapticDevices();
+  if( devices.find(joystickID) != devices.end() )
   {
-    haptic = hapticDevices->find(joystickID)->second;
+    haptic = devices.find(joystickID)->second;
   }
   else
   {
-    if(SDL_JoystickIsHaptic(SDL_JoystickFromInstanceID(joystickID)) == SDL_TRUE)
+    SDL_Joystick* joystick = SDL_JoystickFromInstanceID(joystickID);
+    if(joystick != NULL && SDL_JoystickIsHaptic(joystick) == SDL_TRUE)
     {
-      haptic = SDL_HapticOpenFromJoystick(SDL_JoystickFromInstanceID(joystickID));
+      haptic = SDL_HapticOpenFromJoystick(joystick);
       if (haptic != NULL && SDL_HapticRumbleInit(haptic) != 0) // 0 == success
       {
         SDL_HapticClose(haptic);
         haptic = NULL;
       }
       newDevice = true;
+    }
+    else if (joystick == NULL)
+    {
+      return false; // device unplugged since the caller looked it up
     }
   }
 
@@ -87,7 +97,7 @@ bool MickSDLUtil::rumbleController(SDL_JoystickID joystickID, float strength, Ui
       }
       else if(newDevice)
       {
-        hapticDevices->insert(std::pair<SDL_JoystickID, SDL_Haptic*>(joystickID, haptic));
+        devices.insert(std::pair<SDL_JoystickID, SDL_Haptic*>(joystickID, haptic));
         printf( "Added controller: %i to haptics! \n", joystickID);
       }
     }
@@ -102,6 +112,17 @@ bool MickSDLUtil::rumbleController(SDL_JoystickID joystickID, float strength, Ui
     }
   }
   return rumbled;
+}
+
+void MickSDLUtil::closeHaptic(SDL_JoystickID joystickID)
+{
+  auto& devices = hapticDevices();
+  auto it = devices.find(joystickID);
+  if(it != devices.end())
+  {
+    SDL_HapticClose(it->second);
+    devices.erase(it);
+  }
 }
 
 SDL_JoystickID MickSDLUtil::getPrimaryJoystickID()

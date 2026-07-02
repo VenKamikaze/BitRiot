@@ -4,6 +4,7 @@
 #include "MickBaseInput.h"
 #include "PlayerCharacterEntity.h"
 #include <memory>
+#include <set>
 #include <utility>
 
 
@@ -29,6 +30,8 @@ void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerC
   m_action2Down.clear();
   m_spawnSelection.clear();
   m_keyMap.clear();
+  m_controllerDown.clear();
+  m_controllerReleased.clear();
   // Phase 2.7: each game starts with no in-progress join selectors. The
   // InfoPanel is recreated per game so its indicators reset alongside.
   m_pendingJoins.clear();
@@ -40,6 +43,18 @@ void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerC
   setAvailableKeys();
 
   std::GameSettings * settings = std::GameSettings::getInstance();
+
+  // Seed the set of keyboard sets already explicitly claimed in the canonical
+  // model, so default seeding below can't hand a set to one player that
+  // another player already explicitly owns (e.g. P2 explicitly holds set 0).
+  std::set<int> usedSets;
+  for(auto& p : *settings->getPlayers())
+  {
+    if(p.attachedKeyboardId >= 0)
+    {
+      usedSets.insert(p.attachedKeyboardId);
+    }
+  }
 
   for(const auto& player: playerCharacters)
   {
@@ -68,13 +83,28 @@ void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerC
     int keyboardSetIndex = setup->attachedKeyboardId;
 
     // Mandatory default seeding: a human keyboard player with no stored set
-    // gets a deterministic set by player index, written back into the canonical
-    // model so it stays authoritative (and idempotent across "Play again").
-    // Without this, keyboard-only play (the common case) has no key map.
+    // gets the lowest set neither explicitly claimed by another player nor
+    // already handed out earlier in this loop, written back into the
+    // canonical model so it stays authoritative (and idempotent across "Play
+    // again"). Identical to the old canonicalIndex-based seeding when nothing
+    // is explicitly assigned; prevents double-WASD when e.g. P2 explicitly
+    // owns set 0. Without this, keyboard-only play (the common case) has no
+    // key map.
     if(keyboardSetIndex < 0)
     {
-      keyboardSetIndex = canonicalIndex;
-      settings->setPlayerKeyboard(canonicalIndex, keyboardSetIndex);
+      for(int candidate = 0; candidate < (int) m_availableKeySets.size(); ++candidate)
+      {
+        if(usedSets.find(candidate) == usedSets.end())
+        {
+          keyboardSetIndex = candidate;
+          break;
+        }
+      }
+      if(keyboardSetIndex >= 0)
+      {
+        usedSets.insert(keyboardSetIndex);
+        settings->setPlayerKeyboard(canonicalIndex, keyboardSetIndex);
+      }
     }
 
     if(keyboardSetIndex >= 0 && keyboardSetIndex < (int) m_availableKeySets.size())
@@ -461,6 +491,154 @@ void InputHandler::detachController(int controllerId)
 }
 
 
+void InputHandler::processPlayerButtons(shared_ptr<PlayerCharacterEntity> player,
+    const std::function<bool(ButtonName)>& isDown,
+    const std::function<bool(ButtonName)>& isReleased)
+{
+  int i = player->getID();           // opaque unique entity id: m_action* key
+  int slot = player->getTeam();      // 1-based player slot: InfoPanel row (see setSelection)
+
+  if (m_action1Down[i] == false && m_action2Down[i] == false)
+  {
+    if (isDown(UP_KEY))
+    {
+      player->moveInDirection(UP);
+      player->incAnimFrame();
+    }
+    else if (isDown(DOWN_KEY))
+    {
+      player->moveInDirection(DOWN);
+      player->incAnimFrame();
+    }
+    else if (isDown(LEFT_KEY))
+    {
+      player->moveInDirection(LEFT);
+      player->incAnimFrame();
+    }
+    else if (isDown(RIGHT_KEY))
+    {
+      player->moveInDirection(RIGHT);
+      player->incAnimFrame();
+    }
+    if (isDown(ACTION1_KEY))
+    {
+      m_action1Down[i] = true;
+    }
+    else if (isDown(ACTION2_KEY))
+    {
+      m_action2Down[i] = true;
+      m_spawnSelection[i] = EGG1;
+    }
+  }
+  else // action1Down == true || action2Down == true
+  {
+    if (m_action1Down[i] == true)
+    {
+      // get action1 + direction
+      if (isDown(UP_KEY))
+      {
+        m_spawnSelection[i] = BOMB;
+        p_infoPanel->setSelection(BOMB, slot);
+      }
+      else if (isDown(DOWN_KEY))
+      {
+        m_spawnSelection[i] = BLOCK;
+        p_infoPanel->setSelection(BLOCK, slot);
+      }
+      else if (isDown(LEFT_KEY))
+      {
+        m_spawnSelection[i] = MINE;
+        p_infoPanel->setSelection(MINE, slot);
+      }
+      else if (isDown(RIGHT_KEY))
+      {
+        m_spawnSelection[i] = ROCKET_SPIN;
+        p_infoPanel->setSelection(ROCKET_SPIN, slot);
+      }
+
+      // for no direction press
+      if (m_spawnSelection[i] == BLOCK)
+      {
+        p_infoPanel->setSelection(BLOCK, slot);
+      }
+
+      if (isReleased(ACTION1_KEY))
+      {
+        // control released this frame, try to place item
+        if (p_dynamicMap->tileHasStaticEntity(player->getTileX(), player->getTileY()) == false)
+        {
+          // TO DO - if trying to place block, check there is an exit
+          player->createEntity(m_spawnSelection[i]);
+        }
+
+        m_action1Down[i] = false;
+        m_spawnSelection[i] = BLOCK;
+        p_infoPanel->setSelection(PLAYER_CHARACTER, slot);
+      }
+      // end if action1Down == true
+    }
+    else
+    {
+      // action2Down == true
+      // get action2 + direction
+      if (isDown(UP_KEY))
+      {
+        m_spawnSelection[i] = EGG3;
+      }
+      else if (isDown(DOWN_KEY))
+      {
+        m_spawnSelection[i] = EGG5;
+      }
+      else if (isDown(LEFT_KEY))
+      {
+        m_spawnSelection[i] = EGG2;
+      }
+      else if (isDown(RIGHT_KEY))
+      {
+        m_spawnSelection[i] = EGG4;
+      }
+
+      p_infoPanel->setSelection(m_spawnSelection[i], slot);
+
+
+      if (isReleased(ACTION2_KEY))
+      {
+        // action2 released this frame, try to place egg
+        if (p_dynamicMap->tileHasStaticEntity(player->getTileX(), player->getTileY()) == false)
+        {
+          player->createEntity(m_spawnSelection[i]);
+        }
+
+        m_action2Down[i] = false;
+        m_spawnSelection[i] = BLOCK;
+        p_infoPanel->setSelection(PLAYER_CHARACTER, slot);
+      }
+
+    }
+  } // end if action1 && action2 down
+}
+
+void InputHandler::setControllerButtonState(int playerId, ButtonName button, bool down)
+{
+  bool wasDown = m_controllerDown[playerId][button]; // lazily zero-inits on first touch
+  m_controllerDown[playerId][button] = down;
+  if (wasDown && ! down)
+  {
+    m_controllerReleased[playerId][button] = true;
+  }
+}
+
+bool InputHandler::consumeControllerReleased(int playerId, ButtonName button)
+{
+  auto it = m_controllerReleased.find(playerId);
+  if (it == m_controllerReleased.end() || ! it->second[button])
+  {
+    return false;
+  }
+  it->second[button] = false; // edge-triggered: only true once, mirrors isKeyReleased()
+  return true;
+}
+
 void InputHandler::processKeyboardInput(/*SDL_Event event*/)
 {
   shared_ptr<MickBaseInput> input = GameRunningSDLInput::getInstance();
@@ -471,7 +649,8 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
     MickLogger::getInstance()->debug(this, "Escape pressed in game");
     throw InputException("Escape pressed", GOT_QUIT);
   }
-  else if(input->isAKeyDown() || input->isAKeyReleased())
+
+  if(input->isAKeyDown() || input->isAKeyReleased())
   {
     for(const auto& player : p_players)
     {
@@ -484,133 +663,28 @@ void InputHandler::processKeyboardInput(/*SDL_Event event*/)
         continue;
       }
 
-      int i = player->getID();           // opaque unique entity id: m_keyMap / m_action* key
-      int slot = player->getTeam();      // 1-based player slot: InfoPanel row (see setSelection)
-
-      //static bool action1Down[GameSettings::MAX_PLAYERS] = { false, false, false, false };
-      //static bool action2Down[4] = { false, false, false, false };
-      //static EntityType selection[4] = { BLOCK, BLOCK, BLOCK, BLOCK };
-
-      if (m_action1Down[i] == false && m_action2Down[i] == false)
-      {
-        if (input->isKeyDown(m_keyMap[i][UP_KEY]))
-        {
-          //cout << "UP: KEY IS DOWN!\n";
-          player->moveInDirection(UP);
-          player->incAnimFrame();
-        }
-        else if (input->isKeyDown(m_keyMap[i][DOWN_KEY]))
-        {
-          player->moveInDirection(DOWN);
-          player->incAnimFrame();
-        }
-        else if (input->isKeyDown(m_keyMap[i][LEFT_KEY]))
-        {
-          player->moveInDirection(LEFT);
-          player->incAnimFrame();
-        }
-        else if (input->isKeyDown(m_keyMap[i][RIGHT_KEY]))
-        {
-          player->moveInDirection(RIGHT);
-          player->incAnimFrame();
-        }
-        if (input->isKeyDown(m_keyMap[i][ACTION1_KEY]))
-        {
-          m_action1Down[i] = true;
-        }
-        else if (input->isKeyDown(m_keyMap[i][ACTION2_KEY]))
-        {
-          m_action2Down[i] = true;
-          m_spawnSelection[i] = EGG1;
-        }
-      }
-      else // action1Down == true || action2Down == true
-      {
-        if (m_action1Down[i] == true)
-        {
-          // get action1 + direction
-          if (input->isKeyDown(m_keyMap[i][UP_KEY]))
-          {
-            m_spawnSelection[i] = BOMB;
-            p_infoPanel->setSelection(BOMB, slot);
-          }
-          else if (input->isKeyDown(m_keyMap[i][DOWN_KEY]))
-          {
-            m_spawnSelection[i] = BLOCK;
-            p_infoPanel->setSelection(BLOCK, slot);
-          }
-          else if (input->isKeyDown(m_keyMap[i][LEFT_KEY]))
-          {
-            m_spawnSelection[i] = MINE;
-            p_infoPanel->setSelection(MINE, slot);
-          }
-          else if (input->isKeyDown(m_keyMap[i][RIGHT_KEY]))
-          {
-            m_spawnSelection[i] = ROCKET_SPIN;
-            p_infoPanel->setSelection(ROCKET_SPIN, slot);
-          }
-
-          // for no direction press
-          if (m_spawnSelection[i] == BLOCK)
-          {
-            p_infoPanel->setSelection(BLOCK, slot);
-          }
-
-          if (input->isKeyReleased(m_keyMap[i][ACTION1_KEY]))
-          {
-            // control released this frame, try to place item
-            if (p_dynamicMap->tileHasStaticEntity(player->getTileX(), player->getTileY()) == false)
-            {
-              // TO DO - if trying to place block, check there is an exit
-              player->createEntity(m_spawnSelection[i]);
-            }
-
-            m_action1Down[i] = false;
-            m_spawnSelection[i] = BLOCK;
-            p_infoPanel->setSelection(PLAYER_CHARACTER, slot);
-          }
-          // end if action1Down == true
-        }
-        else
-        {
-          // action2Down == true
-          // get action2 + direction
-          if (input->isKeyDown(m_keyMap[i][UP_KEY]))
-          {
-            m_spawnSelection[i] = EGG3;
-          }
-          else if (input->isKeyDown(m_keyMap[i][DOWN_KEY]))
-          {
-            m_spawnSelection[i] = EGG5;
-          }
-          else if (input->isKeyDown(m_keyMap[i][LEFT_KEY]))
-          {
-            m_spawnSelection[i] = EGG2;
-          }
-          else if (input->isKeyDown(m_keyMap[i][RIGHT_KEY]))
-          {
-            m_spawnSelection[i] = EGG4;
-          }
-
-          p_infoPanel->setSelection(m_spawnSelection[i], slot);
-
-
-          if (input->isKeyReleased(m_keyMap[i][ACTION2_KEY]))
-          {
-            // action2 released this frame, try to place egg
-            if (p_dynamicMap->tileHasStaticEntity(player->getTileX(), player->getTileY()) == false)
-            {
-              player->createEntity(m_spawnSelection[i]);
-            }
-
-            m_action2Down[i] = false;
-            m_spawnSelection[i] = BLOCK;
-            p_infoPanel->setSelection(PLAYER_CHARACTER, slot);
-          }
-
-        }
-      } // end if action1 && action2 down
+      int i = player->getID();
+      processPlayerButtons(player,
+        [&](ButtonName b){ return input->isKeyDown(m_keyMap[i][b]); },
+        [&](ButtonName b){ return input->isKeyReleased(m_keyMap[i][b]); });
     }
+  }
+
+  // Controller-driven players: processed independently of the keyboard gate
+  // above (a controller-only game may see zero real key activity) and of the
+  // shared keysCurrentlyDown/m_keyMap machinery entirely - see the
+  // m_controllerDown/m_controllerReleased comment in InputHandler.h for why.
+  for(const auto& player : p_players)
+  {
+    if ((!player) || (!player->isAlive()) || (player->isControlledByAI()) || (player->attachedController == -1))
+    {
+      continue;
+    }
+
+    int i = player->getID();
+    processPlayerButtons(player,
+      [&](ButtonName b){ return m_controllerDown[i][b]; },
+      [&](ButtonName b){ return consumeControllerReleased(i, b); });
   }
 }
 

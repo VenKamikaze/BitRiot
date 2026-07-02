@@ -13,6 +13,7 @@
 #include <SDL2/SDL.h>
 #include "GameRunningSDLInput.h"
 #include "InputException.h"
+#include <functional>
 
 class InputHandler : public std::enable_shared_from_this<InputHandler>
 {
@@ -41,6 +42,17 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
     static const int NUM_ACTION_BUTTONS = 6;
     enum ButtonName { UP_KEY, DOWN_KEY, LEFT_KEY, RIGHT_KEY, ACTION1_KEY, ACTION2_KEY };
 
+    // Controller movement/action input, independent of the keyboard m_keyMap
+    // machinery entirely: every KEY_ enum value already corresponds to a real
+    // physical key (see MickBaseInput.h + GameRunningSDLInput::setupKeymap),
+    // so there is no spare "virtual" key tag a controller press could safely
+    // borrow without risking collision with a real keyboard player's set.
+    // Each controller-attached player instead gets a private per-player
+    // button table here, written by GameRunningSDLInput::setControllerInput
+    // and read by processKeyboardInput - so any number of simultaneous pads
+    // can drive input with no shared-state collision risk.
+    void setControllerButtonState(int playerId, ButtonName button, bool down);
+
   public:
     bool usingControllers=false;
     map<int, array<KEY, NUM_ACTION_BUTTONS>> m_keyMap; // player ID, keys available to use
@@ -52,10 +64,25 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
     map<int, bool> m_action1Down; // player ID, action1Down
     map<int, bool> m_action2Down; // player ID, action2Down
     map<int, EntityType> m_spawnSelection; // player ID, Entity selected
-  
+    // Per-player controller button state (player ID -> which of the 6
+    // ButtonName slots are currently held / were released this frame). See
+    // setControllerButtonState. Released flags are consumed (cleared) on read,
+    // mirroring GameRunningSDLInput's keysRecentlyReleased semantics.
+    map<int, array<bool, NUM_ACTION_BUTTONS>> m_controllerDown;
+    map<int, array<bool, NUM_ACTION_BUTTONS>> m_controllerReleased;
+
   private:
     void setAvailableKeys();
     vector<array<KEY, NUM_ACTION_BUTTONS>> m_availableKeySets; // fixed table of key sets, indexed by attachedKeyboardId (rebuilt each game).
+
+    // Shared movement/action/item-selection logic for one alive human player
+    // this frame, independent of whether the input source is a keyboard set
+    // (isDown/isReleased backed by m_keyMap + the shared keysCurrentlyDown
+    // singleton) or a controller (backed by m_controllerDown/m_controllerReleased).
+    void processPlayerButtons(shared_ptr<PlayerCharacterEntity> player,
+        const std::function<bool(ButtonName)>& isDown,
+        const std::function<bool(ButtonName)>& isReleased);
+    bool consumeControllerReleased(int playerId, ButtonName button);
 
     // Phase 2.7 mid-game-join selector state. One entry per device currently
     // choosing a CPU player to take over (supports several joiners at once).

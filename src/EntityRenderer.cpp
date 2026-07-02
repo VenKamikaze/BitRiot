@@ -11,9 +11,11 @@ static const unsigned int TEAM_ORIGINAL_SHADOW_COLOR = (142 << 16) + (16 << 8) +
 
 static bool teamColoursInitialised = false;
 
-Uint32 EntityRenderer::TEAM_HIGHLIGHT_COLOR[] = {0,0,0,0,0};
-Uint32 EntityRenderer::TEAM_SHADOW_COLOR[] = {0,0,0,0,0};
-Uint32 EntityRenderer::TEAM_BASE_COLOR[] = {0,0,0,0,0};
+// NUM_TEAMS entries (MAX_PLAYERS + 1). Indices: 0 = purple CPU team, 1..6 =
+// player teams. Must stay sized to NUM_TEAMS or the [team] writes below overrun.
+Uint32 EntityRenderer::TEAM_HIGHLIGHT_COLOR[] = {0,0,0,0,0,0,0};
+Uint32 EntityRenderer::TEAM_SHADOW_COLOR[] = {0,0,0,0,0,0,0};
+Uint32 EntityRenderer::TEAM_BASE_COLOR[] = {0,0,0,0,0,0,0};
 
 
 
@@ -26,18 +28,24 @@ EntityRenderer::EntityRenderer(SDL_Surface* sdl_primary, const char * filename)
     TEAM_HIGHLIGHT_COLOR[2] = SDL_MapRGB(sdl_primary->format, 166, 185, 247); // team 2 - blue team
     TEAM_HIGHLIGHT_COLOR[3] = SDL_MapRGB(sdl_primary->format, 186, 247, 192); // team 3 - green team
     TEAM_HIGHLIGHT_COLOR[4] = SDL_MapRGB(sdl_primary->format, 241, 237, 166); // team 4 - yellow team
+    TEAM_HIGHLIGHT_COLOR[5] = SDL_MapRGB(sdl_primary->format, 166, 240, 247); // team 5 - cyan team
+    TEAM_HIGHLIGHT_COLOR[6] = SDL_MapRGB(sdl_primary->format, 247, 200, 150); // team 6 - orange team
 
     TEAM_BASE_COLOR[0] = SDL_MapRGB(sdl_primary->format, 200, 23, 221); // team 0 - computer team base colour
     TEAM_BASE_COLOR[1] = SDL_MapRGB(sdl_primary->format, 221, 23, 23); // team 1 - red team
     TEAM_BASE_COLOR[2] = SDL_MapRGB(sdl_primary->format, 23, 69, 221); // team 2 - blue team
     TEAM_BASE_COLOR[3] = SDL_MapRGB(sdl_primary->format, 72, 221, 86); // team 3 - green team
     TEAM_BASE_COLOR[4] = SDL_MapRGB(sdl_primary->format, 208, 196, 23); // team 4 - yellow team
+    TEAM_BASE_COLOR[5] = SDL_MapRGB(sdl_primary->format, 23, 200, 210); // team 5 - cyan team
+    TEAM_BASE_COLOR[6] = SDL_MapRGB(sdl_primary->format, 221, 120, 23); // team 6 - orange team
 
     TEAM_SHADOW_COLOR[0] = SDL_MapRGB(sdl_primary->format, 142, 16, 158); // team 0 - computer team shadow colour
     TEAM_SHADOW_COLOR[1] = SDL_MapRGB(sdl_primary->format, 158, 16, 16); // team 1 - red team
     TEAM_SHADOW_COLOR[2] = SDL_MapRGB(sdl_primary->format, 16, 49, 158); // team 2 - blue team
     TEAM_SHADOW_COLOR[3] = SDL_MapRGB(sdl_primary->format, 51, 158, 61); // team 3 - green team
     TEAM_SHADOW_COLOR[4] = SDL_MapRGB(sdl_primary->format, 148, 140, 16); // team 4 - yellow team
+    TEAM_SHADOW_COLOR[5] = SDL_MapRGB(sdl_primary->format, 16, 142, 150); // team 5 - cyan team
+    TEAM_SHADOW_COLOR[6] = SDL_MapRGB(sdl_primary->format, 158, 84, 16); // team 6 - orange team
     teamColoursInitialised = true;
 
   }

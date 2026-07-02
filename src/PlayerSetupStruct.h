@@ -14,6 +14,7 @@ struct Player {
   int human = 0; // 1 for true
   int attachedControllerId = -1;
   int attachedKeyboardId = -1; // index for m_keyMap
+  std::string deviceLabel = "CPU"; // display-only; kept in sync by PlayersSelectBinder::refreshDeviceLabels()
 };
 
 #endif //_PLAYERSETUPSTRUCT_H_

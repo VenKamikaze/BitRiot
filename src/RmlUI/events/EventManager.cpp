@@ -100,6 +100,16 @@ void EventManager::ProcessEvent(Rml::Event& event, const Rml::String& value)
 			return;
 		if (values[0] == "start")
 		{
+			// Gate: refuse to start when the current player count needs a taller map
+			// than is configured (the player-select screen also visibly disables the
+			// Start button + shows why; this is the defensive backstop for a click or
+			// Enter that slips past the disabled styling).
+			if (! std::GameSettings::getInstance()->canStartGame())
+			{
+				std::MickLogger::getInstance()->debug(this, "start ignored: map too short for the selected player count");
+				return;
+			}
+
 			// Start the game with the current settings.
 			std::GameSettings::getInstance()->setGameState(std::GameSettings::GAME_INIT);
 
