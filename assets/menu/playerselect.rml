@@ -8,7 +8,7 @@
 
   <body class="background" onload="psinit">
 
-    <div data-model="playersSelect">
+    <div data-model="playersSelect" data-class-wrapped="players.size > 4">
 
       <div id="header" class="header-container">
         <div class="menu">
@@ -21,7 +21,7 @@
 
 		
       <section class="strips">
-        <article data-for="player : players" class="strip" data-attr-style="'width:' + (100 / players.size) + '%'" data-attr-col="it_index" data-attr-id="'article-' + it_index" data-attr-playerId="player.id">
+        <article data-for="player : players" class="strip" data-attr-style="'width:' + (players.size > 4 ? (100.0 / 3) : (100.0 / players.size)) + '%'" data-attr-col="it_index" data-attr-id="'article-' + it_index" data-attr-playerId="player.id">
           <div class="stripContent">
             <h1 data-attr-id="'h1-' + player.id" data-class-red="it_index == 0" data-class-blue="it_index == 1" data-class-green="it_index == 2" data-class-yellow="it_index == 3" data-class-cyan="it_index == 4" data-class-orange="it_index == 5">Player {{player.id + 1}}</h1>
             <!-- We'll do teams later --> <!-- <h1 data-attr-col="it_index" data-attr-playerId="player.id" data-class-red="it_index == 0" data-class-blue="it_index == 1" data-class-green="it_index == 2" data-class-yellow="it_index == 3">Team {{player.team + 1}}</h1> -->
@@ -31,9 +31,6 @@
           </div>
         </article>
       </section>
-
-      <div style="clear: both;"><!-- nc --></div>
-
 
       <div id="footer" class="footer-container">
         <div class="menu">

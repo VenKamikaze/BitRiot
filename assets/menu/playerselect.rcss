@@ -1,53 +1,64 @@
+/* Player strips use flexbox (not float) so the row count is driven purely by
+   flex-wrap: 2-4 players sit on one row (basis set inline per-player by the
+   RML, 100/players.size%); 5-6 players wrap to two rows of up to 3 columns
+   (basis 100/3%) - see the data-attr-style ternary in playerselect.rml. The
+   old float-based .strip layout collapsed/misplaced content at 5-6 players
+   (footer floating to the top, strips overlapping) - flex-wrap avoids that
+   failure mode entirely.
+
+   Sizing below is deliberately split in two tiers, both driven by the same
+   "wrapped" class (data-class-wrapped="players.size > 4" on the top-level
+   data-model div): the *base* rules are the roomy, generously-spaced layout
+   used whenever 2-4 players fit on one row; ".wrapped ..." overrides tighten
+   fonts/padding/portrait size only for the 5-6 player two-row case, which
+   has half the vertical budget per row and must still fit the smallest
+   window this menu is ever shown at (see the note above .wrapped .strip). */
 .strips {
-  min-height: 70vh;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-content: flex-start;
   text-align: center;
-  overflow: hidden;
   color: white;
 }
 
 .strip {
-  float: left;
   position: relative;
-  width: 25%;
-  min-height: 70vh;
+  box-sizing: border-box;
   overflow: hidden;
+  padding: 8px 4px;
 }
 
-.strip#0 {
-}
-
-.strip#1 {
-}
-
-.strip#2 {
-}
-
-.strip#3 {
-}
-
-.strip#4 {
-}
-
-.strip#5 {
+/* The menu window does not resize to fit the chosen player count/map size
+   (only a game round does, at GAME_INIT) - a fresh launch is always the
+   default 768x416, so 5-6 players (two rows) must still fit that height
+   (and, if a prior round was played at the smallest map, as small as
+   640x352 - GameSettings::MIN_MAP_WIDTH/HEIGHT). The .wrapped overrides
+   below claw back the vertical/horizontal room the second row needs. */
+.wrapped .strip {
+  padding: 2px 2px;
 }
 
 .stripContent {
   align-items: center;
   justify-content: center;
-  top: 0;
-  left: 0;
   width: 100%;
-  height: 40vh;
-  padding-top: 10vh;
+  padding-top: 1em;
+}
+
+.wrapped .stripContent {
+  padding-top: 0.05em;
 }
 
 .stripContent img {
   padding: 3px;
-}
-
-.stripContent img {
   border-radius: 3px;
   border: 3px grey;
+}
+
+.wrapped .stripContent img {
+  width: 40px;
+  height: 40px;
 }
 
 .stripContent img.red.playerselected {
@@ -91,12 +102,27 @@ h1 {
   font-weight: bold;
   padding-top: 0.5em;
   padding-bottom: 1em;
+  /* Black outline keeps every team colour (esp. green/yellow, which are hard
+     to read on the busy background) legible without changing the hue -
+     the hues themselves are the player-colour contract and stay untouched.
+     Applies at every player count, not just .wrapped - the contrast problem
+     isn't tied to row count. */
+  font-effect: outline(1dp #000000);
+}
+
+.wrapped h1 {
+  padding-top: 0.05em;
+  padding-bottom: 0.05em;
 }
 
 p {
   padding-top: 1em;
   font-size: 12pt;
   font-weight: bold;
+}
+
+.wrapped p {
+  padding-top: 0.05em;
 }
 
 .red {
@@ -123,17 +149,30 @@ p {
   color: #dd7817;
 }
 
+/* Previously float:left with a fixed 10vh height - when the warning message
+   (5-6 players, map too short) wrapped to 2 lines, the real content height
+   exceeded the declared 10vh and the un-floated .strips section below
+   started at the declared (not actual) height, overlapping the header text.
+   Normal block flow with auto height sizes to whatever the header actually
+   needs, so the strips/footer below always sit clear of it. This applies
+   regardless of player count/tier - it's a correctness fix, not a sizing
+   compromise. */
 .header-container {
-  float: left;
-  margin-top: 2vh;
-  width: 100vw;
-  height: 10vh;  
+  width: 100%;
+  padding-top: 0.5em;
+}
+
+.wrapped .header-container {
+  padding-top: 0.1em;
 }
 
 .footer-container {
-  float:left;
-  width: 100vw;
-  height: 10vh;
+  width: 100%;
+  padding: 0.35em 0;
+}
+
+.wrapped .footer-container {
+  padding: 0.1em 0;
 }
 
 div.controller {
@@ -146,9 +185,17 @@ div.controller {
   font-size: 18pt;
 }
 
+.wrapped .menu {
+  font-size: 13pt;
+}
+
 .mapsize {
   font-size: 12pt;
   color: #cccccc;
+}
+
+.wrapped .mapsize {
+  font-size: 10pt;
 }
 
 .warning {
@@ -159,6 +206,11 @@ div.controller {
   padding-top: 0.5em;
 }
 
+.wrapped .warning {
+  font-size: 10pt;
+  padding-top: 0.15em;
+}
+
 /* Start button greyed out while the map is too short for the player count. */
 button.disabled {
   color: #777777;
@@ -166,11 +218,11 @@ button.disabled {
 
 /* The Control button's label now cycles through CPU / Keyboard 1-4 / Pad N
    (cyclePlayerControl) instead of just CPU/Human - "Keyboard 4" is the
-   longest label, so keep it on one line and give it a bit more room than the
-   old CPU/Human toggle needed, especially at 6 narrow player columns. */
+   longest label, so keep it on one line. Font-effect outline for the same
+   busy-background readability reason as h1, at every player count. */
 .joinplayer {
   white-space: nowrap;
   font-size: 11pt;
   padding: 4px 8px;
+  font-effect: outline(1dp #000000);
 }
-
