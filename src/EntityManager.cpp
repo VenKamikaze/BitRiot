@@ -172,6 +172,18 @@ void EntityManager::processMessageQueue()
             // also remove from AI Game View
             AIGameView::getInstance()->removeEntity(id, atX, atY);
           }
+          else
+          {
+            // entity was still live in entityList (not a duplicate destroy) but was not
+            // found at its own reported (atX,atY) in entityMap - so it is NOT removed from
+            // entityList or AIGameView here. It keeps updating and stays visible to
+            // AIGameView lookups (e.g. RocketSpinEntity::enemyInTile) at whatever stale
+            // location it was last registered at - a candidate cause of "ghost" targets.
+            std::string msg = std::string("EntityManager DESTROY_ENTITY desync: id=") + std::to_string(id)
+              + " not found in entityMap at its own (atX,atY)=(" + std::to_string(atX) + "," + std::to_string(atY) + ")"
+              + " - entity NOT removed from entityList/AIGameView";
+            MickLogger::getInstance()->warn(nullptr, msg);
+          }
         }
 
         break;

@@ -1,5 +1,7 @@
 
 #include "DynamicMap.h"
+#include "MickLogger.h"
+#include <string>
 
 DynamicMap::DynamicMap(int width, int height)
 {
@@ -40,6 +42,14 @@ bool DynamicMap::moveEntityOnMap(int id, int oldX, int oldY, int newX, int newY)
       return AIGameView::getInstance()->moveEntity(id, oldX, oldY, newX, newY);
     }
   }
+
+  // desync: entity id was expected at (oldX,oldY) but wasn't found there.
+  // Its AIGameView entry (and this entityMap bucket) will now be stale/out of
+  // sync with the entity's real position - a candidate cause of "ghost" targets.
+  std::string msg = std::string("DynamicMap::moveEntityOnMap desync: id=") + std::to_string(id)
+    + " not found at oldX,oldY=(" + std::to_string(oldX) + "," + std::to_string(oldY) + ")"
+    + " attempting move to (" + std::to_string(newX) + "," + std::to_string(newY) + ")";
+  MickLogger::getInstance()->warn(nullptr, msg);
 
   return false; // entity not found at oldX, oldY
 }
