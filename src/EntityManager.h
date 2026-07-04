@@ -27,7 +27,7 @@ class EntityManager
 
     void processMessageQueue(); // processes all messages in EntityMessageQueue (create, move and destroy entities)
     unique_ptr<vector<shared_ptr<PlayerCharacterEntity>>> getAllPlayerCharacters();
-    shared_ptr<PlayerCharacterEntity> getPlayerPointer(int team);
+    shared_ptr<PlayerCharacterEntity> getPlayerPointer(int playerNumber);
     //bool getPlayerDead(int playerIndex)
     //{
     //  return m_playerDead->at(playerIndex);

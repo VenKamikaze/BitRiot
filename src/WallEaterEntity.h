@@ -10,13 +10,13 @@
 class WallEaterEntity : public SimpleMovingEntity
 {
   public:
-    WallEaterEntity(int uniqueID, int team, int atX, int atY);
+    WallEaterEntity(int uniqueID, int playerNumber, int atX, int atY);
     virtual ~WallEaterEntity();
 
     // overridden virtual methods
     virtual void onCollision(EntityType typeCollidedWith,
                              EntityGroupType groupTypeCollidedWith,
-                             int teamCollidedWith);
+                             int collidedWithPlayerNumber);
 
     virtual void update();
 

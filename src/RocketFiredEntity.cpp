@@ -1,12 +1,12 @@
 #include "RocketFiredEntity.h"
 #include <cmath>
 
-RocketFiredEntity::RocketFiredEntity(int uniqueID, int teamNumber, int atX, int atY,
+RocketFiredEntity::RocketFiredEntity(int uniqueID, int playerNumber, int atX, int atY,
                                      unsigned int flags, float fToX, float fToY)
 {
   // constructor
   m_ID = uniqueID;
-  m_team = teamNumber;
+  m_playerNumber = playerNumber;
 
   m_type = ROCKET_FIRED;
   m_groupType = WEAPON_GROUP;
@@ -56,9 +56,9 @@ RocketFiredEntity::RocketFiredEntity(int uniqueID, int teamNumber, int atX, int 
 RocketFiredEntity::~RocketFiredEntity()
 {}
 
-void RocketFiredEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTypeCollidedWith, int teamCollidedWith)
+void RocketFiredEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTypeCollidedWith, int collidedWithPlayerNumber)
 {
-  if ((teamCollidedWith != m_team && (
+  if ((collidedWithPlayerNumber != m_playerNumber && (
          (groupTypeCollidedWith == CHARACTER_GROUP) ||
          (groupTypeCollidedWith == MONSTER_GROUP) ||
          (groupTypeCollidedWith == PLAYER_SPAWN_GROUP) ||

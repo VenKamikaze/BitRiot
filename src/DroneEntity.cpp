@@ -1,7 +1,7 @@
 #include "DroneEntity.h"
 
-DroneEntity::DroneEntity(int uniqueID, int team, int atX, int atY)
-  :SimpleMovingEntity(uniqueID, team, atX, atY)
+DroneEntity::DroneEntity(int uniqueID, int playerNumber, int atX, int atY)
+  :SimpleMovingEntity(uniqueID, playerNumber, atX, atY)
 {
   // constructor
   m_type = DRONE;
@@ -22,9 +22,9 @@ DroneEntity::~DroneEntity() {}
 
 void DroneEntity::onCollision(EntityType typeCollidedWith,
                               EntityGroupType groupTypeCollidedWith,
-                              int teamCollidedWith)
+                              int collidedWithPlayerNumber)
 {
-  SimpleMovingEntity::onCollision(typeCollidedWith, groupTypeCollidedWith, teamCollidedWith);
+  SimpleMovingEntity::onCollision(typeCollidedWith, groupTypeCollidedWith, collidedWithPlayerNumber);
 }
 
 void DroneEntity::update()

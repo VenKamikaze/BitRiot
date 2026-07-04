@@ -7,13 +7,13 @@
 class IQPowerupEntity : public GameEntity
 {
   public:
-    IQPowerupEntity(int uniqueID, int teamNumber, int atX, int atY);
+    IQPowerupEntity(int uniqueID, int playerNumber, int atX, int atY);
     virtual ~IQPowerupEntity() {}
 
     // overridden virtual methods
     virtual void onCollision(EntityType typeCollidedWith,
                              EntityGroupType groupTypeCollidedWith,
-                             int teamCollidedWith);
+                             int collidedWithPlayerNumber);
 
     virtual void update();
 

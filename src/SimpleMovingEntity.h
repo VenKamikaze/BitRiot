@@ -10,14 +10,14 @@
 class SimpleMovingEntity : public GameEntity
 {
   public:
-    SimpleMovingEntity(int uniqueID, int teamNumber, int atX, int atY,
+    SimpleMovingEntity(int uniqueID, int playerNumber, int atX, int atY,
                        float offsetX = 0.0f, float offsetY = 0.0f);
     virtual ~SimpleMovingEntity();
 
     // overridden virtual methods
     virtual void onCollision(EntityType typeCollidedWith,
                              EntityGroupType groupTypeCollidedWith,
-                             int teamCollidedWith);
+                             int collidedWithPlayerNumber);
 
     virtual void update();
 

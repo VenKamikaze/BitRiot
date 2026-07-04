@@ -9,13 +9,13 @@
 class RocketSpinEntity : public GameEntity
 {
   public:
-    RocketSpinEntity(int uniqueID, int teamNumber, int atX, int atY);
+    RocketSpinEntity(int uniqueID, int playerNumber, int atX, int atY);
     virtual ~RocketSpinEntity();
 
     // overridden virtual methods
     virtual void onCollision(EntityType typeCollidedWith,
                              EntityGroupType groupTypeCollidedWith,
-                             int teamCollidedWith);
+                             int collidedWithPlayerNumber);
 
     virtual void update();
 

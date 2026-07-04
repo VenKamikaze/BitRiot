@@ -1,11 +1,11 @@
 
 #include "MineEntity.h"
 
-MineEntity::MineEntity(int uniqueID, int teamNumber, int atX, int atY)
+MineEntity::MineEntity(int uniqueID, int playerNumber, int atX, int atY)
 {
   // constructor
   m_ID = uniqueID;
-  m_team = teamNumber;
+  m_playerNumber = playerNumber;
 
   m_type = MINE;
   m_groupType = WEAPON_GROUP;
@@ -33,7 +33,7 @@ MineEntity::~MineEntity()
   // destructor
 }
 
-void MineEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTypeCollidedWith, int teamCollidedWith)
+void MineEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTypeCollidedWith, int collidedWithPlayerNumber)
 {
   if (typeCollidedWith == EXPLOSION)
   {
@@ -41,7 +41,7 @@ void MineEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupT
     return;
   }
 
-  if (teamCollidedWith != m_team)
+  if (collidedWithPlayerNumber != m_playerNumber)
   {
     explode();
     return;
@@ -65,7 +65,7 @@ void MineEntity::update()
     }
   }
 
-  if (m_team != 0) // cpu team doesn't decay
+  if (m_playerNumber != 0) // cpu team doesn't decay
   {
     m_fuse--;
     if (m_fuse <= 0)

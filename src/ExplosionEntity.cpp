@@ -5,7 +5,7 @@ ExplosionEntity::ExplosionEntity(int uniqueID, int atX, int atY)
 {
   // constructor
   m_ID = uniqueID;
-  m_team = 0;
+  m_playerNumber = 0;
 
   m_type = EXPLOSION;
   m_groupType = EXPLOSION_GROUP;
@@ -28,7 +28,7 @@ ExplosionEntity::~ExplosionEntity()
   // destructor
 }
 
-void ExplosionEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTypeCollidedWith, int teamCollidedWith)
+void ExplosionEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTypeCollidedWith, int collidedWithPlayerNumber)
 {
 
 }

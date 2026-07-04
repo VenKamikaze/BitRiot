@@ -62,9 +62,9 @@ void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerC
     // counter (the factory is a never-reset singleton), NOT a player slot - by
     // the 2nd game it is ~1980+. It is only safe here as an opaque key for the
     // m_keyMap / m_action* maps (consistent with processKeyboardInput). The
-    // canonical model is indexed by player slot, which is getTeam() (1-based).
+    // canonical model is indexed by player slot, which is getPlayerNumber() (1-based).
     const int id = player->getID();                   // opaque unique entity id (map key)
-    const int canonicalIndex = player->getTeam() - 1; // 0-based player slot -> model index
+    const int canonicalIndex = player->getPlayerNumber() - 1; // 0-based player slot -> model index
 
     m_action1Down.insert(std::pair<int, bool>(id, false));
     m_action2Down.insert(std::pair<int, bool>(id, false));
@@ -116,7 +116,7 @@ void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerC
       // mid-game keyboard takeover ends in.
       if (p_infoPanel)
       {
-        p_infoPanel->setJoinIndicator(player->getTeam(), InfoPanel::JOIN_READY,
+        p_infoPanel->setJoinIndicator(player->getPlayerNumber(), InfoPanel::JOIN_READY,
           InfoPanel::JOIN_DEVICE_KEYBOARD);
       }
     }
@@ -246,7 +246,7 @@ vector<int> InputHandler::getTakeableSlots(int excludePendingIndex)
     {
       continue;
     }
-    int team = player->getTeam();
+    int team = player->getPlayerNumber();
 
     bool targetedByOther = false;
     for (int i = 0; i < (int) m_pendingJoins.size(); i++)
@@ -466,7 +466,7 @@ void InputHandler::detachController(int controllerId)
   {
     if(player && player->isAlive() && player->attachedController == controllerId)
     {
-      MickLogger::getInstance()->debug(this, string("Detached controller from player: ").append(to_string(player->getTeam())));
+      MickLogger::getInstance()->debug(this, string("Detached controller from player: ").append(to_string(player->getPlayerNumber())));
       player->attachedController = -1;
       // Phase 2.6: on unplug, only a player WITHOUT a keymap should revert to CPU.
       // A controller take-over (now via the Phase 2.7 selector, AI-only) leaves
@@ -496,7 +496,7 @@ void InputHandler::processPlayerButtons(shared_ptr<PlayerCharacterEntity> player
     const std::function<bool(ButtonName)>& isReleased)
 {
   int i = player->getID();           // opaque unique entity id: m_action* key
-  int slot = player->getTeam();      // 1-based player slot: InfoPanel row (see setSelection)
+  int slot = player->getPlayerNumber();      // 1-based player slot: InfoPanel row (see setSelection)
 
   if (m_action1Down[i] == false && m_action2Down[i] == false)
   {

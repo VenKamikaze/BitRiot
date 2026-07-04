@@ -1,10 +1,10 @@
 #include "EnergyDropEntity.h"
 
-EnergyDropEntity::EnergyDropEntity(int uniqueID, int teamNumber, int atX, int atY)
+EnergyDropEntity::EnergyDropEntity(int uniqueID, int playerNumber, int atX, int atY)
 {
   // constructor
   m_ID = uniqueID;
-  m_team = teamNumber;
+  m_playerNumber = playerNumber;
 
   m_type = ENERGY_DROP;
   m_groupType = WEAPON_GROUP;
@@ -31,7 +31,7 @@ EnergyDropEntity::~EnergyDropEntity()
 
 void EnergyDropEntity::onCollision(EntityType typeCollidedWith,
                                    EntityGroupType groupTypeCollidedWith,
-                                   int teamCollidedWith)
+                                   int collidedWithPlayerNumber)
 {
   if (groupTypeCollidedWith == EXPLOSION_GROUP)
   {

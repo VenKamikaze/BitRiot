@@ -1,7 +1,7 @@
 #include "RobotEntity.h"
 
-RobotEntity::RobotEntity(int uniqueID, int team, int atX, int atY, unsigned int flags)
-  : SimpleMovingEntity(uniqueID, team, atX, atY)
+RobotEntity::RobotEntity(int uniqueID, int playerNumber, int atX, int atY, unsigned int flags)
+  : SimpleMovingEntity(uniqueID, playerNumber, atX, atY)
 {
   // constructor
   m_type = ROBOT1;
@@ -39,9 +39,9 @@ RobotEntity::RobotEntity(int uniqueID, int team, int atX, int atY, unsigned int 
 
 void RobotEntity::onCollision(EntityType typeCollidedWith,
                               EntityGroupType groupTypeCollidedWith,
-                              int teamCollidedWith)
+                              int collidedWithPlayerNumber)
 {
-  SimpleMovingEntity::onCollision(typeCollidedWith, groupTypeCollidedWith, teamCollidedWith);
+  SimpleMovingEntity::onCollision(typeCollidedWith, groupTypeCollidedWith, collidedWithPlayerNumber);
 }
 
 void RobotEntity::update()
@@ -91,26 +91,26 @@ void RobotEntity::performAction()
   // ok to do whatever it if
   if (m_layBlocks)
   {
-    emq->postCreateMessage(BLOCK, m_team, m_tileX, m_tileY, 0);
+    emq->postCreateMessage(BLOCK, m_playerNumber, m_tileX, m_tileY, 0);
   }
   else if (m_layMines)
   {
-    emq->postCreateMessage(MINE, m_team, m_tileX, m_tileY, 0);
+    emq->postCreateMessage(MINE, m_playerNumber, m_tileX, m_tileY, 0);
   }
   else if (m_fireRockets)
   {
-    emq->postCreateMessage(ROCKET_SPIN, m_team, m_tileX, m_tileY, 0);
+    emq->postCreateMessage(ROCKET_SPIN, m_playerNumber, m_tileX, m_tileY, 0);
   }
   else if (m_layBombs)
   {
-    emq->postCreateMessage(BOMB, m_team, m_tileX, m_tileY, 0);
+    emq->postCreateMessage(BOMB, m_playerNumber, m_tileX, m_tileY, 0);
   }
   else
   {
     return;  // no action flags
   }
 
-  if (m_team != 0)
+  if (m_playerNumber != 0)
   {
     // if not cpu team, it costs some health
     m_health -= DataReader::getInstance()->getIntFromFile("ROBOT_ACTION_COST", "data/entity.txt");

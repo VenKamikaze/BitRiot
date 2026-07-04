@@ -1,10 +1,10 @@
 #include "BombEntity.h"
 
-BombEntity::BombEntity(int uniqueID, int teamNumber, int atX, int atY)
+BombEntity::BombEntity(int uniqueID, int playerNumber, int atX, int atY)
 {
   // constructor
   m_ID = uniqueID;
-  m_team = teamNumber;
+  m_playerNumber = playerNumber;
 
   m_type = BOMB;
   m_groupType = WEAPON_GROUP;
@@ -30,7 +30,7 @@ BombEntity::~BombEntity()
   // destructor
 }
 
-void BombEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTypeCollidedWith, int teamCollidedWith)
+void BombEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTypeCollidedWith, int collidedWithPlayerNumber)
 {
   if (typeCollidedWith == EXPLOSION)
   {

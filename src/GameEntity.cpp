@@ -339,7 +339,7 @@ bool GameEntity::render(SDL_Surface* dest)
   int destX = (m_tileX * Map::TILE_WIDTH) + (int)(m_offsetX * (Map::TILE_WIDTH/2));
   int destY = (m_tileY * Map::TILE_WIDTH) + (int)(m_offsetY * (Map::TILE_WIDTH/2));
 
-  return er->render(dest, destX, destY, m_currentAnimState, m_currentAnimFrame, m_team);
+  return er->render(dest, destX, destY, m_currentAnimState, m_currentAnimFrame, m_playerNumber);
 }
 
 void GameEntity::incAnimFrame()
@@ -348,7 +348,7 @@ void GameEntity::incAnimFrame()
 
   m_currentAnimFrame++;
 
-  if (m_currentAnimFrame >= er->getNumFrames(m_team))
+  if (m_currentAnimFrame >= er->getNumFrames(m_playerNumber))
   {
     m_currentAnimFrame = 0;
   }

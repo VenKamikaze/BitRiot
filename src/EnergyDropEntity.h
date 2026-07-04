@@ -11,13 +11,13 @@
 class EnergyDropEntity : public GameEntity
 {
   public:
-    EnergyDropEntity(int uniqueID, int teamNumber, int atX, int atY);
+    EnergyDropEntity(int uniqueID, int playerNumber, int atX, int atY);
     virtual ~EnergyDropEntity();
 
     // overridden virtual methods
     virtual void onCollision(EntityType typeCollidedWith,
                              EntityGroupType groupTypeCollidedWith,
-                             int teamCollidedWith);
+                             int collidedWithPlayerNumber);
 
     virtual void update();
 

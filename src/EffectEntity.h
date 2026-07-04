@@ -15,7 +15,7 @@ class EffectEntity : public GameEntity
     // overridden virtual methods
     virtual void onCollision(EntityType typeCollidedWith,
                              EntityGroupType groupTypeCollidedWith,
-                             int teamCollidedWith) {} // does nothing
+                             int collidedWithPlayerNumber) {} // does nothing
 
     virtual void update();
 

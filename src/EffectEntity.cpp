@@ -4,7 +4,7 @@ EffectEntity::EffectEntity(int uniqueID, EntityType effectType, int atX, int atY
 {
   // constructor
   m_ID = uniqueID;
-  m_team = 0; // team does not matter, set to cpu
+  m_playerNumber = 0; // team does not matter, set to cpu
 
   m_type = effectType;
   m_origAnimCounter = DataReader::getInstance()->getIntFromFile("BASE_EFFECT_ANIM_COUNT", "data/entity.txt");

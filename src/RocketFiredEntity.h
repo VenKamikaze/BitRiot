@@ -7,14 +7,14 @@
 class RocketFiredEntity : public GameEntity
 {
   public:
-    RocketFiredEntity(int uniqueID, int teamNumber, int atX, int atY,
+    RocketFiredEntity(int uniqueID, int playerNumber, int atX, int atY,
                       unsigned int flags, float toX, float toY);
     virtual ~RocketFiredEntity();
 
     // overridden virtual methods
     virtual void onCollision(EntityType typeCollidedWith,
                              EntityGroupType groupTypeCollidedWith,
-                             int teamCollidedWith);
+                             int collidedWithPlayerNumber);
 
     virtual void update();
 

@@ -11,13 +11,13 @@
 class EggEntity : public GameEntity
 {
   public:
-    EggEntity(int uniqueID, int teamNumber, EntityType eggType, EntityType hatchType, int atX, int atY, unsigned int flags);
+    EggEntity(int uniqueID, int playerNumber, EntityType eggType, EntityType hatchType, int atX, int atY, unsigned int flags);
     ~EggEntity();
 
     // overridden virtual methods
     virtual void onCollision(EntityType typeCollidedWith,
                              EntityGroupType groupTypeCollidedWith,
-                             int teamCollidedWith);
+                             int collidedWithPlayerNumber);
 
     virtual void update();
 

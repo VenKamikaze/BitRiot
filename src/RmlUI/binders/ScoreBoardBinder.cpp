@@ -56,10 +56,10 @@ namespace std
     m_scores.gameLengthSeconds = gameTotalLength;
     if(winner)
     {
-      ss << "Player " << winner->getTeam() << " " << ScoreBoardBinder::randomWinText();
+      ss << "Player " << winner->getPlayerNumber() << " " << ScoreBoardBinder::randomWinText();
       m_scores.numberBombsPlaced = winner->getNumberBombsPlaced();
       m_scores.numberEggsPlaced = winner->getNumberEggsPlaced();
-      m_scores.playerWinNumber = winner->getTeam();
+      m_scores.playerWinNumber = winner->getPlayerNumber();
     }
     else
     {

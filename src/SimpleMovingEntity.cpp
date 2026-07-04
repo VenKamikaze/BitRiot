@@ -1,13 +1,13 @@
 #include "SimpleMovingEntity.h"
 
-SimpleMovingEntity::SimpleMovingEntity(int uniqueID, int teamNumber, int atX, int atY, float offX, float offY)
+SimpleMovingEntity::SimpleMovingEntity(int uniqueID, int playerNumber, int atX, int atY, float offX, float offY)
 {
 
   m_initialAnimCount = DataReader::getInstance()->getIntFromFile("BASE_ANIM_COUNT", "data/entity.txt");
   m_initialDecayCount = DataReader::getInstance()->getIntFromFile("BASE_DECAY_COUNT", "data/entity.txt");
 
   m_ID = uniqueID;
-  m_team = teamNumber;
+  m_playerNumber = playerNumber;
   m_tileX = atX;
   m_tileY = atY;
   m_offsetX = offX;
@@ -36,9 +36,9 @@ SimpleMovingEntity::~SimpleMovingEntity()
 
 void SimpleMovingEntity::onCollision(EntityType typeCollidedWith,
                                      EntityGroupType groupTypeCollidedWith,
-                                     int teamCollidedWith)
+                                     int collidedWithPlayerNumber)
 {
-  if ((teamCollidedWith != m_team && (
+  if ((collidedWithPlayerNumber != m_playerNumber && (
          (groupTypeCollidedWith == CHARACTER_GROUP) ||
          (groupTypeCollidedWith == MONSTER_GROUP) ||
          (groupTypeCollidedWith == PLAYER_SPAWN_GROUP) ||
@@ -48,7 +48,7 @@ void SimpleMovingEntity::onCollision(EntityType typeCollidedWith,
     // collided with hostile type
     m_health--;
     EntityMessageQueue::getInstance()->postCreateMessage(DAMAGE_EFFECT,
-        m_team, m_tileX, m_tileY, 0, m_offsetX, m_offsetY);
+        m_playerNumber, m_tileX, m_tileY, 0, m_offsetX, m_offsetY);
     return;
   }
 }
@@ -62,7 +62,7 @@ void SimpleMovingEntity::update()
     m_animCounter = m_initialAnimCount;
   }
 
-  if (m_team != 0) // CPU team doesn't decay
+  if (m_playerNumber != 0) // CPU team doesn't decay
   {
     m_decayCounter--;
     if (m_decayCounter <= 0)
@@ -78,7 +78,7 @@ void SimpleMovingEntity::update()
   {
     EntityMessageQueue::getInstance()->postDestroyMessage(m_ID);
     EntityMessageQueue::getInstance()->postCreateMessage(DAMAGE_EFFECT,
-        m_team, m_tileX, m_tileY, 0, m_offsetX, m_offsetY);
+        m_playerNumber, m_tileX, m_tileY, 0, m_offsetX, m_offsetY);
     return;
   }
 

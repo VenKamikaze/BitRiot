@@ -2,11 +2,11 @@
 
 #include "BlockEntity.h"
 
-BlockEntity::BlockEntity(int uniqueID, int teamNumber, int atX, int atY)
+BlockEntity::BlockEntity(int uniqueID, int playerNumber, int atX, int atY)
 {
   // constructor
   m_ID = uniqueID;
-  m_team = teamNumber;
+  m_playerNumber = playerNumber;
 
   m_type = BLOCK;
   m_groupType = BLOCK_GROUP;
@@ -34,7 +34,7 @@ BlockEntity::~BlockEntity()
   Map::getInstance()->setBlockAt(m_tileX, m_tileY, false);
 }
 
-void BlockEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTypeCollidedWith, int teamCollidedWith)
+void BlockEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTypeCollidedWith, int collidedWithPlayerNumber)
 {
 
   if (typeCollidedWith == EXPLOSION)
@@ -48,7 +48,7 @@ void BlockEntity::onCollision(EntityType typeCollidedWith, EntityGroupType group
     // munch effect!
     EntityMessageQueue::getInstance()->postDestroyMessage(m_ID);
     GameSound::playSound(GameSound::MUNCHY);
-    EntityMessageQueue::getInstance()->postCreateMessage(MUNCH_EFFECT, m_team, m_tileX, m_tileY, 0);
+    EntityMessageQueue::getInstance()->postCreateMessage(MUNCH_EFFECT, m_playerNumber, m_tileX, m_tileY, 0);
     return;
   }
 }

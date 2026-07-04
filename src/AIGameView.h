@@ -18,7 +18,7 @@ using namespace std;
 struct EntityInfo
 {
   int id;
-  int team;
+  int playerNumber;
   EntityType type;
   EntityGroupType groupType;
   bool staticFlag;

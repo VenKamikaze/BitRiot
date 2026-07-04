@@ -10,13 +10,13 @@
 class EggThiefEntity : public SimpleMovingEntity
 {
   public:
-    EggThiefEntity(int uniqueID, int team, int atX, int atY);
+    EggThiefEntity(int uniqueID, int playerNumber, int atX, int atY);
     virtual ~EggThiefEntity();
 
     // overridden virtual methods
     virtual void onCollision(EntityType typeCollidedWith,
                              EntityGroupType groupTypeCollidedWith,
-                             int teamCollidedWith);
+                             int collidedWithPlayerNumber);
 
     virtual void update();
 

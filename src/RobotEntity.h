@@ -11,13 +11,13 @@
 class RobotEntity : public SimpleMovingEntity
 {
   public:
-    RobotEntity(int uniqueID, int team, int atX, int atY, unsigned int flags);
+    RobotEntity(int uniqueID, int playerNumber, int atX, int atY, unsigned int flags);
     virtual ~RobotEntity() {}
 
     // overridden virtual methods
     virtual void onCollision(EntityType typeCollidedWith,
                              EntityGroupType groupTypeCollidedWith,
-                             int teamCollidedWith);
+                             int collidedWithPlayerNumber);
 
     virtual void update();
 

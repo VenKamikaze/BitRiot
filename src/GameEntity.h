@@ -62,9 +62,9 @@ class GameEntity
     {
       return m_ID;
     }
-    inline const int getTeam()
+    inline const int getPlayerNumber()
     {
-      return m_team;
+      return m_playerNumber;
     }
     inline const bool getWalkThroughBlocks()
     {
@@ -107,7 +107,7 @@ class GameEntity
     // virtual functions to override
     virtual void onCollision(EntityType typeCollidedWith,
                              EntityGroupType groupTypeCollidedWith,
-                             int teamCollidedWith) = 0; //pure virtual function
+                             int collidedWithPlayerNumber) = 0; //pure virtual function
     virtual void update() = 0; // called each frame for AI, animation, movement etc.
 
     // virtual functions that don't always need overriding
@@ -135,7 +135,7 @@ class GameEntity
     int m_health; // init to a starting value, lose health when hit or even when move
     float m_velocity; // should be speed really, but i prefer this,
     // also should be a function of health for most entities
-    int m_team; // 0 is monsters, 1 for player1, 2 for player2 etc...
+    int m_playerNumber; // 0 is monsters, 1 for player1, 2 for player2 etc...
 
 
     void explode(); // used by some children to explode :)

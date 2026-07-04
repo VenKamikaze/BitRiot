@@ -1,11 +1,11 @@
 #include "EggEntity.h"
 
-EggEntity::EggEntity(int uniqueID, int teamNumber, EntityType eggType,
+EggEntity::EggEntity(int uniqueID, int playerNumber, EntityType eggType,
                      EntityType hatchType, int atX, int atY, unsigned int flags)
 {
   // constructor
   m_ID = uniqueID;
-  m_team = teamNumber;
+  m_playerNumber = playerNumber;
 
   m_type = eggType;
   m_hatchling = hatchType;
@@ -58,9 +58,9 @@ EggEntity::~EggEntity()
   // destructor
 }
 
-void EggEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTypeCollidedWith, int teamCollidedWith)
+void EggEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTypeCollidedWith, int collidedWithPlayerNumber)
 {
-  if (teamCollidedWith == m_team)
+  if (collidedWithPlayerNumber == m_playerNumber)
   {
     // collided with own team
     // do nothing for most entity types
@@ -86,7 +86,7 @@ void EggEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTy
       case EGG_THIEF:
         // oh no an egg thief!
         // forced to change teams
-        m_team = teamCollidedWith;
+        m_playerNumber = collidedWithPlayerNumber;
         GameSound::playSound(GameSound::EGG_STOLEN);
         break;
       default:
@@ -117,6 +117,6 @@ void EggEntity::update()
 void EggEntity::hatch()
 {
   EntityMessageQueue * emq = EntityMessageQueue::getInstance();
-  emq->postCreateMessage(m_hatchling, m_team, m_tileX, m_tileY, m_hatchFlags);
+  emq->postCreateMessage(m_hatchling, m_playerNumber, m_tileX, m_tileY, m_hatchFlags);
   emq->postDestroyMessage(m_ID);
 }

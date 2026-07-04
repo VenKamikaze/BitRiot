@@ -8,13 +8,13 @@
 class BombEntity : public GameEntity
 {
   public:
-    BombEntity(int uniqueID, int teamNumber, int atX, int atY);
+    BombEntity(int uniqueID, int playerNumber, int atX, int atY);
     virtual ~BombEntity();
 
     // overridden virtual methods
     virtual void onCollision(EntityType typeCollidedWith,
                              EntityGroupType groupTypeCollidedWith,
-                             int teamCollidedWith);
+                             int collidedWithPlayerNumber);
 
     virtual void update();
 

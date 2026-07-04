@@ -1,10 +1,10 @@
 #include "IQPowerupEntity.h"
 
-IQPowerupEntity::IQPowerupEntity(int uniqueID, int teamNumber, int atX, int atY)
+IQPowerupEntity::IQPowerupEntity(int uniqueID, int playerNumber, int atX, int atY)
 {
   // constructor
   m_ID = uniqueID;
-  m_team = teamNumber;
+  m_playerNumber = playerNumber;
 
   m_type = IQPLUS_POWERUP;
   m_groupType = POWERUP_GROUP;
@@ -30,7 +30,7 @@ IQPowerupEntity::IQPowerupEntity(int uniqueID, int teamNumber, int atX, int atY)
 
 void IQPowerupEntity::onCollision(EntityType typeCollidedWith,
                                   EntityGroupType groupTypeCollidedWith,
-                                  int teamCollidedWith)
+                                  int collidedWithPlayerNumber)
 {
   if (groupTypeCollidedWith == EXPLOSION_GROUP)
   {

@@ -7,13 +7,13 @@
 class EnPlusEntity : public GameEntity
 {
   public:
-    EnPlusEntity(int uniqueID, int teamNumber, int atX, int atY);
+    EnPlusEntity(int uniqueID, int playerNumber, int atX, int atY);
     virtual ~EnPlusEntity() {}
 
     // overridden virtual methods
     virtual void onCollision(EntityType typeCollidedWith,
                              EntityGroupType groupTypeCollidedWith,
-                             int teamCollidedWith);
+                             int collidedWithPlayerNumber);
 
     virtual void update();
 

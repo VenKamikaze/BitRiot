@@ -2,11 +2,11 @@
 
 #include "PlayerCharacterEntity.h"
 
-PlayerCharacterEntity::PlayerCharacterEntity(int uniqueID, int teamNumber, int atX, int atY, unsigned int flags)
+PlayerCharacterEntity::PlayerCharacterEntity(int uniqueID, int playerNumber, int atX, int atY, unsigned int flags)
 {
   // constructor
   m_ID = uniqueID;
-  m_team = teamNumber;
+  m_playerNumber = playerNumber;
 
   m_type = PLAYER_CHARACTER;
   m_groupType = CHARACTER_GROUP;
@@ -106,9 +106,9 @@ void PlayerCharacterEntity::incAnimFrame()
 
 void PlayerCharacterEntity::onCollision(EntityType typeCollidedWith,
                                         EntityGroupType groupTypeCollidedWith,
-                                        int teamCollidedWith)
+                                        int collidedWithPlayerNumber)
 {
-  if ((teamCollidedWith != m_team && (
+  if ((collidedWithPlayerNumber != m_playerNumber && (
          (groupTypeCollidedWith == CHARACTER_GROUP) ||
          (groupTypeCollidedWith == MONSTER_GROUP) ||
          (groupTypeCollidedWith == PLAYER_SPAWN_GROUP) ||
@@ -117,7 +117,7 @@ void PlayerCharacterEntity::onCollision(EntityType typeCollidedWith,
   {
     m_health--;
     EntityMessageQueue::getInstance()->postCreateMessage(DAMAGE_EFFECT,
-        m_team, m_tileX, m_tileY, 0, m_offsetX, m_offsetY);
+        m_playerNumber, m_tileX, m_tileY, 0, m_offsetX, m_offsetY);
     if(! isControlledByAI() && attachedController != -1 )
     {
       // Try to rumble the controller if possible
@@ -207,7 +207,7 @@ bool PlayerCharacterEntity::createEntity(EntityType type)
       // illegal type to lay specified
       return false;
   }
-  EntityMessageQueue::getInstance()->postCreateMessage(type, m_team, m_tileX, m_tileY, flags);
+  EntityMessageQueue::getInstance()->postCreateMessage(type, m_playerNumber, m_tileX, m_tileY, flags);
 
   // check health for death
   if (m_health <= 0)
@@ -993,7 +993,7 @@ bool PlayerCharacterEntity::goNumTilesAway(int numToMove)
           vector<EntityInfo>::iterator it;
           for (it = info.begin(); it != info.end(); ++it)
           {
-            if (it->type == MINE && it->team != getTeam())
+            if (it->type == MINE && it->playerNumber != getPlayerNumber())
             {
               badMineFound = true;
               break;
@@ -1322,7 +1322,7 @@ bool PlayerCharacterEntity::safeLocationToBomb(int tileX, int tileY)
 
     for (it = info.begin(); it != info.end(); ++it)
     {
-      if ((it->groupType == EGG_GROUP && it->team == m_team)
+      if ((it->groupType == EGG_GROUP && it->playerNumber == m_playerNumber)
           || it->type == ENERGY_DROP || it->groupType == POWERUP_GROUP)
       {
         result = false;
@@ -1404,7 +1404,7 @@ void PlayerCharacterEntity::checkEnvironment()
         vector<EntityInfo>::iterator infoIt;
         for (infoIt = info.begin(); infoIt != info.end(); ++infoIt)
         {
-          if (infoIt->team != m_team && (infoIt->groupType == CHARACTER_GROUP
+          if (infoIt->playerNumber != m_playerNumber && (infoIt->groupType == CHARACTER_GROUP
                                          || infoIt->groupType == PLAYER_SPAWN_GROUP
                                          || infoIt->groupType == ROBOT_GROUP) )
           {
@@ -1479,7 +1479,7 @@ void PlayerCharacterEntity::checkEnvironment()
         vector<EntityInfo>::iterator infoIt;
         for (infoIt = info.begin(); infoIt != info.end(); ++infoIt)
         {
-          if (infoIt->team != m_team && infoIt->groupType == EGG_GROUP
+          if (infoIt->playerNumber != m_playerNumber && infoIt->groupType == EGG_GROUP
               && infoIt->type != EGG1 )
           {
             if (nearest.id == -1)
@@ -1542,7 +1542,7 @@ void PlayerCharacterEntity::checkEnvironment()
         vector<EntityInfo>::iterator infoIt;
         for (infoIt = info.begin(); infoIt != info.end(); ++infoIt)
         {
-          if (infoIt->team == m_team && infoIt->type == EGG_THIEF)
+          if (infoIt->playerNumber == m_playerNumber && infoIt->type == EGG_THIEF)
           {
             nearbyThief = true;
             break;

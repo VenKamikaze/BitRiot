@@ -94,7 +94,7 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
     };
     vector<PendingJoin> m_pendingJoins;
 
-    // Selector helpers (all index per-player vectors by getTeam()-1, never getID()).
+    // Selector helpers (all index per-player vectors by getPlayerNumber()-1, never getID()).
     int  getKeyboardSetForKey(KEY k, ButtonName & outButton); // fixed-table set index for any button key, or -1
     bool isKeyboardSetBound(int setIndex);                    // does a live player already drive this set?
     int  findPendingJoinIndex(bool isController, int deviceId);

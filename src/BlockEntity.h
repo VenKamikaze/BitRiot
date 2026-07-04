@@ -8,13 +8,13 @@
 class BlockEntity : public GameEntity
 {
   public:
-    BlockEntity(int uniqueID, int teamNumber, int atX, int atY);
+    BlockEntity(int uniqueID, int playerNumber, int atX, int atY);
     ~BlockEntity();
 
     // overridden virtual methods
     virtual void onCollision(EntityType typeCollidedWith,
                              EntityGroupType groupTypeCollidedWith,
-                             int teamCollidedWith);
+                             int collidedWithPlayerNumber);
 
     virtual void update();
 

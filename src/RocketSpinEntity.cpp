@@ -1,10 +1,10 @@
 #include "RocketSpinEntity.h"
 
-RocketSpinEntity::RocketSpinEntity(int uniqueID, int teamNumber, int atX, int atY)
+RocketSpinEntity::RocketSpinEntity(int uniqueID, int playerNumber, int atX, int atY)
 {
   // constructor
   m_ID = uniqueID;
-  m_team = teamNumber;
+  m_playerNumber = playerNumber;
 
   m_type = ROCKET_SPIN;
   m_groupType = WEAPON_GROUP;
@@ -30,7 +30,7 @@ RocketSpinEntity::~RocketSpinEntity()
   // destructor
 }
 
-void RocketSpinEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTypeCollidedWith, int teamCollidedWith)
+void RocketSpinEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTypeCollidedWith, int collidedWithPlayerNumber)
 {
   if (typeCollidedWith == EXPLOSION)
   {
@@ -149,7 +149,7 @@ void RocketSpinEntity::fireAt(const DIRECTION d, const int destX, const int dest
   EntityMessageQueue * emq = EntityMessageQueue::getInstance();
 
   emq->postDestroyMessage(m_ID);
-  emq->postCreateMessage(ROCKET_FIRED, m_team, m_tileX, m_tileY, flags, (float)destX, (float)destY);
+  emq->postCreateMessage(ROCKET_FIRED, m_playerNumber, m_tileX, m_tileY, flags, (float)destX, (float)destY);
 }
 
 bool RocketSpinEntity::enemyInTile(const int tileX, const int tileY) const
@@ -162,7 +162,7 @@ bool RocketSpinEntity::enemyInTile(const int tileX, const int tileY) const
     if ( ((it->groupType == CHARACTER_GROUP) ||
           (it->groupType == MONSTER_GROUP) ||
           (it->groupType == PLAYER_SPAWN_GROUP) ||
-          (it->groupType == ROBOT_GROUP)) && (it->team != m_team) )
+          (it->groupType == ROBOT_GROUP)) && (it->playerNumber != m_playerNumber) )
     {
       return true;
     }

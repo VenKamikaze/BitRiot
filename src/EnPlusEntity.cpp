@@ -1,11 +1,11 @@
 #include "EnPlusEntity.h"
 
-EnPlusEntity::EnPlusEntity(int uniqueID, int teamNumber, int atX, int atY)
+EnPlusEntity::EnPlusEntity(int uniqueID, int playerNumber, int atX, int atY)
 {
   //GameEntity(); // apparently this is called for us automatically M2S check this
   // constructor
   m_ID = uniqueID;
-  m_team = teamNumber;
+  m_playerNumber = playerNumber;
 
   m_type = ENPLUS_POWERUP;
   m_groupType = POWERUP_GROUP;
@@ -31,7 +31,7 @@ EnPlusEntity::EnPlusEntity(int uniqueID, int teamNumber, int atX, int atY)
 
 void EnPlusEntity::onCollision(EntityType typeCollidedWith,
                                EntityGroupType groupTypeCollidedWith,
-                               int teamCollidedWith)
+                               int collidedWithPlayerNumber)
 {
   if (groupTypeCollidedWith == EXPLOSION_GROUP)
   {

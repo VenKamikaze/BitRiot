@@ -23,12 +23,12 @@ typedef pair<int, int> coord;
 class PlayerCharacterEntity : public GameEntity
 {
   public:
-    PlayerCharacterEntity(int uniqueID, int teamNumber, int atX, int atY, unsigned int flags);
+    PlayerCharacterEntity(int uniqueID, int playerNumber, int atX, int atY, unsigned int flags);
     virtual ~PlayerCharacterEntity();
 
     virtual void onCollision(EntityType typeCollidedWith,
                              EntityGroupType groupTypeCollidedWith,
-                             int teamCollidedWith); //pure virtual function
+                             int collidedWithPlayerNumber); //pure virtual function
     virtual void update(); // called each frame for AI, animation, movement etc.
 
     virtual void incAnimFrame();

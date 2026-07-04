@@ -1,8 +1,8 @@
 
 #include "EggThiefEntity.h"
 
-EggThiefEntity::EggThiefEntity(int uniqueID, int teamNumber, int atX, int atY)
-  :SimpleMovingEntity(uniqueID, teamNumber, atX, atY)
+EggThiefEntity::EggThiefEntity(int uniqueID, int playerNumber, int atX, int atY)
+  :SimpleMovingEntity(uniqueID, playerNumber, atX, atY)
 {
   // constructor
   m_type = EGG_THIEF;
@@ -18,9 +18,9 @@ EggThiefEntity::~EggThiefEntity()
 
 void EggThiefEntity::onCollision(EntityType typeCollidedWith,
                                  EntityGroupType groupTypeCollidedWith,
-                                 int teamCollidedWith)
+                                 int collidedWithPlayerNumber)
 {
-  SimpleMovingEntity::onCollision(typeCollidedWith, groupTypeCollidedWith, teamCollidedWith);
+  SimpleMovingEntity::onCollision(typeCollidedWith, groupTypeCollidedWith, collidedWithPlayerNumber);
 }
 
 void EggThiefEntity::update()

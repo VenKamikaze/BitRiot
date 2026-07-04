@@ -122,7 +122,7 @@ void EntityManager::processMessageQueue()
           // also add to AIGameView
           EntityInfo info;
           info.id = id;
-          info.team = entity->getTeam();
+          info.playerNumber = entity->getPlayerNumber();
           info.type = entity->getType();
           info.groupType = entity->getGroupType();
           info.staticFlag = entity->getStaticFlag();
@@ -147,7 +147,7 @@ void EntityManager::processMessageQueue()
           // check for setting player dead flag
           if (m_pDynamicMap->entityIterator->second->getType() == PLAYER_CHARACTER)
           {
-            //m_playerDead->at(m_pDynamicMap->entityIterator->second->getTeam() - 1) = true;
+            //m_playerDead->at(m_pDynamicMap->entityIterator->second->getPlayerNumber() - 1) = true;
             static_pointer_cast<PlayerCharacterEntity>(m_pDynamicMap->entityIterator->second)->setAlive(false);
           }
 
@@ -218,7 +218,7 @@ unique_ptr<vector<shared_ptr<PlayerCharacterEntity>>> EntityManager::getAllPlaye
   return players;
 }
 
-shared_ptr<PlayerCharacterEntity> EntityManager::getPlayerPointer(int team)
+shared_ptr<PlayerCharacterEntity> EntityManager::getPlayerPointer(int playerNumber)
 {
 
   // set up player character entity pointers
@@ -228,7 +228,7 @@ shared_ptr<PlayerCharacterEntity> EntityManager::getPlayerPointer(int team)
   {
     if (m_pDynamicMap->entityIterator->second->getType() == PLAYER_CHARACTER)
     {
-      if (m_pDynamicMap->entityIterator->second->getTeam() == team)
+      if (m_pDynamicMap->entityIterator->second->getPlayerNumber() == playerNumber)
       {
         return std::static_pointer_cast<PlayerCharacterEntity>(m_pDynamicMap->entityIterator->second);
         //return (shared_ptr<PlayerCharacterEntity>) m_pDynamicMap->entityIterator->second;
@@ -248,7 +248,7 @@ shared_ptr<PlayerCharacterEntity> EntityManager::getWinningPlayer()
     {
       if(player->isAlive())
       {
-        MickLogger::getInstance()->debug(this, string("Player " + to_string(player->getTeam()) + " is the winning player").c_str());
+        MickLogger::getInstance()->debug(this, string("Player " + to_string(player->getPlayerNumber()) + " is the winning player").c_str());
         return player;
       }
     }
@@ -311,7 +311,7 @@ void EntityManager::runCollisions()
               shared_ptr<GameEntity> otherEntity = m_pDynamicMap->entityList.find(otherID)->second;
               otherEntity->onCollision(currentEntity->getType(),
                                        currentEntity->getGroupType(),
-                                       currentEntity->getTeam());
+                                       currentEntity->getPlayerNumber());
 
             }
           }

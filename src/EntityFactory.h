@@ -36,7 +36,7 @@ class EntityFactory
   public:
     static EntityFactory * getInstance();
 
-    shared_ptr<GameEntity> getEntity(EntityType t, int team, int atX, int atY,
+    shared_ptr<GameEntity> getEntity(EntityType t, int playerNumber, int atX, int atY,
                            unsigned int flags, float offsetX = 0, float offsetY = 0);
 
   private:

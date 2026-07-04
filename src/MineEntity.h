@@ -10,13 +10,13 @@
 class MineEntity : public GameEntity
 {
   public:
-    MineEntity(int id,int team, int atX, int atY);
+    MineEntity(int id,int playerNumber, int atX, int atY);
     ~MineEntity();
 
     // overridden virtual methods
     virtual void onCollision(EntityType typeCollidedWith,
                              EntityGroupType groupTypeCollidedWith,
-                             int teamCollidedWith);
+                             int collidedWithPlayerNumber);
 
     virtual void update();
     static const int ANIM_DELAY_MAX = 15;

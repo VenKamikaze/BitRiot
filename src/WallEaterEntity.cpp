@@ -1,7 +1,7 @@
 #include "WallEaterEntity.h"
 
-WallEaterEntity::WallEaterEntity(int uniqueID, int teamNumber, int atX, int atY)
-  :SimpleMovingEntity(uniqueID, teamNumber, atX, atY)
+WallEaterEntity::WallEaterEntity(int uniqueID, int playerNumber, int atX, int atY)
+  :SimpleMovingEntity(uniqueID, playerNumber, atX, atY)
 {
   // constructor
   m_type = WALL_EATER;
@@ -20,9 +20,9 @@ WallEaterEntity::~WallEaterEntity()
 
 void WallEaterEntity::onCollision(EntityType typeCollidedWith,
                                   EntityGroupType groupTypeCollidedWith,
-                                  int teamCollidedWith)
+                                  int collidedWithPlayerNumber)
 {
-  SimpleMovingEntity::onCollision(typeCollidedWith, groupTypeCollidedWith, teamCollidedWith);
+  SimpleMovingEntity::onCollision(typeCollidedWith, groupTypeCollidedWith, collidedWithPlayerNumber);
 
   // also
   if (typeCollidedWith == BLOCK)
