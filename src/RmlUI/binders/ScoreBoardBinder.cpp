@@ -2,27 +2,38 @@
 #include "ScoreBoardBinder.h"
 #include "MickLogger.h"
 #include <cstddef>
+#include <algorithm>
 
 namespace std
 {
 
-  struct ScoreBoardData 
+  // One row per player on the end-game scoreboard, grouped by team.
+  struct PlayerScoreRow
+  {
+    int playerNumber = 0;
+    int teamNumber = 0;
+    int eggs = 0;
+    int bombs = 0;
+    int survived = 0; // 1 if still alive at game end
+    int winner = 0;   // 1 if on the winning team
+  };
+
+  struct ScoreBoardData
   {
     Rml::String playerWin = "";
     int gameLengthSeconds = 0;
-    int numberEggsPlaced = 0;
-    int numberBombsPlaced = 0;
-    int playerWinNumber = 0;
+    int winningTeamNumber = 0;
+    std::vector<PlayerScoreRow> playerScores;
   } m_scores;
 
-  ScoreBoardBinder::ScoreBoardBinder(Rml::Context* rmlContext, shared_ptr<PlayerCharacterEntity> winner, int gameTotalLength)
+  ScoreBoardBinder::ScoreBoardBinder(Rml::Context* rmlContext, shared_ptr<PlayerCharacterEntity> winner, vector<shared_ptr<PlayerCharacterEntity>> allPlayers, int gameTotalLength)
   {
-    ScoreBoardBinder::mapScoreBoardData(winner, gameTotalLength);
+    ScoreBoardBinder::mapScoreBoardData(winner, allPlayers, gameTotalLength);
     SetupDataBinding(rmlContext);
   }
 
   bool ScoreBoardBinder::SetupDataBinding(Rml::Context* context)
-  { 
+  {
     Rml::DataModelConstructor constructor = context->CreateDataModel(m_modelName);
 
     if (!constructor)
@@ -30,11 +41,21 @@ namespace std
       return false;
     }
 
+    if(auto rowHandle = constructor.RegisterStruct<PlayerScoreRow>())
+    {
+      rowHandle.RegisterMember("playerNumber", &PlayerScoreRow::playerNumber);
+      rowHandle.RegisterMember("teamNumber", &PlayerScoreRow::teamNumber);
+      rowHandle.RegisterMember("eggs", &PlayerScoreRow::eggs);
+      rowHandle.RegisterMember("bombs", &PlayerScoreRow::bombs);
+      rowHandle.RegisterMember("survived", &PlayerScoreRow::survived);
+      rowHandle.RegisterMember("winner", &PlayerScoreRow::winner);
+    }
+    constructor.RegisterArray<std::vector<PlayerScoreRow>>();
+
     constructor.Bind("playerWin", &m_scores.playerWin);
-    constructor.Bind("numberEggsPlaced", &m_scores.numberEggsPlaced);
-    constructor.Bind("numberBombsPlaced", &m_scores.numberBombsPlaced);
     constructor.Bind("gameLengthSeconds", &m_scores.gameLengthSeconds);
-    constructor.Bind("playerWinNumber", &m_scores.playerWinNumber);
+    constructor.Bind("winningTeamNumber", &m_scores.winningTeamNumber);
+    constructor.Bind("playerScores", &m_scores.playerScores);
 
     m_dataModelHandle = constructor.GetModelHandle();
 
@@ -50,21 +71,40 @@ namespace std
     }
   }
 
-  void ScoreBoardBinder::mapScoreBoardData(shared_ptr<PlayerCharacterEntity> winner, int gameTotalLength)
+  void ScoreBoardBinder::mapScoreBoardData(shared_ptr<PlayerCharacterEntity> winner, vector<shared_ptr<PlayerCharacterEntity>> allPlayers, int gameTotalLength)
   {
     std::ostringstream ss;
     m_scores.gameLengthSeconds = gameTotalLength;
+    m_scores.winningTeamNumber = winner ? winner->getTeamNumber() : 0;
+
     if(winner)
     {
-      ss << "Player " << winner->getPlayerNumber() << " " << ScoreBoardBinder::randomWinText();
-      m_scores.numberBombsPlaced = winner->getNumberBombsPlaced();
-      m_scores.numberEggsPlaced = winner->getNumberEggsPlaced();
-      m_scores.playerWinNumber = winner->getPlayerNumber();
+      ss << "Team " << m_scores.winningTeamNumber << " " << ScoreBoardBinder::randomWinText();
     }
     else
     {
       ss << "It was a draw!";
     }
+
+    // Build one row per player, grouped by team (sorted by team, then player).
+    m_scores.playerScores.clear();
+    for(const auto& player : allPlayers)
+    {
+      PlayerScoreRow row;
+      row.playerNumber = player->getPlayerNumber();
+      row.teamNumber = player->getTeamNumber();
+      row.eggs = player->getNumberEggsPlaced();
+      row.bombs = player->getNumberBombsPlaced();
+      row.survived = player->isAlive() ? 1 : 0;
+      row.winner = (m_scores.winningTeamNumber != 0 && row.teamNumber == m_scores.winningTeamNumber) ? 1 : 0;
+      m_scores.playerScores.push_back(row);
+    }
+    std::sort(m_scores.playerScores.begin(), m_scores.playerScores.end(),
+      [](const PlayerScoreRow& a, const PlayerScoreRow& b) {
+        if(a.teamNumber != b.teamNumber) return a.teamNumber < b.teamNumber;
+        return a.playerNumber < b.playerNumber;
+      });
+
     MickLogger::getInstance()->debug(nullptr, ss.str().c_str());
     m_scores.playerWin = ss.str();
   }

@@ -38,7 +38,7 @@ void SimpleMovingEntity::onCollision(EntityType typeCollidedWith,
                                      EntityGroupType groupTypeCollidedWith,
                                      int collidedWithPlayerNumber)
 {
-  if ((collidedWithPlayerNumber != m_playerNumber && (
+  if ((!isTeammatePlayer(collidedWithPlayerNumber) && (
          (groupTypeCollidedWith == CHARACTER_GROUP) ||
          (groupTypeCollidedWith == MONSTER_GROUP) ||
          (groupTypeCollidedWith == PLAYER_SPAWN_GROUP) ||

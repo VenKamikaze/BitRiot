@@ -36,7 +36,9 @@ using namespace std;
 
 const string EventHandlerPlayerSelect::RML_FILENAME = "playerselect.rml";
 static const int NAVIGATION_MIN_ROW_EXTRA_CONTROLLER = 2;
-static const int NAVIGATION_MAX_ROW_EXTRA_CONTROLLER = 3;
+// portrait=2, control=3, team=4 (footer Main Menu is row 5, deliberately
+// outside this range so it is not a controller up/down target).
+static const int NAVIGATION_MAX_ROW_EXTRA_CONTROLLER = 4;
 
 EventHandlerPlayerSelect::EventHandlerPlayerSelect()
 {

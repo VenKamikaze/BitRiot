@@ -189,7 +189,8 @@ SDL_Surface* InfoPanel::makeKeyboardIcon(Uint8 r, Uint8 g, Uint8 b, int maxW, in
 SDL_Surface* InfoPanel::makeTeamKeyboardIcon(int slot)
 {
   Uint8 r, g, b;
-  SDL_GetRGB(EntityRenderer::TEAM_BASE_COLOR[slot + 1], m_surface->format, &r, &g, &b);
+  // Colour the panel row by the player's alliance team, matching in-game sprites.
+  SDL_GetRGB(EntityRenderer::TEAM_BASE_COLOR[GameSettings::getInstance()->teamNumberForPlayer(slot + 1)], m_surface->format, &r, &g, &b);
   return makeKeyboardIcon(r, g, b, 2 * Map::TILE_WIDTH, Map::TILE_HEIGHT);
 }
 
@@ -307,7 +308,7 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
     if (playerSelection[i] != PLAYER_CHARACTER)
     {
       EntityRenderer * er = EntityRendererFactory::getInstance()->getEntityRenderer(playerSelection[i]);
-      er->render(m_surface, xOffset, yOffset, 0, 0, i + 1);
+      er->render(m_surface, xOffset, yOffset, 0, 0, GameSettings::getInstance()->teamNumberForPlayer(i + 1));
     }
 
     // draw health bar

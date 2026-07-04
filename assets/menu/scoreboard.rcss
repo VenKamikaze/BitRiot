@@ -14,6 +14,55 @@
   margin-top: 5%;
 }
 
+.gamelen {
+  font-size: 12pt;
+  color: #cccccc;
+  padding-bottom: 0.5em;
+}
+
+#teamStats {
+  display: block;
+}
+
+/* One row per player, grouped by team. The winning team's rows are brighter
+   and bold so the result reads at a glance. Kept deliberately simple - the
+   full column-layout / smaller-font redesign is a separate TODO item. */
+.scoreRow {
+  display: block;
+  font-size: 13pt;
+  color: #bbbbbb;
+  padding: 0.1em 0;
+}
+
+.scoreRow.winnerRow {
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.scoreTeam {
+  display: inline-block;
+  width: 22%;
+  text-align: right;
+  padding-right: 0.6em;
+}
+
+.scorePlayer {
+  display: inline-block;
+  width: 22%;
+}
+
+.scoreStat {
+  display: inline-block;
+  width: 20%;
+  text-align: right;
+  padding-right: 0.6em;
+}
+
+.scoreSurvived {
+  display: inline-block;
+  color: #7CFC7C;
+}
+
 .invisible {
   display: none;
 }

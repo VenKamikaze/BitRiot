@@ -36,6 +36,9 @@ class EntityManager
     bool oneOrZeroPlayersRemain();
     bool allPlayersDead();
     int numPlayersAlive();
+    // Number of distinct alliance teams with at least one player still alive.
+    // Team play ends when this drops to <= 1 (last team standing wins).
+    int numAliveTeams();
 
     DynamicMap * getDynamicMap()
     {

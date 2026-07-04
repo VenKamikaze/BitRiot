@@ -4,6 +4,7 @@
 #include "MickLogger.h"
 #include "PlayerCharacterEntity.h"
 #include <memory>
+#include <set>
 #include <string>
 
 EntityManager::EntityManager()
@@ -258,7 +259,32 @@ shared_ptr<PlayerCharacterEntity> EntityManager::getWinningPlayer()
 
 bool EntityManager::oneOrZeroPlayersRemain()
 {
-  return numPlayersAlive() <= 1;
+  // A single-team (co-op) round is all players allied vs the NPC spawner: it
+  // must keep running until the whole team is wiped out, not end at kickoff
+  // when only one team exists. So there the round ends only when everyone is
+  // dead.
+  if(GameSettings::getInstance()->numConfiguredTeams() <= 1)
+  {
+    return allPlayersDead();
+  }
+  // PvP: the round ends when one (or zero) alliance teams remain, not when one
+  // player head remains. In the default free-for-all each player is their own
+  // team, so this is identical to numPlayersAlive() <= 1.
+  return numAliveTeams() <= 1;
+}
+
+int EntityManager::numAliveTeams()
+{
+  std::set<int> aliveTeams;
+  unique_ptr<vector<shared_ptr<PlayerCharacterEntity>>> playerCharacters = getAllPlayerCharacters();
+  for(const auto& player : *playerCharacters)
+  {
+    if(player->isAlive())
+    {
+      aliveTeams.insert(player->getTeamNumber());
+    }
+  }
+  return (int) aliveTeams.size();
 }
 
 bool EntityManager::allPlayersDead()

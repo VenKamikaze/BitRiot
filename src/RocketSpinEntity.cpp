@@ -162,7 +162,7 @@ bool RocketSpinEntity::enemyInTile(const int tileX, const int tileY) const
     if ( ((it->groupType == CHARACTER_GROUP) ||
           (it->groupType == MONSTER_GROUP) ||
           (it->groupType == PLAYER_SPAWN_GROUP) ||
-          (it->groupType == ROBOT_GROUP)) && (it->playerNumber != m_playerNumber) )
+          (it->groupType == ROBOT_GROUP)) && (!isTeammatePlayer(it->playerNumber)) )
     {
       return true;
     }

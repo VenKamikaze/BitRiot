@@ -57,8 +57,8 @@
 }
 
 .wrapped .stripContent img {
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
 }
 
 .stripContent img.red.playerselected {
@@ -243,4 +243,22 @@ button.disabled {
   font-size: 10pt;
   padding: 4px 8px;
   font-effect: outline(1dp #000000);
+}
+
+/* Per-player alliance selector. Cycles Team 1..N (cyclePlayerTeam) and is
+   tinted to the team colour via data-class-*; outline for the same busy-
+   background readability reason as the h1 title and Control button. The
+   .wrapped tier is tightened so the extra row still fits at 5-6 players. */
+.teamselect {
+  white-space: nowrap;
+  font-size: 10pt;
+  padding: 4px 8px;
+  margin-top: 4px;
+  font-effect: outline(1dp #000000);
+}
+
+.wrapped .teamselect {
+  font-size: 9pt;
+  padding: 1px 6px;
+  margin-top: 0px;
 }

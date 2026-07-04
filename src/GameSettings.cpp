@@ -6,6 +6,7 @@
  */
 
 #include "GameSettings.h"
+#include <set>
 
 using namespace std;
 
@@ -65,8 +66,27 @@ void GameSettings::setNumberOfPlayers(int allPlayers)
     {
       m_players.resize(allPlayers);
     }
+    // A team number must always be <= the player count. If the count dropped,
+    // reset any now-invalid team back to that player's own slot (free-for-all).
+    for(int i = 0; i < allPlayers; i++)
+    {
+      if(m_players.at(i).team >= allPlayers)
+      {
+        m_players.at(i).team = m_players.at(i).id;
+      }
+    }
     syncMirrors();
   }
+}
+
+int GameSettings::numConfiguredTeams()
+{
+  std::set<int> teams;
+  for(int i = 0; i < numPlayers; i++)
+  {
+    teams.insert(m_players.at(i).team);
+  }
+  return (int) teams.size();
 }
 
 void GameSettings::setPlayerGender(int playerIndex, bool isMale)

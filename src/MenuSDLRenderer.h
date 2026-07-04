@@ -60,7 +60,7 @@ class MenuSDLRenderer
 {
   public:
     MenuSDLRenderer(SDL_Renderer *renderer, SDL_Window *screen, shared_ptr<InputHandler>);
-    void loadScoreBoard(shared_ptr<PlayerCharacterEntity> winner, int gameTotalLength);
+    void loadScoreBoard(shared_ptr<PlayerCharacterEntity> winner, vector<shared_ptr<PlayerCharacterEntity>> allPlayers, int gameTotalLength);
     void clearScoreBoard();
     bool showMenu();
     virtual ~MenuSDLRenderer();

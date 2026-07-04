@@ -77,17 +77,12 @@ void MenuSDLRenderer::initGui(SDL_Renderer* renderer, SDL_Window *screen)
   m_screen = screen;
 }
 
-void MenuSDLRenderer::loadScoreBoard(shared_ptr<PlayerCharacterEntity> winner, int gameTotalLength)
+void MenuSDLRenderer::loadScoreBoard(shared_ptr<PlayerCharacterEntity> winner, vector<shared_ptr<PlayerCharacterEntity>> allPlayers, int gameTotalLength)
 {
-  m_scoreBinder = new ScoreBoardBinder(context, winner, gameTotalLength);
-  Rml::ElementDocument *doc = loadMenu("scoreboard.rml", (winner != nullptr));
-  if(! winner)
-  {
-    MickLogger::getInstance()->debug(this, "No winner - hiding winner stats");
-    doc->GetElementById("winnerStats")->SetClass("invisible", true);
-    doc->Focus();
-    doc->Show();
-  }
+  m_scoreBinder = new ScoreBoardBinder(context, winner, allPlayers, gameTotalLength);
+  // The scoreboard now lists every player grouped by team (with a "Team N wins"
+  // / draw headline), so there is no separate winner-only block to hide.
+  loadMenu("scoreboard.rml", true);
 }
 
 void MenuSDLRenderer::clearScoreBoard()

@@ -41,7 +41,7 @@ void MineEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupT
     return;
   }
 
-  if (collidedWithPlayerNumber != m_playerNumber)
+  if (!isTeammatePlayer(collidedWithPlayerNumber))
   {
     explode();
     return;

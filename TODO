@@ -1,12 +1,8 @@
 
 TODO / bugs / feature ideas, in order of importance:
 
-
-* Player select menu: 'Selected' highlighting of selected items on menu don't show up very well and don't show at all when highlighting portrait images of players on 'Player Select' menu. e.g. of player 1 character doesn't show blue border so it is hard to tell where your input focus is.
-
-* Menu: Menu navigation is not great - 'Start' should be renamed to 'Play' and instead go to the 'Player Select' menu, and 'Player Select' should not show on mainmenu.rml at all.
-
-* Teams: Team play should be implemented - allow team selection on player select menu - if players are on the same team, then they work together and can win together. Spinning energy 'rockets' should not target each other or pteam players' spawn, and they can pass by each other and their spawn without damage plus their spawn do not target or hurt each other. Scoreboard will need updating to reflect stats for each player on the team.
+* Teams: Team scoreboard does not align very well - text needs to be centred and column headings should be made.
+* Teams: Co-op play never ends - tested a 4 player coop team game and the NPC spawner eventually stopped spawning eggs but the game never ended.
 
 * Build improvements - bump RmlUI to latest and make sure it's statically linked. We want to be able to bundle it with BitRiot so people can play without needing to download separate deps. SDL 2.x can stay dynamic as it's a very common dependency to have installed.
 
@@ -16,3 +12,12 @@ DONE, but needs verification:
 
 * Bug: Possibly related to playing multiple games (needs further debugging): spinning energy 'rockets' were frequently just shooting "randomly" and not at any targets.
 ** THIS HAS BEEN FIXED.
+
+DONE and verified:
+
+* Player select menu: 'Selected' highlighting of selected items on menu don't show up very well and don't show at all when highlighting portrait images of players on 'Player Select' menu. e.g. of player 1 character doesn't show blue border so it is hard to tell where your input focus is.
+
+* Menu: Menu navigation is not great - 'Start' should be renamed to 'Play' and instead go to the 'Player Select' menu, and 'Player Select' should not show on mainmenu.rml at all.
+
+* Teams: Team play should be implemented - allow team selection on player select menu - if players are on the same team, then they work together and can win together. Spinning energy 'rockets' should not target each other or pteam players' spawn, and they can pass by each other and their spawn without damage plus their spawn do not target or hurt each other. Scoreboard will need updating to reflect stats for each player on the team.
+

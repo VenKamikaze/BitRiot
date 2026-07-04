@@ -93,6 +93,25 @@ class GameSettings
     {
       m_players.at(playerIndex).attachedKeyboardId = keyboardSetIndex;
     }
+    // Alliance team for a player slot. team is 0-based (0..numPlayers-1);
+    // players sharing a team cooperate. No mirror to re-derive.
+    inline void setPlayerTeam(int playerIndex, int team)
+    {
+      m_players.at(playerIndex).team = team;
+    }
+    // Maps an entity's playerNumber (1-based slot; 0 = CPU/neutral) to its
+    // 1-based alliance team number (0 = CPU). Used for friendly-fire, team
+    // colours, win detection and the scoreboard. Out-of-range -> 0 (neutral).
+    inline int teamNumberForPlayer(int playerNumber)
+    {
+      if (playerNumber <= 0 || playerNumber > numPlayers)
+        return 0;
+      return m_players.at(playerNumber - 1).team + 1;
+    }
+    // Number of distinct alliance teams the current round is configured with.
+    // 1 = a co-op game (all players allied, plays until wiped out vs the NPCs);
+    // >= 2 = a PvP game (ends on last team standing). Out-of-line in the .cpp.
+    int numConfiguredTeams();
 
     inline void setBlockSpawnPercentage(int blockSpawnPercentage)
     {

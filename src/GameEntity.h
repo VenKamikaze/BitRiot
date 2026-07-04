@@ -66,6 +66,16 @@ class GameEntity
     {
       return m_playerNumber;
     }
+    // Alliance team number (1-based; 0 = CPU/neutral), derived from this
+    // entity's playerNumber via the menu's team assignment. Entities sharing a
+    // team cooperate: rockets/spawns don't target or damage teammates.
+    int getTeamNumber() const;
+    // True if an entity belonging to player slot otherPlayerNumber is on this
+    // entity's alliance team (so it must not be targeted/damaged). Used by all
+    // targeting/collision checks in place of the old "same slot" comparison;
+    // takes a playerNumber (as carried by EntityInfo / passed to onCollision)
+    // and maps it to a team internally.
+    bool isTeammatePlayer(int otherPlayerNumber) const;
     inline const bool getWalkThroughBlocks()
     {
       return m_walkThroughBlocks;

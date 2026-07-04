@@ -167,6 +167,18 @@ namespace std
       MickLogger::getInstance()->debug(this, std::string("Players.togglePlayerPortrait[").append(to_string(playerId)).append("]=").append(portaitFile));
       model_handle.DirtyVariable("players");
 	  }
+
+    // Cycles a slot's alliance team. Teams are stored 0-based (displayed +1)
+    // and cycle within 0..numPlayers-1, so a team number is always <= the
+    // player count. Players sharing a team cooperate.
+    void cyclePlayerTeam(Rml::DataModelHandle model_handle, Rml::Event& ev, const Rml::VariantList& /*arguments*/) {
+      int playerId = getPlayerIdAssociatedWithEvent(ev);
+      int numPlayers = (int) players.size();
+      int newTeam = (players.at(playerId).team + 1) % numPlayers;
+      std::GameSettings::getInstance()->setPlayerTeam(playerId, newTeam);
+      MickLogger::getInstance()->debug(this, std::string("Players.cyclePlayerTeam[").append(to_string(playerId)).append("]=").append(to_string(newTeam)));
+      model_handle.DirtyVariable("players");
+	  }
   } playersData;
 
   PlayersSelectBinder::PlayersSelectBinder(Rml::Context* rmlContext)
@@ -200,6 +212,7 @@ namespace std
     constructor.BindEventCallback("toggleNumPlayers", &Players::toggleNumPlayers, &playersData);
     constructor.BindEventCallback("cyclePlayerControl", &Players::cyclePlayerControl, &playersData);
     constructor.BindEventCallback("togglePlayerPortrait", &Players::togglePlayerPortrait, &playersData);
+    constructor.BindEventCallback("cyclePlayerTeam", &Players::cyclePlayerTeam, &playersData);
 
     if(auto controllerHandle = constructor.RegisterStruct<Controller>())
     {

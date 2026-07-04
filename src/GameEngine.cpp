@@ -154,7 +154,7 @@ bool GameEngine::runEngine()
           // This is useful when all human players are dead but AI is still alive, incase
           //   a human player wants to take over the AI.
           GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
-          menuSystem->loadScoreBoard(m_pEntityManager->getWinningPlayer(), (SDL_GetTicks() - m_gameStartedAtTicks) / 1000);
+          menuSystem->loadScoreBoard(m_pEntityManager->getWinningPlayer(), *m_pEntityManager->getAllPlayerCharacters(), (SDL_GetTicks() - m_gameStartedAtTicks) / 1000);
         }
       }
       try
@@ -166,7 +166,7 @@ bool GameEngine::runEngine()
         if(e.gotQuit())
 	      {
           GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
-          menuSystem->loadScoreBoard(m_pEntityManager->getWinningPlayer(), (SDL_GetTicks() - m_gameStartedAtTicks) / 1000);
+          menuSystem->loadScoreBoard(m_pEntityManager->getWinningPlayer(), *m_pEntityManager->getAllPlayerCharacters(), (SDL_GetTicks() - m_gameStartedAtTicks) / 1000);
 	      }
       }
 

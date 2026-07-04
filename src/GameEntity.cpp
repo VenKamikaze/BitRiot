@@ -1,6 +1,17 @@
 // default behaviour for all game entities
 
 #include "GameEntity.h"
+#include "GameSettings.h"
+
+int GameEntity::getTeamNumber() const
+{
+  return GameSettings::getInstance()->teamNumberForPlayer(m_playerNumber);
+}
+
+bool GameEntity::isTeammatePlayer(int otherPlayerNumber) const
+{
+  return getTeamNumber() == GameSettings::getInstance()->teamNumberForPlayer(otherPlayerNumber);
+}
 
 GameEntity::GameEntity()
 {
@@ -339,7 +350,9 @@ bool GameEntity::render(SDL_Surface* dest)
   int destX = (m_tileX * Map::TILE_WIDTH) + (int)(m_offsetX * (Map::TILE_WIDTH/2));
   int destY = (m_tileY * Map::TILE_WIDTH) + (int)(m_offsetY * (Map::TILE_WIDTH/2));
 
-  return er->render(dest, destX, destY, m_currentAnimState, m_currentAnimFrame, m_playerNumber);
+  // Render in the entity's alliance-team colour (teammates share a colour), not
+  // its per-player slot colour. getTeamNumber() -> the same colour-table index.
+  return er->render(dest, destX, destY, m_currentAnimState, m_currentAnimFrame, getTeamNumber());
 }
 
 void GameEntity::incAnimFrame()

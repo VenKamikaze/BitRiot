@@ -26,8 +26,8 @@ namespace std
   class ScoreBoardBinder
   {
     public:
-      ScoreBoardBinder(Rml::Context* rmlContext, shared_ptr<PlayerCharacterEntity> winner, int gameTotalLength);
-      static void mapScoreBoardData(shared_ptr<PlayerCharacterEntity> winner, int gameTotalLength);
+      ScoreBoardBinder(Rml::Context* rmlContext, shared_ptr<PlayerCharacterEntity> winner, vector<shared_ptr<PlayerCharacterEntity>> allPlayers, int gameTotalLength);
+      static void mapScoreBoardData(shared_ptr<PlayerCharacterEntity> winner, vector<shared_ptr<PlayerCharacterEntity>> allPlayers, int gameTotalLength);
       void RemoveDataBinding(Rml::Context *context);
     private:
       bool SetupDataBinding(Rml::Context* context);

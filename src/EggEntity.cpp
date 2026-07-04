@@ -60,9 +60,9 @@ EggEntity::~EggEntity()
 
 void EggEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTypeCollidedWith, int collidedWithPlayerNumber)
 {
-  if (collidedWithPlayerNumber == m_playerNumber)
+  if (isTeammatePlayer(collidedWithPlayerNumber))
   {
-    // collided with own team
+    // collided with a teammate
     // do nothing for most entity types
     switch (groupTypeCollidedWith)
     {

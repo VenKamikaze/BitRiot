@@ -108,7 +108,7 @@ void PlayerCharacterEntity::onCollision(EntityType typeCollidedWith,
                                         EntityGroupType groupTypeCollidedWith,
                                         int collidedWithPlayerNumber)
 {
-  if ((collidedWithPlayerNumber != m_playerNumber && (
+  if ((!isTeammatePlayer(collidedWithPlayerNumber) && (
          (groupTypeCollidedWith == CHARACTER_GROUP) ||
          (groupTypeCollidedWith == MONSTER_GROUP) ||
          (groupTypeCollidedWith == PLAYER_SPAWN_GROUP) ||
@@ -993,7 +993,7 @@ bool PlayerCharacterEntity::goNumTilesAway(int numToMove)
           vector<EntityInfo>::iterator it;
           for (it = info.begin(); it != info.end(); ++it)
           {
-            if (it->type == MINE && it->playerNumber != getPlayerNumber())
+            if (it->type == MINE && !isTeammatePlayer(it->playerNumber))
             {
               badMineFound = true;
               break;
@@ -1322,7 +1322,7 @@ bool PlayerCharacterEntity::safeLocationToBomb(int tileX, int tileY)
 
     for (it = info.begin(); it != info.end(); ++it)
     {
-      if ((it->groupType == EGG_GROUP && it->playerNumber == m_playerNumber)
+      if ((it->groupType == EGG_GROUP && isTeammatePlayer(it->playerNumber))
           || it->type == ENERGY_DROP || it->groupType == POWERUP_GROUP)
       {
         result = false;
@@ -1404,7 +1404,7 @@ void PlayerCharacterEntity::checkEnvironment()
         vector<EntityInfo>::iterator infoIt;
         for (infoIt = info.begin(); infoIt != info.end(); ++infoIt)
         {
-          if (infoIt->playerNumber != m_playerNumber && (infoIt->groupType == CHARACTER_GROUP
+          if (!isTeammatePlayer(infoIt->playerNumber) && (infoIt->groupType == CHARACTER_GROUP
                                          || infoIt->groupType == PLAYER_SPAWN_GROUP
                                          || infoIt->groupType == ROBOT_GROUP) )
           {
@@ -1479,7 +1479,7 @@ void PlayerCharacterEntity::checkEnvironment()
         vector<EntityInfo>::iterator infoIt;
         for (infoIt = info.begin(); infoIt != info.end(); ++infoIt)
         {
-          if (infoIt->playerNumber != m_playerNumber && infoIt->groupType == EGG_GROUP
+          if (!isTeammatePlayer(infoIt->playerNumber) && infoIt->groupType == EGG_GROUP
               && infoIt->type != EGG1 )
           {
             if (nearest.id == -1)
@@ -1542,7 +1542,7 @@ void PlayerCharacterEntity::checkEnvironment()
         vector<EntityInfo>::iterator infoIt;
         for (infoIt = info.begin(); infoIt != info.end(); ++infoIt)
         {
-          if (infoIt->playerNumber == m_playerNumber && infoIt->type == EGG_THIEF)
+          if (isTeammatePlayer(infoIt->playerNumber) && infoIt->type == EGG_THIEF)
           {
             nearbyThief = true;
             break;
