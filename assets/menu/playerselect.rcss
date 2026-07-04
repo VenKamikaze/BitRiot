@@ -26,7 +26,7 @@
   position: relative;
   box-sizing: border-box;
   overflow: hidden;
-  padding: 8px 4px;
+  padding: 8px 2px;
 }
 
 /* The menu window does not resize to fit the chosen player count/map size
@@ -92,7 +92,25 @@
   border: 3px rgb(150,150,200);
 }
 
-.stripContent img:focus {
+/* Real input focus (keyboard Tab/arrow nav, or the primary controller) and
+   another controller/keyboard set "fake" highlighting a portrait (see
+   ANY_PLAYER_HIGHLIGHTED_CLASS in MickRmlUIElementUtil - previously had no
+   CSS at all, so it was completely invisible) both need the same visible
+   marker. */
+.stripContent img:focus,
+.stripContent img.playerhighlight {
+  border-radius: 3px;
+  border: 3px rgb(120,120,255);
+}
+
+/* The above loses to the per-colour .playerselected rules above on
+   specificity (2 classes there vs 1 pseudo-class here) whenever a portrait is
+   both locked-in AND currently focused/highlighted - e.g. the default player
+   1 slot, which starts pre-selected. These combined selectors match that
+   specificity (2 classes) and are declared after the colour rules, so source
+   order settles the tie in favour of showing focus/highlight. */
+.stripContent img.playerselected:focus,
+.stripContent img.playerselected.playerhighlight {
   border-radius: 3px;
   border: 3px rgb(120,120,255);
 }
@@ -117,7 +135,7 @@ h1 {
 
 p {
   padding-top: 1em;
-  font-size: 12pt;
+  font-size: 11pt;
   font-weight: bold;
 }
 
@@ -222,7 +240,7 @@ button.disabled {
    busy-background readability reason as h1, at every player count. */
 .joinplayer {
   white-space: nowrap;
-  font-size: 11pt;
+  font-size: 10pt;
   padding: 4px 8px;
   font-effect: outline(1dp #000000);
 }
