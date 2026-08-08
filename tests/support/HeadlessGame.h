@@ -47,6 +47,23 @@
 namespace bitriot_test
 {
 
+// Result of driving a round to its natural conclusion. Every field is filled in
+// whether or not the round ended, so a round that runs out of frame budget is
+// diagnosable from the outcome rather than just timing out.
+struct RoundOutcome
+{
+  bool ended = false;          // did the win condition fire within the budget?
+  int frames = 0;              // frames simulated
+  int playersAlive = 0;
+  int aliveTeams = 0;
+  bool hostilesRemain = false; // CPU-owned eggs/monsters still on the board
+  bool poolSpent = false;      // spawning pool out of points
+  int winningPlayerNumber = 0; // 0 = draw / nobody left
+  int winningTeamNumber = 0;   // 0 = draw
+
+  std::string describe() const;
+};
+
 // Silent MickBaseSound backend. Registering itself in the constructor mirrors
 // what MickSDLSound does, so GameSound::playSound() becomes a no-op instead of
 // dereferencing a null instance.
@@ -89,8 +106,8 @@ class HeadlessGameTest : public ::testing::Test
   public:
     // Map dimensions used unless a test calls setMapSize(). Matches the game's
     // own defaults.
-    static const int DEFAULT_MAP_WIDTH = 17;
-    static const int DEFAULT_MAP_HEIGHT = 13;
+    static constexpr int DEFAULT_MAP_WIDTH = 17;
+    static constexpr int DEFAULT_MAP_HEIGHT = 13;
 
   protected:
     void SetUp() override;
@@ -106,10 +123,27 @@ class HeadlessGameTest : public ::testing::Test
     // Size must equal the configured player count.
     void setTeams(std::initializer_list<int> teamsPerSlot);
 
-    // Resizes the map. Must be odd in both dimensions (the wall/pillar layout
-    // assumes it) and is applied to Map's statics, GameSettings and the
+    // Resizes the map, applying it to Map's statics, GameSettings and the
     // rebuilt static map together.
+    //
+    // The *game* only ever uses odd dimensions (Map::init's pillar grid and
+    // GameSettings::MAP_SIZE_STEP assume it), and menu-reachable sizes are
+    // bounded by MIN_MAP_WIDTH/HEIGHT. Tests are not bound by either: there is
+    // no InfoPanel here to blit player portraits off the bottom of a short map,
+    // and no start-gate to satisfy. Small maps are the point - they force AI
+    // players into contact quickly so a round reaches its natural end in a
+    // usable number of frames.
+    //
+    // MIN_TEST_MAP_DIMENSION is the smallest that leaves a playable interior
+    // once the outer wall is placed.
+    // constexpr, not const: gtest's ASSERT_GE binds its arguments by reference,
+    // which ODR-uses the constant and would need an out-of-line definition.
+    static constexpr int MIN_TEST_MAP_DIMENSION = 4;
     void setMapSize(int width, int height);
+
+    // A small map that still gives both players room to move and meet. Used by
+    // the round-completion tests.
+    void useTestMap() { setMapSize(7, 7); }
 
     // -- round lifecycle ----------------------------------------------------
 
@@ -121,10 +155,28 @@ class HeadlessGameTest : public ::testing::Test
 
     EntityManager& em();
 
+    // The round's spawning pool, sized as GameEngine::resetGame() sizes it
+    // (numPlayers * 100). Created by startRound().
+    SpawningPool& pool();
+
     // Advances the simulation. Each call is one EntityManager::runFrame(),
     // i.e. AI + message queue + collisions - the same work the real game loop
     // does per tick.
     void runFrames(int frames);
+
+    // Drives the round until the win condition fires or the frame budget runs
+    // out, in exactly the order GameEngine::runEngine() uses for GAME_RUNNING:
+    //
+    //     check oneOrZeroPlayersRemain(pool.canSpawnMore())   <- top of tick
+    //     pool.update()
+    //     entityManager.runFrame()
+    //
+    // The check being at the *top* matters: it is what makes an "already over
+    // at kickoff" bug observable on frame zero.
+    //
+    // Does not assert. Inspect the returned RoundOutcome so a round that fails
+    // to terminate is diagnosable rather than a bare timeout.
+    RoundOutcome runRoundToCompletion(int maxFrames);
 
     // -- world queries and manipulation -------------------------------------
 
@@ -153,6 +205,7 @@ class HeadlessGameTest : public ::testing::Test
     void resetSingletons();
 
     std::unique_ptr<EntityManager> m_entityManager;
+    std::unique_ptr<SpawningPool> m_spawningPool;
     int m_mapWidth = DEFAULT_MAP_WIDTH;
     int m_mapHeight = DEFAULT_MAP_HEIGHT;
     std::streambuf* m_savedCout = nullptr;

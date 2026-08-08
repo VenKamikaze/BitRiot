@@ -14,9 +14,11 @@ DONE, but needs verification:
 
 * Teams: Team scoreboard does not align very well - text needs to be centred and column headings should be made.
 ** FIXED in 18eb5ea - reworked into a centred table with a header row and shared column widths.
+** VERIFIED by ScoreboardLayoutTest: loads the real scoreboard.rml/.rcss through RmlUi and asserts on computed geometry. Reverting the assets to e28cbf3 fails 7 of its 8 cases. NOTE: this verifies geometry (columns align to within 1px, no overlap, no wrapping), not how it looks.
 
 * Teams: Co-op play never ends - tested a 4 player coop team game and the NPC spawner eventually stopped spawning eggs but the game never ended.
 ** FIXED in 18eb5ea - a co-op round now also ends when the board is clear of hostile NPCs and the spawning pool is out of points. Covered by WinConditionTest and RoundLifecycleTest.
+** VERIFIED by FullRoundTest: plays whole 2- and 4-player co-op rounds to their natural end. Restoring the old co-op branch reproduces the bug exactly - 60000 frames with hostilesRemain=false, poolSpent=true, players alive, round never ends.
 ** Note: with the NPC Spawner option turned off, a co-op round still never ends. That is deliberate - no enemies can ever spawn, so it is an enemy-free sandbox. Ending it automatically would end it at kickoff.
 
 DONE and verified:

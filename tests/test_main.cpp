@@ -11,6 +11,7 @@
 #include <iostream>
 
 #include "support/HeadlessGame.h"
+#include "support/RmlLayoutHarness.h"
 
 int main(int argc, char** argv)
 {
@@ -31,7 +32,11 @@ int main(int argc, char** argv)
   }
   std::srand(seed);
 
+  // Order matters: HeadlessEnvironment brings up SDL and the entity renderers,
+  // which the Rml layout tests' player entities need before RmlUi is asked for
+  // anything. Environments run SetUp in registration order.
   ::testing::AddGlobalTestEnvironment(new bitriot_test::HeadlessEnvironment());
+  ::testing::AddGlobalTestEnvironment(new bitriot_test::RmlEnvironment());
 
   return RUN_ALL_TESTS();
 }

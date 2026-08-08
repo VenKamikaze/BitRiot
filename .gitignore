@@ -33,3 +33,37 @@ dsutil.cpp.old
 dsutil.h.old
 main.cpp.old
 main.cpp.triplebuf
+
+# --- CMake build output ---
+/build/
+/cmake-build-debug/
+*.o
+*.a
+# The cmake/ directory holds the checked-in Find*.cmake modules, so ignore only
+# what a configure run drops into it rather than the whole directory.
+/cmake/CMakeCache.txt
+/cmake/CMakeFiles/
+/cmake/Makefile
+/cmake/cmake_install.cmake
+/cmake/BitRiot
+/cmake/assets
+/cmake/data
+compile_commands.json
+
+# --- IDE / tooling ---
+.idea/
+.kdev4/
+*.kdev4
+.vscode/
+.cache/
+*.swp
+*~
+
+# --- Runtime and debugging artefacts ---
+*.log
+*.tar.gz
+Screenshot_*.png
+
+# NOTE: ext/RmlUi is a submodule and is deliberately NOT ignored. Its pointer is
+# kept out of commits by staging paths explicitly, so it stays visible in
+# `git status` rather than being silently hidden.

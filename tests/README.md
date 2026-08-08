@@ -23,6 +23,13 @@ That is what makes this harness cheap: **no production code was refactored and
 nothing is mocked.** Tests exercise the same `EntityManager::runFrame()` the
 game loop calls.
 
+The same trick works one level up for the menus: RmlUi resolves layout in
+`Context::Update()` and only touches the `RenderInterface` in
+`Context::Render()`, so a render interface that draws nothing still yields real
+element positions and sizes. That is what `support/RmlLayoutHarness.*` provides,
+and it turns "are the scoreboard columns aligned?" into an assertion instead of
+a screenshot.
+
 Two things do have to be supplied:
 
 - **A sound backend.** Entity constructors call `GameSound::playSound()`, and
@@ -135,9 +142,44 @@ m_pEntityManager->oneOrZeroPlayersRemain(m_pSpawningPool->canSpawnMore())
 shape the engine uses. When you add a feature, add at least one test at that
 level as well as the unit ones.
 
+## Playing a whole round (and then another)
+
+`runRoundToCompletion(maxFrames)` drives a round to its natural end in exactly
+the order `GameEngine::runEngine()` uses — win check at the *top* of the tick,
+then `pool.update()`, then `runFrame()`. It never asserts; it returns a
+`RoundOutcome` with `ended`, `frames`, `playersAlive`, `aliveTeams`,
+`hostilesRemain`, `poolSpent` and the winner, so a round that fails to
+terminate is diagnosable instead of just timing out. `describe()` renders it
+for a failure message.
+
+Small maps (`useTestMap()` = 7×7, or `setMapSize()` down to 4×4) exist for this:
+they force AI players into contact so a round ends in hundreds of frames rather
+than tens of thousands. **These sizes are test-only and must not become a menu
+option** — `InfoPanel` computes portrait positions as `((i*3)+1)*TILE_HEIGHT`
+with no clamp, so on a short map players' HUD blits off the bottom of the
+surface, and even dimensions violate the odd-map invariant `Map::init`'s pillar
+grid assumes. The harness has no `InfoPanel` and no start-gate, so neither
+applies here.
+
+## Proving a test can fail
+
+A green test proves nothing until you've seen it go red for the right reason.
+Both of the team-play fixes were verified differentially — the tests were run
+against the pre-fix code and confirmed to fail:
+
+- Reverting `assets/menu/scoreboard.{rml,rcss}` to `e28cbf3` fails 7 of the 8
+  `ScoreboardLayoutTest` cases (no header row, misaligned columns, overlapping
+  cells).
+- Restoring the old co-op branch (`return allPlayersDead();`) fails all three
+  co-op round tests with `{ended=false frames=60000 playersAlive=2
+  hostilesRemain=false poolSpent=true}` — the reported bug exactly.
+
+Assets are read at runtime, so the scoreboard check needs no rebuild: swap the
+files, run, swap back.
+
 ## Coverage today
 
-64 tests across five files:
+80 tests across seven files:
 
 - `WinConditionTest.cpp` — free-for-all, team and co-op round-end rules,
   including the co-op "board cleared and pool exhausted" win and the
@@ -152,8 +194,15 @@ level as well as the unit ones.
 - `EntitySimTest.cpp` — round setup, multi-frame simulation on 4- and 6-player
   maps, `AIGameView` add/move/destroy bookkeeping, and ghost-entity regression
   guards across repeated rounds.
+- `FullRoundTest.cpp` — whole rounds played to their natural end (PvP, team,
+  2- and 4-player co-op), plus consecutive rounds in one process.
+- `ScoreboardLayoutTest.cpp` — the scoreboard's real computed geometry: column
+  headings exist, every data cell aligns with its heading, columns don't
+  overlap or wrap, rows group by team, the winning team is marked.
 
-Not covered: rendering, input/device assignment, the RmlUi menus and
-scoreboard, and specific weapon/AI behaviours. Input and menus would need real
-refactoring to test; weapon and AI behaviour is testable with this harness today
-and is the obvious next area to extend.
+Not covered: rendering (rasterisation), input and device assignment, and
+specific weapon/AI behaviours. Input would need real refactoring to test;
+weapon and AI behaviour is testable with this harness today and is the obvious
+next area to extend. The other RmlUi menus (`playerselect.rml`,
+`gameoptions.rml`) are now reachable through `RmlLayoutTest` the same way the
+scoreboard is — only their data models need wiring up.

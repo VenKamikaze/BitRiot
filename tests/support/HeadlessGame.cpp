@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 
 #include "AIGameView.h"
@@ -138,6 +139,7 @@ void HeadlessGameTest::SetUp()
 
 void HeadlessGameTest::TearDown()
 {
+  m_spawningPool.reset();
   m_entityManager.reset();
 
   if (m_savedCout != nullptr)
@@ -151,6 +153,7 @@ void HeadlessGameTest::resetSingletons()
 {
   // Order matters. Tear the world down first so nothing observes a half-reset
   // GameSettings, then restore settings, then rebuild the map-sized singletons.
+  m_spawningPool.reset();
   m_entityManager.reset();
 
   // Drain anything a previous test posted but never processed.
@@ -217,8 +220,10 @@ void HeadlessGameTest::setTeams(std::initializer_list<int> teamsPerSlot)
 
 void HeadlessGameTest::setMapSize(int width, int height)
 {
-  ASSERT_EQ(width % 2, 1) << "map width must be odd";
-  ASSERT_EQ(height % 2, 1) << "map height must be odd";
+  ASSERT_GE(width, MIN_TEST_MAP_DIMENSION)
+      << "a map narrower than this has no interior once the outer wall is placed";
+  ASSERT_GE(height, MIN_TEST_MAP_DIMENSION)
+      << "a map shorter than this has no interior once the outer wall is placed";
 
   m_mapWidth = width;
   m_mapHeight = height;
@@ -237,10 +242,15 @@ void HeadlessGameTest::startRound()
   // real "play again" sequence, including the AIGameView clear that
   // DynamicMap's constructor performs.
   m_entityManager.reset();
+  m_spawningPool.reset();
   m_entityManager.reset(new EntityManager());
 
   std::GameSettings* settings = std::GameSettings::getInstance();
   const int numPlayers = settings->getNumberOfPlayers();
+
+  // Sized exactly as GameEngine::resetGame() sizes it.
+  m_spawningPool.reset(new SpawningPool(numPlayers * 100));
+
   std::vector<bool>* playerAIs = settings->getPlayerAIs();
 
   EntityMessageQueue* emq = EntityMessageQueue::getInstance();
@@ -273,12 +283,69 @@ EntityManager& HeadlessGameTest::em()
   return *m_entityManager;
 }
 
+SpawningPool& HeadlessGameTest::pool()
+{
+  if (!m_spawningPool)
+  {
+    ADD_FAILURE() << "pool() called before startRound()";
+    m_spawningPool.reset(new SpawningPool(0));
+  }
+  return *m_spawningPool;
+}
+
 void HeadlessGameTest::runFrames(int frames)
 {
   for (int i = 0; i < frames; i++)
   {
     em().runFrame();
   }
+}
+
+RoundOutcome HeadlessGameTest::runRoundToCompletion(int maxFrames)
+{
+  RoundOutcome out;
+
+  for (int frame = 0; frame < maxFrames; frame++)
+  {
+    // Top of tick, before the pool updates - same as GameEngine::runEngine().
+    if (em().oneOrZeroPlayersRemain(pool().canSpawnMore()))
+    {
+      out.ended = true;
+      break;
+    }
+
+    pool().update();
+    em().runFrame();
+    out.frames++;
+  }
+
+  out.playersAlive = em().numPlayersAlive();
+  out.aliveTeams = em().numAliveTeams();
+  out.hostilesRemain = em().anyHostileNpcsAlive();
+  out.poolSpent = !pool().canSpawnMore();
+
+  std::shared_ptr<PlayerCharacterEntity> winner = em().getWinningPlayer(pool().canSpawnMore());
+  if (winner)
+  {
+    out.winningPlayerNumber = winner->getPlayerNumber();
+    out.winningTeamNumber = winner->getTeamNumber();
+  }
+
+  return out;
+}
+
+std::string RoundOutcome::describe() const
+{
+  std::ostringstream ss;
+  ss << "{ended=" << (ended ? "true" : "false")
+     << " frames=" << frames
+     << " playersAlive=" << playersAlive
+     << " aliveTeams=" << aliveTeams
+     << " hostilesRemain=" << (hostilesRemain ? "true" : "false")
+     << " poolSpent=" << (poolSpent ? "true" : "false")
+     << " winningPlayer=" << winningPlayerNumber
+     << " winningTeam=" << winningTeamNumber << "}";
+  return ss.str();
 }
 
 std::shared_ptr<PlayerCharacterEntity> HeadlessGameTest::player(int playerNumber)
