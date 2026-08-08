@@ -21,15 +21,21 @@ class SpawningPool
 
     void update();
 
-    // True while the pool can still produce hostile NPCs, which lets a co-op
-    // round end once the board is cleared. Two ways it can dry up:
-    //  - points exhausted: nothing left to buy enemies with;
-    //  - the NPC spawner toggle is off: update() suppresses enemy eggs and
-    //    returns *before* deducting points, so the budget never drains and
-    //    m_pointsLeft alone would stay positive forever.
+    // True while the pool still has budget to spawn hostile NPCs. Once points
+    // are exhausted no more enemies will ever appear, which lets a co-op round
+    // end once the board is cleared.
+    //
+    // Deliberately does NOT consider the NPC spawner toggle. update() suppresses
+    // enemy eggs when the toggle is off but returns before deducting points, so
+    // with the spawner off this stays true for the whole round - which is what
+    // we want: a co-op round with no NPC spawner is an enemy-free sandbox that
+    // should keep running, not end on frame one. Folding the toggle in here
+    // makes oneOrZeroPlayersRemain() fire at kickoff, because the board is
+    // legitimately clear of hostiles before anyone has moved. See
+    // RoundLifecycleTest.CoopWithTheSpawnerDisabledDoesNotEndAtKickoff.
     inline bool canSpawnMore() const
     {
-      return m_pointsLeft > 0 && GameSettings::getInstance()->isNpcSpawnerEnabled();
+      return m_pointsLeft > 0;
     }
 
   private:

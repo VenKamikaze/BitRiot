@@ -119,13 +119,32 @@ any test, but they are real:
   it is a genuine bug — the death animation pause only happens once per launch.
   Fixing it needs a `reset()` on `GameTimer` called from `GameEngine::resetGame()`.
 
+## Test at the seams, not just the units
+
+The suite's first real catch came from a test that composed two things each of
+which passed its own tests. `WinConditionTest` feeds `oneOrZeroPlayersRemain()`
+a literal `true`/`false`; `SpawningPoolTest` checks `canSpawnMore()` on its own.
+Both were green while the composition — what `GameEngine` actually calls —
+ended a co-op round on frame one:
+
+```cpp
+m_pEntityManager->oneOrZeroPlayersRemain(m_pSpawningPool->canSpawnMore())
+```
+
+`RoundLifecycleTest.cpp` exists to wire real objects together in exactly the
+shape the engine uses. When you add a feature, add at least one test at that
+level as well as the unit ones.
+
 ## Coverage today
 
-57 tests across four files:
+64 tests across five files:
 
 - `WinConditionTest.cpp` — free-for-all, team and co-op round-end rules,
   including the co-op "board cleared and pool exhausted" win and the
   player-owned-vs-CPU-owned egg distinction that makes it correct.
+- `RoundLifecycleTest.cpp` — the `EntityManager` × `SpawningPool` seam as
+  `GameEngine` composes it, including the guard that a spawner-off co-op round
+  is an enemy-free sandbox rather than an instant win.
 - `GameSettingsTest.cpp` — roster sizing, alliance team mapping, the 6-player
   map-height gate and the undrivable-human start guard.
 - `SpawningPoolTest.cpp` — both ways the pool stops producing hostiles (points

@@ -42,29 +42,37 @@ TEST_F(SpawningPoolTest, APoolWithNoPointsCannotSpawn)
   EXPECT_FALSE(pool.canSpawnMore());
 }
 
-TEST_F(SpawningPoolTest, DisablingTheNpcSpawnerMeansNoMoreHostilesCanAppear)
+TEST_F(SpawningPoolTest, CanSpawnMoreReportsBudgetAndIgnoresTheSpawnerToggle)
 {
-  // The discriminating case. update() suppresses enemy eggs when the toggle is
-  // off but returns *before* deducting points, so the budget never drains. A
-  // points-only check would report "more hostiles possible" forever and a co-op
-  // round played with the spawner off could never end.
+  // canSpawnMore() answers "is there budget left", not "will an enemy appear".
+  // The distinction matters: with the toggle off, update() suppresses enemy
+  // eggs but returns before deducting points, so the budget never drains and
+  // this stays true for the whole round. That is intentional - see the comment
+  // on canSpawnMore() and RoundLifecycleTest, where folding the toggle in here
+  // was shown to end a spawner-off co-op round at kickoff.
   SpawningPool pool(400);
   ASSERT_TRUE(pool.canSpawnMore());
 
   std::GameSettings::getInstance()->setNpcSpawnerEnabled(false);
-
-  EXPECT_FALSE(pool.canSpawnMore())
-      << "with the spawner off no further hostile can ever be produced";
-}
-
-TEST_F(SpawningPoolTest, ReEnablingTheSpawnerRestoresSpawning)
-{
-  SpawningPool pool(400);
-  std::GameSettings::getInstance()->setNpcSpawnerEnabled(false);
-  ASSERT_FALSE(pool.canSpawnMore());
+  EXPECT_TRUE(pool.canSpawnMore()) << "the toggle does not consume budget";
 
   std::GameSettings::getInstance()->setNpcSpawnerEnabled(true);
-  EXPECT_TRUE(pool.canSpawnMore()) << "the toggle is read live, not latched";
+  EXPECT_TRUE(pool.canSpawnMore());
+}
+
+TEST_F(SpawningPoolTest, ADisabledPoolNeverDrainsItsBudget)
+{
+  configurePlayers(2);
+  startRound();
+  clearBlocks();
+
+  std::GameSettings::getInstance()->setNpcSpawnerEnabled(false);
+
+  SpawningPool pool(60); // would be spent well inside this many ticks if enabled
+  pumpPool(pool, 5000);
+
+  EXPECT_TRUE(pool.canSpawnMore())
+      << "suppressed egg spawns must not cost points";
 }
 
 TEST_F(SpawningPoolTest, AnEnabledPoolEventuallyPutsHostilesOnTheBoard)

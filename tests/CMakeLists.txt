@@ -4,6 +4,7 @@ set(TEST_SOURCES
   test_main.cpp
   support/HeadlessGame.cpp
   WinConditionTest.cpp
+  RoundLifecycleTest.cpp
   GameSettingsTest.cpp
   SpawningPoolTest.cpp
   EntitySimTest.cpp

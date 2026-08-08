@@ -1,17 +1,23 @@
 
 TODO / bugs / feature ideas, in order of importance:
 
-* Teams: Team scoreboard does not align very well - text needs to be centred and column headings should be made.
-* Teams: Co-op play never ends - tested a 4 player coop team game and the NPC spawner eventually stopped spawning eggs but the game never ended.
-
 * Build improvements - bump RmlUI to latest and make sure it's statically linked. We want to be able to bundle it with BitRiot so people can play without needing to download separate deps. SDL 2.x can stay dynamic as it's a very common dependency to have installed.
 
 * Scoreboard: End game "Scoreboard" should be cleaned up a bit - how about stats for all players in a column format, and a smaller font?
 
+* Bug: the game-over countdown only happens on the first round of a session. GameOverTimer/GameScoreBoardTimer latch timerTriggered with no reset, so from the second round on getTimerCompleted() compares against the previous round's startTime and is immediately true - the death-animation pause is skipped. Needs a reset() on GameTimer called from GameEngine::resetGame(). Found while building the test harness; see tests/README.md.
+
 DONE, but needs verification:
 
 * Bug: Possibly related to playing multiple games (needs further debugging): spinning energy 'rockets' were frequently just shooting "randomly" and not at any targets.
-** THIS HAS BEEN FIXED.
+** THIS HAS BEEN FIXED. Regression-guarded by EntitySimTest.AIGameViewIsClearedWhenANewRoundStarts.
+
+* Teams: Team scoreboard does not align very well - text needs to be centred and column headings should be made.
+** FIXED in 18eb5ea - reworked into a centred table with a header row and shared column widths.
+
+* Teams: Co-op play never ends - tested a 4 player coop team game and the NPC spawner eventually stopped spawning eggs but the game never ended.
+** FIXED in 18eb5ea - a co-op round now also ends when the board is clear of hostile NPCs and the spawning pool is out of points. Covered by WinConditionTest and RoundLifecycleTest.
+** Note: with the NPC Spawner option turned off, a co-op round still never ends. That is deliberate - no enemies can ever spawn, so it is an enemy-free sandbox. Ending it automatically would end it at kickoff.
 
 DONE and verified:
 
