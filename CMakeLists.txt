@@ -120,13 +120,15 @@ set(SOURCES ./src/AIGameView.cpp
 ./src/SimpleMovingEntity.cpp
 ./src/SpawningPool.cpp
 ./src/RmlUI/glue/SystemInterfaceSDL2.cpp
-./src/WallEaterEntity.cpp
-./src/main.cpp)
+./src/WallEaterEntity.cpp)
 
 
-add_executable(BitRiot ${SOURCES})
+# Everything except main.cpp lives in a static library so the test harness can
+# link the real game code (see tests/). BitRiot is then just main.cpp + this.
+add_library(bitriot_core STATIC ${SOURCES})
 
-target_include_directories(BitRiot PRIVATE
+# PUBLIC: the test target links bitriot_core and needs the same headers.
+target_include_directories(bitriot_core PUBLIC
   ${SDL2_INCLUDE_DIR}
   ${SDL2_MIXER_INCLUDE_DIR}
   ${SDL2_TTF_INCLUDE_DIR}
@@ -137,20 +139,35 @@ target_include_directories(BitRiot PRIVATE
   ${PROJECT_SOURCE_DIR}/src
 )
 
-target_compile_features(BitRiot PRIVATE cxx_std_14)
+# PRIVATE, not PUBLIC: the game code is C++14, but GoogleTest >= 1.17 requires
+# C++17. The test target raises its own standard; mixing the two is fine as
+# long as both are built by the same compiler/libstdc++.
+target_compile_features(bitriot_core PRIVATE cxx_std_14)
 
-target_compile_options(BitRiot PRIVATE
+# INTERFACE half propagates to the test target: it includes the same headers,
+# so it needs the same cstdint workaround. The warning/optimisation flags stay
+# PRIVATE to the library.
+target_compile_options(bitriot_core PRIVATE
   -Wall
   -Wno-comment
-  # RmlUi 4.x headers (Types.h, robin_hood.h) use uintptr_t / UINT64_C without
-  # including <cstdint>; GCC 13+ no longer pulls it in transitively. Force it.
-  -include cstdint
   $<$<CONFIG:Debug>:-ggdb -O0>
   $<$<CONFIG:Release>:-O2>
 )
+target_compile_options(bitriot_core INTERFACE
+  # RmlUi 4.x headers (Types.h, robin_hood.h) use uintptr_t / UINT64_C without
+  # including <cstdint>; GCC 13+ no longer pulls it in transitively. Force it.
+  -include cstdint
+)
+# The library's own TUs need it too.
+target_compile_options(bitriot_core PRIVATE -include cstdint)
 
+add_executable(BitRiot ./src/main.cpp)
+target_link_libraries(BitRiot PRIVATE bitriot_core)
+target_compile_features(BitRiot PRIVATE cxx_std_14)
+
+# PUBLIC on the library so both BitRiot and the test executable inherit these.
 if(MINGW)
-  target_link_libraries(BitRiot PRIVATE
+  target_link_libraries(bitriot_core PUBLIC
     ${SDL2_LIBRARY}
     ${SDL2_MIXER_LIBRARY}
     ${SDL2_TTF_LIBRARY}
@@ -161,7 +178,7 @@ if(MINGW)
   )
   target_link_options(BitRiot PRIVATE -mwindows)
 else()
-  target_link_libraries(BitRiot PRIVATE
+  target_link_libraries(bitriot_core PUBLIC
     ${SDL2_LIBRARY}
     ${SDL2_MIXER_LIBRARY}
     ${SDL2_TTF_LIBRARY}
@@ -185,5 +202,20 @@ else()
 endif()
 
 if(RMLUI_STATIC)
-  target_compile_definitions(BitRiot PRIVATE RMLUI_STATIC_LIB)
+  target_compile_definitions(bitriot_core PUBLIC RMLUI_STATIC_LIB)
+endif()
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+option(BITRIOT_BUILD_TESTS "Build the headless test harness (requires GoogleTest)" ON)
+
+if(BITRIOT_BUILD_TESTS)
+  find_package(GTest)
+  if(GTEST_FOUND)
+    enable_testing()
+    add_subdirectory(tests)
+  else()
+    message(STATUS "GoogleTest not found - skipping tests. Install gtest or configure with -DBITRIOT_BUILD_TESTS=OFF to silence this.")
+  endif()
 endif()
