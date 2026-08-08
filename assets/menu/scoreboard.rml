@@ -14,12 +14,20 @@
           <div id="statsContainer">
             <p class="gamelen">Game lasted {{gameLengthSeconds}} seconds.</p>
             <div id="teamStats">
+              <div class="scoreRow scoreHeader">
+                <span class="scoreCol scoreTeam">Team</span>
+                <span class="scoreCol scorePlayer">Player</span>
+                <span class="scoreCol scoreStat">Eggs</span>
+                <span class="scoreCol scoreStat">Explosives</span>
+                <span class="scoreCol scoreResult">Result</span>
+              </div>
               <div data-for="score : playerScores" class="scoreRow" data-class-winnerRow="score.winner">
-                <span class="scoreTeam">Team {{score.teamNumber}}</span>
-                <span class="scorePlayer">Player {{score.playerNumber}}</span>
-                <span class="scoreStat">{{score.eggs}} eggs</span>
-                <span class="scoreStat">{{score.bombs}} explosives</span>
-                <span class="scoreSurvived" data-if="score.survived">survived</span>
+                <span class="scoreCol scoreTeam">{{score.teamNumber}}</span>
+                <span class="scoreCol scorePlayer">{{score.playerNumber}}</span>
+                <span class="scoreCol scoreStat">{{score.eggs}}</span>
+                <span class="scoreCol scoreStat">{{score.bombs}}</span>
+                <span class="scoreCol scoreResult scoreSurvived" data-if="score.survived">survived</span>
+                <span class="scoreCol scoreResult scoreDied" data-if="!score.survived">died</span>
               </div>
             </div>
           </div>

@@ -240,9 +240,9 @@ shared_ptr<PlayerCharacterEntity> EntityManager::getPlayerPointer(int playerNumb
   return nullptr;
 }
 
-shared_ptr<PlayerCharacterEntity> EntityManager::getWinningPlayer()
+shared_ptr<PlayerCharacterEntity> EntityManager::getWinningPlayer(bool moreHostilesPossible)
 {
-  if(oneOrZeroPlayersRemain())
+  if(oneOrZeroPlayersRemain(moreHostilesPossible))
   {
     unique_ptr<vector<shared_ptr<PlayerCharacterEntity>>> playerCharacters = getAllPlayerCharacters();
     for(const auto& player : *playerCharacters)
@@ -257,15 +257,18 @@ shared_ptr<PlayerCharacterEntity> EntityManager::getWinningPlayer()
   return nullptr;
 }
 
-bool EntityManager::oneOrZeroPlayersRemain()
+bool EntityManager::oneOrZeroPlayersRemain(bool moreHostilesPossible)
 {
   // A single-team (co-op) round is all players allied vs the NPC spawner: it
   // must keep running until the whole team is wiped out, not end at kickoff
-  // when only one team exists. So there the round ends only when everyone is
-  // dead.
+  // when only one team exists. So there the round ends only when either the
+  // team is wiped out (loss), OR the board is cleared of hostile NPCs and the
+  // spawner can produce no more (win). The latter avoids the degenerate case
+  // where the spawner exhausts, leaving living humans with nothing to kill
+  // them and the round never terminating.
   if(GameSettings::getInstance()->numConfiguredTeams() <= 1)
   {
-    return allPlayersDead();
+    return allPlayersDead() || (!moreHostilesPossible && !anyHostileNpcsAlive());
   }
   // PvP: the round ends when one (or zero) alliance teams remain, not when one
   // player head remains. In the default free-for-all each player is their own
@@ -304,6 +307,32 @@ int EntityManager::numPlayersAlive()
     }
   }
   return remainingPlayers;
+}
+
+bool EntityManager::anyHostileNpcsAlive()
+{
+  // Hostile NPCs are the CPU spawning pool's creatures: eggs about to hatch and
+  // the monsters they become. All carry playerNumber 0. Player-laid eggs and
+  // their hatchlings carry the owning player's number (a teammate in co-op) and
+  // must be excluded. Powerups/blocks are also playerNumber 0 but fall outside
+  // these groups. NPCs are removed from entityList on death, so presence here
+  // means alive.
+  for (m_pDynamicMap->entityIterator = m_pDynamicMap->entityList.begin();
+       m_pDynamicMap->entityIterator != m_pDynamicMap->entityList.end();
+       m_pDynamicMap->entityIterator++)
+  {
+    const shared_ptr<GameEntity>& entity = m_pDynamicMap->entityIterator->second;
+    if (entity->getPlayerNumber() != 0)
+    {
+      continue; // player-owned egg/monster, not a hostile
+    }
+    EntityGroupType group = entity->getGroupType();
+    if (group == EGG_GROUP || group == ROBOT_GROUP || group == PLAYER_SPAWN_GROUP)
+    {
+      return true;
+    }
+  }
+  return false;
 }
 
 void EntityManager::runCollisions()

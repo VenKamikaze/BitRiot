@@ -32,13 +32,21 @@ class EntityManager
     //{
     //  return m_playerDead->at(playerIndex);
     //}
-    shared_ptr<PlayerCharacterEntity> getWinningPlayer(); // returns winning player or nullptr if a draw.
-    bool oneOrZeroPlayersRemain();
+    // moreHostilesPossible: whether the CPU spawning pool can still produce
+    // enemies (only affects the co-op branch; ignored in PvP). Passed in by
+    // GameEngine, which owns the SpawningPool.
+    shared_ptr<PlayerCharacterEntity> getWinningPlayer(bool moreHostilesPossible); // returns winning player or nullptr if a draw.
+    bool oneOrZeroPlayersRemain(bool moreHostilesPossible);
     bool allPlayersDead();
     int numPlayersAlive();
     // Number of distinct alliance teams with at least one player still alive.
     // Team play ends when this drops to <= 1 (last team standing wins).
     int numAliveTeams();
+    // True if any CPU-owned (playerNumber 0) hostile NPC — a hatching egg or a
+    // monster — is still on the board. Player-laid eggs/monsters carry their
+    // owner's playerNumber and are excluded. Used to decide when a co-op round
+    // has been cleared.
+    bool anyHostileNpcsAlive();
 
     DynamicMap * getDynamicMap()
     {

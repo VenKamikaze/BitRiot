@@ -6,10 +6,6 @@
   font-size: 18pt;
 }
 
-#winnerStats {
-  margin-bottom: 5%;
-}
-
 #statsContainer {
   margin-top: 5%;
 }
@@ -24,14 +20,26 @@
   display: block;
 }
 
-/* One row per player, grouped by team. The winning team's rows are brighter
-   and bold so the result reads at a glance. Kept deliberately simple - the
-   full column-layout / smaller-font redesign is a separate TODO item. */
+/* A centred table: a header row of column titles followed by one row per
+   player, grouped by team. Every cell is centred and column widths are shared
+   between the header and the data rows so they line up. The winning team's
+   rows are brighter and bold so the result reads at a glance. */
 .scoreRow {
   display: block;
   font-size: 13pt;
   color: #bbbbbb;
   padding: 0.1em 0;
+  text-align: center;
+}
+
+/* Column-title row: dimmer, spaced out and underlined to separate it from the
+   data below. */
+.scoreHeader {
+  font-size: 11pt;
+  color: #888888;
+  border-bottom: 1px #555555;
+  padding-bottom: 0.3em;
+  margin-bottom: 0.3em;
 }
 
 .scoreRow.winnerRow {
@@ -39,28 +47,37 @@
   font-weight: bold;
 }
 
-.scoreTeam {
+/* Shared column geometry - identical widths keep header and data aligned.
+   Widths sum to ~86%, leaving headroom for the whitespace gaps RmlUi renders
+   between inline-blocks so a long heading ("Explosives") never wraps the row.
+   The row is centred, so the slack splits into left/right margins. */
+.scoreCol {
   display: inline-block;
-  width: 22%;
-  text-align: right;
-  padding-right: 0.6em;
+  text-align: center;
+}
+
+.scoreTeam {
+  width: 14%;
 }
 
 .scorePlayer {
-  display: inline-block;
-  width: 22%;
+  width: 16%;
 }
 
 .scoreStat {
-  display: inline-block;
-  width: 20%;
-  text-align: right;
-  padding-right: 0.6em;
+  width: 22%;
+}
+
+.scoreResult {
+  width: 14%;
 }
 
 .scoreSurvived {
-  display: inline-block;
   color: #7CFC7C;
+}
+
+.scoreDied {
+  color: #d06060;
 }
 
 .invisible {

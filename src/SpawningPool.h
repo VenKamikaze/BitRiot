@@ -21,6 +21,17 @@ class SpawningPool
 
     void update();
 
+    // True while the pool can still produce hostile NPCs, which lets a co-op
+    // round end once the board is cleared. Two ways it can dry up:
+    //  - points exhausted: nothing left to buy enemies with;
+    //  - the NPC spawner toggle is off: update() suppresses enemy eggs and
+    //    returns *before* deducting points, so the budget never drains and
+    //    m_pointsLeft alone would stay positive forever.
+    inline bool canSpawnMore() const
+    {
+      return m_pointsLeft > 0 && GameSettings::getInstance()->isNpcSpawnerEnabled();
+    }
+
   private:
     int m_pointsLeft;
     int m_IQsLeft, m_ENsLeft;
