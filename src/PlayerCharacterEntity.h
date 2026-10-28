@@ -94,6 +94,8 @@ class PlayerCharacterEntity : public GameEntity
     bool seekPickup(); // queues GOAL_GET_POWERUP for the best reachable pickup, if any
     bool pickupIsHazardous(int tileX, int tileY);
     bool canBombBlocks(); // true if bombing our way through a block is affordable and survivable
+    // true if anything that would explode in a chain is within `radius` tiles
+    bool explosivesNear(int tileX, int tileY, int radius);
     void determineInstructionsFromGoal();
     void processNextInstruction();
 
@@ -103,13 +105,21 @@ class PlayerCharacterEntity : public GameEntity
     bool nearTileCenter(); // checks if entity is near center of current tile
     // Returns the first tile of an A* route to the target, or the current tile
     // when there is none (or we are already there). With allowBlockBombing the
-    // route may go through blocks and, unless queueBlockBombing is false, the
-    // instructions to bomb the first one are queued as a side effect.
+    // route may go through blocks and the instructions to bomb the first one
+    // are queued as a side effect.
     coord getNextTileFromPathfinding(int targetTileX, int targetTileY,
-                                     bool allowBlockBombing = false,
-                                     bool queueBlockBombing = true);
-    // Side-effect free: can we get to the tile, optionally by bombing blocks?
-    bool routeExists(int targetTileX, int targetTileY, bool allowBlockBombing);
+                                     bool allowBlockBombing = false);
+
+    // What it takes to get from our tile to every other tile: one flood fill,
+    // so every candidate target can be classified at once instead of running an
+    // A* search per target. Indexed [y * mapWidth + x].
+    struct RouteInfo
+    {
+      bool reachable = false;
+      int steps = 0;  // tiles walked
+      int blocks = 0; // blocks that have to be bombed on the way
+    };
+    void floodRoutes(bool allowBlockBombing, vector<RouteInfo> & routes);
     bool safeLocationToBomb(int tileX, int tileY); // returns false if a bomb here would be stupid
     // i.e. blowing up our own eggs
     void checkEnvironment(); // checks surrounding environment for anything we should react to
@@ -117,13 +127,27 @@ class PlayerCharacterEntity : public GameEntity
 
     // Pickups we gave up on after repeatedly failing to make progress towards
     // them, so a pickup we cannot actually reach does not trap the AI forever.
-    set<int> m_abandonedPickups;
+    // Maps pickup id to the m_aiFrame we gave up on it; the entry expires after a
+    // while, because whatever was in the way (an egg on the tile we need to bomb
+    // from, say) is usually temporary.
+    map<int, int> m_abandonedPickups;
     struct PickupAttempt
     {
-      int bestDistance = 1 << 30; // closest we have been when setting out for it
-      int failures = 0; // times in a row we set out without getting closer
+      // Best route to it we have set out on: fewest blocks left to bomb, then
+      // fewest tiles to walk.
+      int bestBlocks = 1 << 30;
+      int bestSteps = 1 << 30;
+      int failures = 0; // times in a row we set out without improving on that
     };
     map<int, PickupAttempt> m_pickupAttempts; // keyed by pickup entity id
+    int m_aiFrame = 0; // frames this bot's AI has run; the clock for the above
+
+  public:
+    // Path search nodes currently allocated, across all bots. Zero between
+    // searches; anything else is a leak. For tests.
+    static long livePathNodes();
+
+  protected:
     void clearGoalsAndInstructions(); // wipes m_insList and m_goalList
 
   private:

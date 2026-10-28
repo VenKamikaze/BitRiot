@@ -197,7 +197,7 @@ files, run, swap back.
 
 ## Coverage today
 
-107 tests across nine files:
+119 tests across nine files:
 
 - `WinConditionTest.cpp` — free-for-all, team and co-op round-end rules,
   including the co-op "board cleared and pool exhausted" win and the
@@ -227,11 +227,15 @@ files, run, swap back.
   round with dead players yields one row per player, dead ones included.
 
 - `AISeekEnergyTest.cpp` — bot energy-seeking on a 9x9 board with one bot (the
-  game needs two players, so the second is created and `destroyPlayer`ed):
-  a bot below the 15-health lay limit walks to energy drops / powerups, looks
+  game needs two players, so the second is created and `destroyPlayer`ed): a
+  bot below the 15-health lay limit walks to energy drops / powerups, looks
   across the whole board, picks the nearest, skips pickups it cannot reach or
   that sit on an enemy mine, bombs out of a block cage when it can survive its
-  own blast, and the normal egg-laying recovery is untouched.
+  own blast (and no egg, mine or bomb would chain it), gives up on a pickup that
+  keeps going nowhere and forgives it later, and 15+ health pickup choice. An
+  `AIProbe` (a bot that is not in the round) lets a test ask for one goal
+  decision and read the answer; it also checks the flood fill against A*, and
+  that path searches leave no nodes allocated (`livePathNodes()`).
 
 Not covered: rendering (rasterisation), input and device assignment, and
 specific weapon behaviours and most AI behaviours. Input would need real refactoring to test;

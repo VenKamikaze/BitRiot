@@ -13,10 +13,12 @@
 
 #include "support/HeadlessGame.h"
 
+#include <chrono>
 #include <cstdlib>
 
 #include "GameSettings.h"
 #include "Map.h"
+#include "PlayerCharacterEntity.h"
 
 namespace bitriot_test
 {
@@ -26,6 +28,62 @@ namespace
 // Plenty for a bot to cross the board and bomb a block on the way; a bot that
 // is going to get there does so in a small fraction of this.
 const int FRAME_BUDGET = 3000;
+
+// A bot that is not part of the round, so a test can ask it to make a decision
+// and look at the answer without it also moving, laying eggs or being hurt.
+// It sees the real map and the real AIGameView, which is all a decision needs.
+class AIProbe : public PlayerCharacterEntity
+{
+  public:
+    typedef PlayerCharacterEntity::RouteInfo Route;
+
+    AIProbe(int tileX, int tileY, int health)
+      : PlayerCharacterEntity(99999, 1, tileX, tileY, GameEntity::AI_CONTROLLED_BOT_FLAG)
+    {
+      clearGoalsAndInstructions(); // drop the opening "lay some eggs" goal
+      m_health = health;
+    }
+
+    // Makes one goal decision from scratch. Returns the tile of the pickup it
+    // went for, or (-1,-1) if it chose something else.
+    coord decide()
+    {
+      clearGoalsAndInstructions();
+      determineGoals();
+      lastRoute = -1;
+      coord result(-1, -1);
+      for (std::list<AIGoal*>::iterator it = m_goalList.begin(); it != m_goalList.end(); ++it)
+      {
+        if ((*it)->m_goalType == AIGoal::GOAL_GET_POWERUP)
+        {
+          result = coord((*it)->m_tileX, (*it)->m_tileY);
+          lastRoute = (*it)->m_targetAmount;
+        }
+      }
+      clearGoalsAndInstructions();
+      return result;
+    }
+
+    void advance(int frames) { m_aiFrame += frames; }
+
+    // First step of the A* route, (own tile) if none. Queued bomb instructions
+    // are discarded.
+    coord astarStep(int x, int y, bool throughBlocks)
+    {
+      coord step = getNextTileFromPathfinding(x, y, throughBlocks);
+      clearGoalsAndInstructions();
+      return step;
+    }
+
+    std::vector<Route> flood(bool throughBlocks)
+    {
+      std::vector<Route> routes;
+      floodRoutes(throughBlocks, routes);
+      return routes;
+    }
+
+    int lastRoute = -1; // 0 = walk, 1 = through blocks, of the last decide()
+};
 
 class AISeekEnergyTest : public HeadlessGameTest
 {
@@ -72,13 +130,34 @@ class AISeekEnergyTest : public HeadlessGameTest
       return -1;
     }
 
-    // Walls a tile in with blocks on every open side.
+    // Walls a tile in with blocks on every open side (the border and pillars
+    // are walls already; a block must not be put on top of one).
     void boxIn(int x, int y)
     {
-      spawnEntity(BLOCK, 0, x + 1, y);
-      spawnEntity(BLOCK, 0, x - 1, y);
-      spawnEntity(BLOCK, 0, x, y + 1);
-      spawnEntity(BLOCK, 0, x, y - 1);
+      const int sides[4][2] = { {1, 0}, {-1, 0}, {0, 1}, {0, -1} };
+      for (const auto& side : sides)
+      {
+        if (Map::getInstance()->staticTileAt(x + side[0], y + side[1]) == Map::EMPTY)
+        {
+          spawnEntity(BLOCK, 0, x + side[0], y + side[1]);
+        }
+      }
+    }
+
+    // Destroys the BLOCK entity at a tile, the way an explosion would.
+    void removeBlock(int x, int y)
+    {
+      DynamicMap* map = em().getDynamicMap();
+      for (auto it = map->entityList.begin(); it != map->entityList.end(); ++it)
+      {
+        if (it->second->getType() == BLOCK && it->second->getTileX() == x
+            && it->second->getTileY() == y)
+        {
+          EntityMessageQueue::getInstance()->postDestroyMessage(it->second->getID());
+          break;
+        }
+      }
+      em().processMessageQueue();
     }
 };
 
@@ -122,8 +201,10 @@ TEST_F(AISeekEnergyTest, BotWithNoEnergyLooksBeyondItsUsualSearchRange)
 
 TEST_F(AISeekEnergyTest, BotHeadsForTheNearerOfTwoDrops)
 {
+  // The far drop is scanned first (smaller x), so a bot that just took the first
+  // pickup it found would go for it.
   setPlayerHealth(1, 13);
-  spawnEntity(ENERGY_DROP, 0, 7, 1);
+  spawnEntity(ENERGY_DROP, 0, 1, 7);
   spawnEntity(ENERGY_DROP, 0, 3, 1);
 
   ASSERT_GT(framesUntilFewerThan(ENERGY_DROP, 2), 0);
@@ -138,7 +219,7 @@ TEST_F(AISeekEnergyTest, BotHeadsForTheNearerOfTwoDrops)
       remainingX = it->second->getTileX();
     }
   }
-  EXPECT_EQ(remainingX, 7);
+  EXPECT_EQ(remainingX, 1);
 }
 
 // -- pickups the bot cannot, or should not, go for ---------------------------
@@ -259,10 +340,244 @@ TEST_F(AISeekEnergyTest, BotBelowTheLayLimitWithNothingToCollectJustWaits)
   EXPECT_EQ(player(1)->getHealth(), 12);
 }
 
+
+// -- giving up on a pickup, and coming back to it ------------------------------
+
+TEST_F(AISeekEnergyTest, BotThatKeepsGettingNowhereGivesUpOnAPickupThenForgivesIt)
+{
+  AIProbe bot(1, 1, 60);
+  spawnEntity(ENERGY_DROP, 0, 3, 1);  // nearer
+  spawnEntity(ENERGY_DROP, 0, 1, 4);
+
+  // The probe never moves, which is what a bot whose GO_TO keeps failing looks
+  // like to the next decision: same pickup, no closer.
+  EXPECT_EQ(bot.decide(), coord(3, 1));
+  EXPECT_EQ(bot.decide(), coord(3, 1));
+  EXPECT_EQ(bot.decide(), coord(3, 1));
+  EXPECT_EQ(bot.decide(), coord(1, 4)) << "should have given up on (3,1) and taken the other";
+
+  // The give-up is not for ever: whatever was wrong is usually temporary.
+  bot.advance(2000);
+  EXPECT_EQ(bot.decide(), coord(3, 1)) << "should have forgiven (3,1) by now";
+}
+
+TEST_F(AISeekEnergyTest, GettingFewerBlocksAwayCountsAsProgressTowardsAPickup)
+{
+  // Bot caged by blocks with a drop behind a chain of them. Each bomb that
+  // removes a block is progress even though the straight-line distance to the
+  // drop has not changed, so the bot must not give up mid-dig.
+  AIProbe bot(1, 1, 60);
+  spawnEntity(BLOCK, 0, 2, 1);
+  spawnEntity(BLOCK, 0, 1, 2);
+  spawnEntity(BLOCK, 0, 1, 3);
+  spawnEntity(ENERGY_DROP, 0, 1, 4);
+
+  EXPECT_EQ(bot.decide(), coord(1, 4));
+  EXPECT_EQ(bot.decide(), coord(1, 4));
+  EXPECT_EQ(bot.decide(), coord(1, 4));
+
+  removeBlock(1, 2); // one block fewer to get through
+
+  EXPECT_EQ(bot.decide(), coord(1, 4)) << "a block fewer is progress";
+  EXPECT_EQ(bot.decide(), coord(1, 4));
+  EXPECT_EQ(bot.decide(), coord(1, 4));
+}
+
+TEST_F(AISeekEnergyTest, HealthyBotWithAnEggUnderItselfStillGetsOutToAPickupInTime)
+{
+  // The bot's opening move is to lay an egg where it stands, and a bomb cannot
+  // be laid on top of an egg. Boxed in by blocks, it can do nothing about the
+  // pickup until the egg hatches - and must not have written the pickup off for
+  // good in the meantime.
+  setPlayerHealth(1, 60);
+  spawnEntity(BLOCK, 0, 2, 1);
+  spawnEntity(BLOCK, 0, 1, 2);
+  spawnEntity(ENERGY_DROP, 0, 1, 4);
+
+  EXPECT_GT(framesUntilFewerThan(ENERGY_DROP, 1, 4000), 0)
+      << "bot never got out, stuck at (" << player(1)->getTileX() << ","
+      << player(1)->getTileY() << ")";
+}
+
+// -- ordinary (15+ health) pickup choice --------------------------------------
+
+TEST_F(AISeekEnergyTest, HealthyBotHeadsForTheNearestPickupNotTheFirstScanned)
+{
+  AIProbe bot(1, 1, 60);
+  spawnEntity(ENERGY_DROP, 0, 1, 4);  // scanned first, three tiles away
+  spawnEntity(ENERGY_DROP, 0, 3, 1);  // two tiles away
+  EXPECT_EQ(bot.decide(), coord(3, 1));
+}
+
+TEST_F(AISeekEnergyTest, HealthyBotPrefersAPickupItCanWalkToOverOneBehindBlocks)
+{
+  AIProbe bot(1, 1, 60);
+  boxIn(3, 1);
+  spawnEntity(ENERGY_DROP, 0, 3, 1);  // nearer, walled in
+  spawnEntity(ENERGY_DROP, 0, 1, 4);  // farther, open
+  EXPECT_EQ(bot.decide(), coord(1, 4));
+  EXPECT_EQ(bot.lastRoute, 0);
+}
+
+TEST_F(AISeekEnergyTest, HealthyBotWillBombThroughBlocksWhenThatIsTheOnlyWay)
+{
+  AIProbe bot(1, 1, 60);
+  boxIn(3, 1);
+  spawnEntity(ENERGY_DROP, 0, 3, 1);
+  EXPECT_EQ(bot.decide(), coord(3, 1));
+  EXPECT_NE(bot.lastRoute, 0) << "route should be flagged as going through blocks";
+}
+
+TEST_F(AISeekEnergyTest, HealthyBotSkipsAHazardousPickupAndOnlyLooksFourTilesOut)
+{
+  AIProbe bot(1, 1, 60);
+  spawnEntity(ENERGY_DROP, 0, 3, 1);
+  spawnEntity(MINE, 0, 3, 1);
+  spawnEntity(ENERGY_DROP, 0, 7, 7);  // across the board
+  EXPECT_EQ(bot.decide(), coord(-1, -1)) << "mined pickup and out-of-range pickup both ignored";
+
+  AIProbe weak(1, 1, 10);  // the same board, but this one has nothing else to live on
+  EXPECT_EQ(weak.decide(), coord(7, 7));
+}
+
+// -- bombing out on low health is not worth dying for ------------------------
+
+TEST_F(AISeekEnergyTest, BotBelowTheLayLimitSurvivesBombingItselfOutAcrossTheRange)
+{
+  // Health 12 is the least that is allowed to bomb out. Whatever it takes off
+  // the bot (the bomb, the blast) it must live to collect the drop.
+  for (int health = 12; health <= 14; health++)
+  {
+    startRound();
+    destroyPlayer(2);
+    clearBlocks();
+    setPlayerHealth(1, health);
+    spawnEntity(BLOCK, 0, 2, 1);
+    spawnEntity(BLOCK, 0, 1, 2);
+    spawnEntity(ENERGY_DROP, 0, 1, 6);
+
+    EXPECT_GT(framesUntilFewerThan(ENERGY_DROP, 1), 0) << "health " << health << " never got out";
+    ASSERT_NE(player(1), nullptr) << "health " << health << " died getting out";
+    EXPECT_GT(player(1)->getHealth(), 0);
+  }
+}
+
+TEST_F(AISeekEnergyTest, BotBelowTheLayLimitDoesNotBombNextToAnEgg)
+{
+  // The blast would set the egg off, which would blast the bot a second time.
+  setPlayerHealth(1, 13);
+  spawnEntity(BLOCK, 0, 2, 1);
+  spawnEntity(BLOCK, 0, 1, 2);
+  spawnEntity(EGG3, 0, 1, 3); // a slow hatcher, two tiles from the bot
+  spawnEntity(ENERGY_DROP, 0, 1, 6);
+
+  for (int frame = 0; frame < 150; frame++)
+  {
+    runFrames(1);
+    ASSERT_EQ(countOfType(BOMB), 0) << "bot bombed with an egg in chain-blast range, frame " << frame;
+  }
+  EXPECT_EQ(player(1)->getHealth(), 13);
+}
+
+// -- route finding -------------------------------------------------------------
+
+TEST_F(AISeekEnergyTest, FloodFillAgreesWithThePathSearchAboutWhatIsReachable)
+{
+  // seekPickup classifies pickups with one flood fill and the bot then walks
+  // them with A*; the two must agree or the bot would chase unreachable tiles.
+  spawnEntity(BLOCK, 0, 2, 1);
+  spawnEntity(BLOCK, 0, 1, 2);
+  boxIn(5, 3);
+  boxIn(7, 7);
+  spawnEntity(BLOCK, 0, 3, 5);
+  spawnEntity(BLOCK, 0, 3, 3);
+
+  AIProbe bot(1, 1, 60);
+  const int width = GameSettings::getInstance()->getMapWidth();
+  const int height = GameSettings::getInstance()->getMapHeight();
+
+  for (int throughBlocks = 0; throughBlocks <= 1; throughBlocks++)
+  {
+    std::vector<AIProbe::Route> routes = bot.flood(throughBlocks != 0);
+    for (int x = 0; x < width; x++)
+    {
+      for (int y = 0; y < height; y++)
+      {
+        if ((x == 1 && y == 1) || Map::getInstance()->staticTileAt(x, y) == Map::WALL)
+        {
+          continue;
+        }
+        const bool astarFindsIt = bot.astarStep(x, y, throughBlocks != 0) != coord(1, 1);
+        EXPECT_EQ(routes[y * width + x].reachable, astarFindsIt)
+            << "tile (" << x << "," << y << ") throughBlocks=" << throughBlocks;
+      }
+    }
+  }
+}
+
+TEST_F(AISeekEnergyTest, PathSearchFreesEveryNodeItAllocates)
+{
+  // Reachable and unreachable targets, with and without block bombing: each
+  // search must leave no path nodes alive (they used to leak on every call).
+  boxIn(5, 3);
+  spawnEntity(BLOCK, 0, 2, 1);
+  spawnEntity(BLOCK, 0, 1, 2);
+
+  AIProbe bot(1, 1, 60);
+  ASSERT_EQ(PlayerCharacterEntity::livePathNodes(), 0);
+
+  const int targets[][2] = { {7, 7}, {5, 3}, {3, 1}, {1, 1}, {7, 1} };
+  for (const auto& t : targets)
+  {
+    bot.astarStep(t[0], t[1], false);
+    EXPECT_EQ(PlayerCharacterEntity::livePathNodes(), 0) << "walking to (" << t[0] << "," << t[1] << ")";
+    bot.astarStep(t[0], t[1], true);
+    EXPECT_EQ(PlayerCharacterEntity::livePathNodes(), 0) << "bombing to (" << t[0] << "," << t[1] << ")";
+  }
+}
+
+TEST_F(AISeekEnergyTest, ManyUnreachablePickupsOnABigMapAreCheapToDecideAbout)
+{
+  // 20 pickups, each walled in, a bot too weak to bomb, on a map the size of the
+  // game's largest. Used to take minutes per decision (a full-map path search
+  // per pickup, each flooding the board with duplicate nodes); now one flood
+  // fill. Judged by node count rather than wall-clock time: no path search at
+  // all should be needed to see that none of them can be reached.
+  setMapSize(33, 25);
+  startRound();
+  destroyPlayer(2);
+  clearBlocks();
+
+  int placed = 0;
+  for (int x = 5; x <= 29 && placed < 20; x += 4)
+  {
+    for (int y = 5; y <= 21 && placed < 20; y += 4)
+    {
+      boxIn(x, y);
+      spawnEntity(ENERGY_DROP, 0, x, y);
+      placed++;
+    }
+  }
+
+  AIProbe bot(1, 1, 11);
+  const auto started = std::chrono::steady_clock::now();
+  EXPECT_EQ(bot.decide(), coord(-1, -1));
+  const auto elapsed = std::chrono::steady_clock::now() - started;
+  EXPECT_EQ(PlayerCharacterEntity::livePathNodes(), 0);
+  // Generous: a decision takes well under a millisecond; the per-pickup path
+  // searches it replaced took two minutes on this board.
+  EXPECT_LT(std::chrono::duration_cast<std::chrono::seconds>(elapsed).count(), 5);
+
+  setPlayerHealth(1, 11);
+  runFrames(300);
+  EXPECT_EQ(PlayerCharacterEntity::livePathNodes(), 0);
+}
+
 // -- determinism ---------------------------------------------------------------
 
 TEST_F(AISeekEnergyTest, SameSeedGivesTheSamePickupTiming)
 {
+  const unsigned int resumeSeed = (unsigned int) std::rand(); // put the harness's RNG back after
   auto run = [this]() -> int
   {
     std::srand(1234);
@@ -278,6 +593,7 @@ TEST_F(AISeekEnergyTest, SameSeedGivesTheSamePickupTiming)
 
   const int first = run();
   const int second = run();
+  std::srand(resumeSeed);
   ASSERT_GT(first, 0);
   EXPECT_EQ(first, second);
 }
