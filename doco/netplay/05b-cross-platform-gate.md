@@ -7,25 +7,24 @@
 
 ## Goal
 
-Decide decision D6 with evidence before any netplay is built on top of it. Show that the simulation produces bit-identical per-tick hashes across compilers, optimisation flags, CPU architectures and WebAssembly, by replaying the golden record from brief 05 under each one.
+Prove, before any netplay is built on top of it, that the simulation produces bit-identical per-tick hashes across compilers, optimisation flags, CPU architectures and WebAssembly, by replaying the golden record from brief 05 under each one.
 
-If any of them diverges, stop. The fixed-point contingency then needs the user's decision.
+After 02b the sim is integer-only (D6), so float maths is no longer the risk. What this gate catches is everything else: undefined behaviour that optimisers treat differently, libstdc++ vs libc++ differences, argument evaluation order, uninitialised state, and 32-bit `long` on wasm32.
+
+If any variant diverges, find the first diverging tick and fix the cause. If the fix is outside this brief's scope, stop and ask the user.
 
 ## Read first
 
 - [`README.md`](README.md): D6, and the cloud network limits.
-- [`research/code-facts.md`](research/code-facts.md) §4 (floats).
-- The Outcome sections of briefs 03b (what SDL use, if any, remains in `bitriot_sim`) and 05 (`bitriot_headless` and the golden record).
+- [`research/code-facts.md`](research/code-facts.md) §4 and §12 (libc++ notes).
+- The Outcome sections of briefs 02b (fixed-point), 03b (what SDL use, if any, remains in `bitriot_sim`) and 05 (`bitriot_headless` and the golden record).
 
 ## In scope
 
 Each item below is a build of `bitriot_headless` that replays the golden record and must match its checkpoints. Wrap them all in one script, `scripts/determinism-gate.sh`, that prints a pass/fail table.
 
 1. **GCC versus Clang.** Both are installed in the container.
-2. **An aggressive-flags build:** `-O3 -march=native -ffp-contract=fast`, which deliberately overrides the guard.
-   - It is *expected* to match, because the sim has no multiply-adds.
-   - If it diverges, the guard matters: confirm the guarded builds still match, and record which code is affected.
-   - **Report either way.**
+2. **An aggressive-flags build:** `-O3 -march=native -ffast-math`. The sim has no floats, so it must match. A divergence points at UB or at a float that crept back into the sim.
 3. **aarch64 under qemu-user (optional).**
    - Use the `g++-aarch64-linux-gnu` and `qemu-user` apt packages, if they're available.
    - This is realistic only because `bitriot_sim` needs no SDL (03b).
@@ -37,24 +36,23 @@ Each item below is a build of `bitriot_headless` that replays the golden record 
    - If `bitriot_sim` still needs SDL core headers (per 03b's Outcome), provide the Emscripten `sdl2` port by git-cloning its source at the tag Emscripten expects and setting `EMCC_LOCAL_PORTS=sdl2=<path>`.
      - GitHub archive downloads are blocked in this container; see the README.
    - Add an emsdk setup step to the scripts: either `scripts/setup-emsdk.sh`, or a flag on `cloud-setup.sh`.
-5. **Record the results** as a table in the Outcome, and in `tests/README.md`. Set D6 in `README.md` to *confirmed* (floats are fine) or *failed* (stop and ask the user).
+5. **Record the results** as a table in the Outcome, and in `tests/README.md`.
 
 ## Out of scope
 
-- Fixed-point conversion itself.
 - The full game's wasm build (09).
 - CI for the gate. Running the script locally is enough, and note how to run it.
 
 ## Tests
 
 - The gate script itself.
-- A **negative control:** a test-only flag that perturbs one float operation (for example adding 1 ulp to one entity's offset at tick 100) makes the gate fail at the right tick. This proves the gate can catch a difference.
+- A **negative control:** a test-only flag that perturbs one sim value (for example adding 1 to one entity's fixed-point offset at tick 100) makes the gate fail at the right tick. This proves the gate can catch a difference.
 
 ## Acceptance criteria
 
 - `scripts/determinism-gate.sh` runs every available variant and reports pass/fail per variant.
 - The wasm-under-Node replay matches native.
-- D6 is marked confirmed or failed, with evidence.
+- Every available variant matches, with evidence.
 
 ## Outcome
 
