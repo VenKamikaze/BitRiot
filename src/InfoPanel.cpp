@@ -362,7 +362,7 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
         destRect.h = 3;
 
         int maxWidth=Map::TILE_WIDTH;
-        int width=   ((float)health/100.0f) *maxWidth;
+        int width=   (int)(((float)health/100.0f) *maxWidth);
         if (width > maxWidth)
         {
           width = maxWidth;

@@ -5,6 +5,7 @@
 #ifndef BITRIOT_TESTS_SOURCESCAN_H_
 #define BITRIOT_TESTS_SOURCESCAN_H_
 
+#include <cctype>
 #include <regex>
 #include <sstream>
 #include <string>
@@ -37,6 +38,15 @@ inline std::string stripCommentsAndStrings(const std::string& in)
       }
       i = stop;
     }
+    else if (in[i] == '\'' && (out.empty() || !std::isalnum((unsigned char)out.back())))
+    {
+      // a character literal such as '"' or '\'' (not a digit separator, which
+      // follows a digit): skip it, so a quote inside it does not start a string
+      i++;
+      if (i < in.size() && in[i] == '\\') i++;
+      i++;
+      if (i < in.size() && in[i] == '\'') i++;
+    }
     else if (in[i] == '"')
     {
       i++;
@@ -64,18 +74,33 @@ inline std::string trimmed(const std::string& s)
 }
 
 // Every line of `source` (after stripping comments and strings) that uses
-// floating point: the float / double types, a floating-point literal (1.5,
-// 2.0f, .5, 1e3, 3f), <cmath> or <math.h>, or a libm function. Each is returned
+// floating point: the float / double types and their aliases (float_t, GLfloat,
+// SDL_FPoint, ...), a floating-point literal (1.5, 2.0f, .5, 1e3, 3f, 0x1p-1),
+// <cmath> or <math.h>, or a libm / string-to-float function. Each is returned
 // trimmed, so a caller can match it against an allowlist.
+//
+// What a text scan cannot see: `auto` initialised from a function that returns a
+// double, and implicit int <-> float conversions at a call (an int passed to a
+// float parameter). Those need an object-level check; see brief 03b's follow-up.
 inline std::vector<std::string> floatingPointLines(const std::string& source)
 {
   static const std::regex floating(
-    R"((^|[^A-Za-z0-9_])(float|double)([^A-Za-z0-9_]|$))"                    // the types
-    R"(|(^|[^A-Za-z0-9_.])([0-9]+\.[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?[fFlL]?([^A-Za-z0-9_]|$))" // 1.5  2.  .5f
-    R"(|(^|[^A-Za-z0-9_.])[0-9]+[eE][+-]?[0-9]+[fFlL]?([^A-Za-z0-9_]|$))"   // 1e3
-    R"(|(^|[^A-Za-z0-9_.])[0-9]+[fF]([^A-Za-z0-9_]|$))"                     // 3f
+    // the types and their aliases
+    R"((^|[^A-Za-z0-9_])(float|double|float_t|double_t|GLfloat|GLdouble|SDL_FPoint|SDL_FRect)([^A-Za-z0-9_]|$))"
+    // 1.5  2.  .5f  1.5e-3
+    R"(|(^|[^A-Za-z0-9_.])([0-9]+\.[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?[fFlL]?([^A-Za-z0-9_]|$))"
+    // 1e3
+    R"(|(^|[^A-Za-z0-9_.])[0-9]+[eE][+-]?[0-9]+[fFlL]?([^A-Za-z0-9_]|$))"
+    // 3f
+    R"(|(^|[^A-Za-z0-9_.])[0-9]+[fF]([^A-Za-z0-9_]|$))"
+    // hex floats: 0x1p-1, 0x1.8p3
+    R"(|(^|[^A-Za-z0-9_.])0[xX][0-9a-fA-F]*\.?[0-9a-fA-F]*[pP][+-]?[0-9]+[fFlL]?)"
     R"(|#\s*include\s*<(cmath|math\.h)>)"
-    R"(|(^|[^A-Za-z0-9_])(fabs|sqrt|pow|floor|ceil|round|lround|fmod|sin|cos|tan|atan2?|exp|log10?)f?\s*\()");
+    // libm, with an optional f / l suffix, and the string-to-float functions
+    R"(|(^|[^A-Za-z0-9_])(fabs|sqrt|cbrt|hypot|pow|floor|ceil|round|lround|llround|trunc|rint|lrint|nearbyint|fmod|remainder|fma|fmin|fmax|fdim|ldexp|frexp|modf|copysign|sin|cos|tan|asin|acos|atan2?|sinh|cosh|tanh|asinh|acosh|atanh|exp|exp2|expm1|log2|log10|log1p)[fl]?\s*\()"
+    // plain log( is also a logging method name, so only the qualified form counts
+    R"(|std::log[fl]?\s*\(|(^|[^A-Za-z0-9_:])::log[fl]?\s*\()"
+    R"(|(^|[^A-Za-z0-9_])(atof|strtof|strtod|strtold|stof|stod|stold)\s*\()");
 
   std::vector<std::string> hits;
   std::istringstream lines(stripCommentsAndStrings(source));

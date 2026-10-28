@@ -18,7 +18,12 @@ RocketFiredEntity::RocketFiredEntity(int uniqueID, int playerNumber, int atX, in
   m_offsetY = 0;
   m_health = 10;
 
-  m_velocity = fixedFromRatio(m_health, DataReader::getInstance()->getIntFromFile("ROCKET_VELOCITY", "data/entity.txt"));
+  // Rounded UP, not to nearest: 10/25 is 0.4 = 26214.4 in Q16.16, and 26214 is a
+  // hair short of it. With 26214 the rocket's offset reaches -0.4 one unit outside
+  // "within one step of the tile middle" and the rocket explodes a tick later than
+  // it did with floats (where noise happened to put it inside). 26215 keeps the
+  // rocket's timing identical to the float code, wall and block stops included.
+  m_velocity = fixedFromRatioCeil(m_health, DataReader::getInstance()->getIntFromFile("ROCKET_VELOCITY", "data/entity.txt"));
 
   m_dir = UP;
   m_currentAnimState = EntityRenderer::IDLE;

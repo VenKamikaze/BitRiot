@@ -4,7 +4,7 @@
 // offset and velocity is an integer in Q16.16, so a tick gives bit-identical
 // results on any compiler, optimisation level and CPU. Floating point is for
 // presentation only (rendering, rumble, UI, audio), and
-// tests/FixedPointSimTest.cpp fails if a float or double appears in a sim file.
+// tests/FixedPointGuardTest.cpp fails if a float or double appears in a sim file.
 //
 // A `fixed_t` is an int32_t holding value * 65536. An entity's offset from the
 // middle of its tile runs from -1 to +1 (so one tile is a change of 2.0), and
@@ -24,7 +24,15 @@
 //                          fixedFromRatio(-n, d) == -fixedFromRatio(n, d).
 //                          A zero or negative d gives 0 (rather than undefined
 //                          behaviour), and a result outside the int32 range
-//                          saturates.
+//                          saturates. The arguments are int32_t, so the scaled
+//                          numerator (at most 2^47) cannot overflow.
+//   fixedFromRatioCeil(n, d)  n / d rounded UP, toward +infinity: the smallest
+//                          fixed-point value not below the true quotient. So a
+//                          positive quotient is never rounded down (and a
+//                          negative one is rounded toward zero). Same rules for
+//                          d <= 0 and saturation. Used where a velocity must not
+//                          fall short of a tile-fraction the old float code
+//                          reached; see RocketFiredEntity.
 //   fixedAbs(v)            |v|; the one value without a positive counterpart
 //                          (INT32_MIN) saturates to INT32_MAX.
 //   fixedToPixels(v, ppu)  v * ppu, TRUNCATED toward zero to a whole number.
@@ -52,28 +60,43 @@ inline fixed_t fixedFromInt(int n)
 }
 
 // numerator / denominator as a fixed_t value; see the rounding rules above.
-inline fixed_t fixedFromRatio(int64_t numerator, int64_t denominator)
+inline fixed_t fixedFromRatio(int32_t numerator, int32_t denominator)
 {
   if (denominator <= 0)
   {
     return 0;
   }
   const bool negative = numerator < 0;
-  const uint64_t absNumerator = negative ? (uint64_t)0 - (uint64_t)numerator : (uint64_t)numerator;
-  uint64_t quotient;
-  if (absNumerator > (UINT64_MAX >> FIXED_SHIFT))
+  const uint64_t absNumerator = negative ? (uint64_t)0 - (uint64_t)(int64_t)numerator : (uint64_t)numerator;
+  const uint64_t magnitude = absNumerator << FIXED_SHIFT; // at most 2^47
+  const uint64_t den = (uint64_t)denominator;
+  uint64_t quotient = magnitude / den;
+  if (2 * (magnitude % den) >= den)
   {
-    quotient = (uint64_t)INT32_MAX; // too big to scale: saturate
+    ++quotient; // nearest, ties away from zero
   }
-  else
+  if (quotient > (uint64_t)INT32_MAX)
   {
-    const uint64_t magnitude = absNumerator << FIXED_SHIFT;
-    const uint64_t den = (uint64_t)denominator;
-    quotient = magnitude / den;
-    if (2 * (magnitude % den) >= den)
-    {
-      ++quotient; // nearest, ties away from zero
-    }
+    quotient = (uint64_t)INT32_MAX;
+  }
+  return negative ? -(fixed_t)quotient : (fixed_t)quotient;
+}
+
+// numerator / denominator rounded up (toward +infinity); see the rounding rules.
+inline fixed_t fixedFromRatioCeil(int32_t numerator, int32_t denominator)
+{
+  if (denominator <= 0)
+  {
+    return 0;
+  }
+  const bool negative = numerator < 0;
+  const uint64_t absNumerator = negative ? (uint64_t)0 - (uint64_t)(int64_t)numerator : (uint64_t)numerator;
+  const uint64_t magnitude = absNumerator << FIXED_SHIFT;
+  const uint64_t den = (uint64_t)denominator;
+  uint64_t quotient = magnitude / den;
+  if (!negative && (magnitude % den) != 0)
+  {
+    ++quotient; // a negative quotient truncated toward zero is already rounded up
   }
   if (quotient > (uint64_t)INT32_MAX)
   {

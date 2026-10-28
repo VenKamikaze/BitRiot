@@ -29,7 +29,6 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <math.h>
 #include <fcntl.h>
 
 #include <SDL2/SDL.h>

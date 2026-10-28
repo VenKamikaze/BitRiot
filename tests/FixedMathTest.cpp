@@ -79,10 +79,10 @@ TEST(FixedHelpersTest, ExactTiesRoundAwayFromZero)
   EXPECT_EQ(fixedFromRatio(-3, 131072), -2);
   EXPECT_EQ(fixedFromRatio(-5, 131072), -3);
   // just either side of a tie
-  EXPECT_EQ(fixedFromRatio(100000, int64_t(131072) * 100000 + 1), 0);  // 0.49999999...
-  EXPECT_EQ(fixedFromRatio(100000, int64_t(131072) * 100000 - 1), 1);  // 0.50000000...
-  EXPECT_EQ(fixedFromRatio(-100000, int64_t(131072) * 100000 + 1), 0);
-  EXPECT_EQ(fixedFromRatio(-100000, int64_t(131072) * 100000 - 1), -1);
+  EXPECT_EQ(fixedFromRatio(16000, 131072 * 16000 + 1), 0);  // 0.49999999...
+  EXPECT_EQ(fixedFromRatio(16000, 131072 * 16000 - 1), 1);  // 0.50000000...
+  EXPECT_EQ(fixedFromRatio(-16000, 131072 * 16000 + 1), 0);
+  EXPECT_EQ(fixedFromRatio(-16000, 131072 * 16000 - 1), -1);
 }
 
 TEST(FixedHelpersTest, FromRatioWithANonPositiveDenominatorIsZero)
@@ -96,11 +96,53 @@ TEST(FixedHelpersTest, FromRatioWithANonPositiveDenominatorIsZero)
 TEST(FixedHelpersTest, FromRatioSaturatesRatherThanOverflowing)
 {
   EXPECT_EQ(fixedFromRatio(INT32_MAX, 1), INT32_MAX);
-  EXPECT_EQ(fixedFromRatio(-(int64_t)INT32_MAX, 1), -INT32_MAX);
-  EXPECT_EQ(fixedFromRatio(int64_t(1) << 40, 1), INT32_MAX);
-  EXPECT_EQ(fixedFromRatio(INT64_MAX, 1), INT32_MAX);
-  EXPECT_EQ(fixedFromRatio(INT64_MIN, 1), -INT32_MAX);
-  EXPECT_EQ(fixedFromRatio(32767, 1), 32767 * 65536);
+  EXPECT_EQ(fixedFromRatio(-INT32_MAX, 1), -INT32_MAX);
+  EXPECT_EQ(fixedFromRatio(INT32_MIN, 1), -INT32_MAX);
+  EXPECT_EQ(fixedFromRatio(32767, 1), 32767 * 65536);   // the largest whole number that fits
+  EXPECT_EQ(fixedFromRatio(32768, 1), INT32_MAX);       // one more does not
+  EXPECT_EQ(fixedFromRatio(-32768, 1), -INT32_MAX);
+}
+
+TEST(FixedHelpersTest, FromRatioKeepsRepresentableResultsForLargeArguments)
+{
+  // the numerator is large but the quotient is not: it must not saturate
+  EXPECT_EQ(fixedFromRatio(INT32_MAX, INT32_MAX), 65536);
+  EXPECT_EQ(fixedFromRatio(INT32_MIN, INT32_MAX), -65536);   // -1.0000000005 rounds to -1.0
+  EXPECT_EQ(fixedFromRatio(2000000000, 100000), 20000 * 65536);
+  EXPECT_EQ(fixedFromRatio(-2000000000, 100000), -20000 * 65536);
+  EXPECT_EQ(fixedFromRatio(INT32_MAX, 65536), INT32_MAX);        // exactly INT32_MAX, not a saturation
+  EXPECT_EQ(fixedFromRatio(1, INT32_MAX), 0);                // 0.00003 of the smallest step
+}
+
+TEST(FixedHelpersTest, FromRatioCeilRoundsUp)
+{
+  EXPECT_EQ(fixedFromRatioCeil(10, 25), 26215);     // 26214.4 -> 26215 (nearest gives 26214)
+  EXPECT_EQ(fixedFromRatio(10, 25), 26214);
+  EXPECT_EQ(fixedFromRatioCeil(110, 400), 18023);   // 18022.4
+  EXPECT_EQ(fixedFromRatioCeil(1, 3), 21846);       // 21845.33
+  EXPECT_EQ(fixedFromRatioCeil(2, 3), 43691);       // 43690.67
+  EXPECT_EQ(fixedFromRatioCeil(1, 2), 32768);       // exact stays exact
+  EXPECT_EQ(fixedFromRatioCeil(4, 1), 262144);
+  EXPECT_EQ(fixedFromRatioCeil(0, 7), 0);
+  // toward +infinity, so a negative quotient moves toward zero
+  EXPECT_EQ(fixedFromRatioCeil(-1, 3), -21845);     // -21845.33
+  EXPECT_EQ(fixedFromRatioCeil(-2, 3), -43690);     // -43690.67
+  EXPECT_EQ(fixedFromRatioCeil(-1, 2), -32768);
+  // not below the true quotient, and within one unit of the nearest rounding
+  for (int n = -300; n <= 300; ++n)
+  {
+    const fixed_t up = fixedFromRatioCeil(n, 190);
+    const fixed_t nearest = fixedFromRatio(n, 190);
+    EXPECT_GE((int64_t)up * 190, (int64_t)n * 65536) << n;
+    EXPECT_GE(up, nearest) << n;
+    EXPECT_LE(up - nearest, 1) << n;
+  }
+  // defined for bad denominators and saturates like fixedFromRatio
+  EXPECT_EQ(fixedFromRatioCeil(10, 0), 0);
+  EXPECT_EQ(fixedFromRatioCeil(10, -5), 0);
+  EXPECT_EQ(fixedFromRatioCeil(INT32_MAX, 1), INT32_MAX);
+  EXPECT_EQ(fixedFromRatioCeil(INT32_MIN, 1), -INT32_MAX);
+  EXPECT_EQ(fixedFromRatioCeil(INT32_MAX, INT32_MAX), 65536);
 }
 
 TEST(FixedHelpersTest, AbsIsSymmetricAndSaturatesTheOneBadValue)
@@ -192,15 +234,14 @@ struct VelocityRow
 
 // (health + extra) / modifier, rounded to nearest:
 //   player (h+10)/400, robot (h+2)/190, drone (h+2)/180, wall eater (h+2)/160,
-//   egg thief (h+2)/140 and rocket 10/25.
+//   egg thief (h+2)/140. (The rocket's 10/25 is rounded up instead; its own test
+//   is below.)
 // Each row also records what the float code gave, so the table shows what the
 // conversion changed. A velocity is off by at most half of 1/65536 (so a tile takes
 // at most 0.03% longer or shorter, at the lowest health where it takes 100+
 // ticks), and ten tiles take the same number of ticks as before, except the
 // slowest player (1 more tick in 691). The whole number of ticks per tile does not
-// change anywhere; the nearest thing is the rocket's, where 2/0.4 is exactly 5
-// and 2/(26214/65536) is 5.00008 (the rocket test in FixedPointSimTest.cpp shows
-// what that does).
+// change anywhere.
 const VelocityRow PLAYER_ROWS[] =
 {
   { "player initial (100)", 100, 18022, 0.275000006, 7.27273, 70, 70 },
@@ -292,11 +333,11 @@ TEST_F(FixedMathTest, MonsterAndRobotVelocitiesComeFromHealthAsRoundedToNearest)
   }
 }
 
-TEST_F(FixedMathTest, RocketVelocityIsATenthOverTheDataFileValue)
+TEST_F(FixedMathTest, RocketVelocityIsATenthOverTheDataFileValueRoundedUp)
 {
   setMapSize(9, 9);
   RocketFiredEntity rocket(9001, 1, 3, 3, GameEntity::RIGHT_FLAG, 5, 3);
-  EXPECT_EQ(rocket.getVelocity(), 26214); // 10 / ROCKET_VELOCITY(25), 0.4
+  EXPECT_EQ(rocket.getVelocity(), 26215); // 10 / ROCKET_VELOCITY(25) = 0.4, rounded UP (nearest is 26214)
 }
 
 TEST_F(FixedMathTest, VelocityOfAnEntityWithNegativeHealthIsDefined)

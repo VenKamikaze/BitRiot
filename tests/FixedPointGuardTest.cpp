@@ -30,7 +30,6 @@ const std::map<std::string, std::string> & nonSimFiles()
 {
   static const std::map<std::string, std::string> files =
   {
-    { "main.cpp", "program entry and window setup (includes <math.h>, uses none of it)" },
     { "InfoPanel.cpp", "HUD drawing: health-bar fill and portrait scaling" },
     { "MickSDLRenderer.cpp", "window scaling and letterboxing" },
     { "MickSDLUtil.h", "haptic rumble strength" },
@@ -170,6 +169,33 @@ TEST(FixedPointSourceGuardTest, TheScanCatchesFloatingPointAndIgnoresLookalikes)
   EXPECT_EQ(floatingPointLines("#include <math.h>").size(), 1u);
   EXPECT_EQ(floatingPointLines("y = std::sqrt(v);").size(), 1u);
   EXPECT_EQ(floatingPointLines("y = floorf(v);").size(), 1u);
+  // libm beyond the obvious, and string-to-float
+  EXPECT_EQ(floatingPointLines("n = (int)hypot(3, 4);").size(), 1u);
+  EXPECT_EQ(floatingPointLines("n = std::exp2(3);").size(), 1u);
+  EXPECT_EQ(floatingPointLines("n = log2(8);").size(), 1u);
+  EXPECT_EQ(floatingPointLines("n = std::log(8);").size(), 1u);
+  EXPECT_EQ(floatingPointLines("n = ::log(8);").size(), 1u);
+  EXPECT_EQ(floatingPointLines("n = cbrt(27);").size(), 1u);
+  EXPECT_EQ(floatingPointLines("n = trunc(v);").size(), 1u);
+  EXPECT_EQ(floatingPointLines("n = fmin(a, b) + fmax(a, b);").size(), 1u);
+  EXPECT_EQ(floatingPointLines("n = asin(a) + acos(a) + sinh(a) + cosh(a) + tanh(a);").size(), 1u);
+  EXPECT_EQ(floatingPointLines("n = atof(text);").size(), 1u);
+  EXPECT_EQ(floatingPointLines("n = std::stod(text);").size(), 1u);
+  EXPECT_EQ(floatingPointLines("n = strtod(text, 0);").size(), 1u);
+  EXPECT_EQ(floatingPointLines("n = sqrtf(v);").size(), 1u);
+  // type aliases
+  EXPECT_EQ(floatingPointLines("float_t x;").size(), 1u);
+  EXPECT_EQ(floatingPointLines("double_t x;").size(), 1u);
+  EXPECT_EQ(floatingPointLines("GLfloat x;").size(), 1u);
+  EXPECT_EQ(floatingPointLines("SDL_FPoint p;").size(), 1u);
+  EXPECT_EQ(floatingPointLines("long double x;").size(), 1u);
+  // hex floats
+  EXPECT_EQ(floatingPointLines("x = 0x1p-1;").size(), 1u);
+  EXPECT_EQ(floatingPointLines("x = 0x1.8p3;").size(), 1u);
+  EXPECT_EQ(floatingPointLines("x = 0X.8P1f;").size(), 1u);
+  // a quote inside a character literal does not hide what follows it
+  EXPECT_EQ(floatingPointLines("char q = '\"'; float x;").size(), 1u);
+  EXPECT_EQ(floatingPointLines("char q = '\''; double x;").size(), 1u);
 
   EXPECT_EQ(floatingPointLines("int x = 5;").size(), 0u);
   EXPECT_EQ(floatingPointLines("int floating = 1;").size(), 0u);
@@ -184,8 +210,17 @@ TEST(FixedPointSourceGuardTest, TheScanCatchesFloatingPointAndIgnoresLookalikes)
   EXPECT_EQ(floatingPointLines("round_robin();").size(), 0u);
   EXPECT_EQ(floatingPointLines("// float x = 1.5f;").size(), 0u);
   EXPECT_EQ(floatingPointLines("/* double */ int x;").size(), 0u);
-  EXPECT_EQ(floatingPointLines("log(\"1.5 float\");").size(), 0u);
+  EXPECT_EQ(floatingPointLines("warn(\"1.5 float\");").size(), 0u);
   EXPECT_EQ(floatingPointLines("int x; // 0.5f").size(), 0u);
+  EXPECT_EQ(floatingPointLines("x = 0x1f;").size(), 0u);
+  EXPECT_EQ(floatingPointLines("x = 0xABCDEF;").size(), 0u);
+  EXPECT_EQ(floatingPointLines("int hypotenuse = 1;").size(), 0u);
+  EXPECT_EQ(floatingPointLines("log(callingClass, message, DEBUG);").size(), 0u);
+  EXPECT_EQ(floatingPointLines("logger->log(a, b);").size(), 0u);
+  EXPECT_EQ(floatingPointLines("void MickLogger::log(void* c, const char *m);").size(), 0u);
+  EXPECT_EQ(floatingPointLines("int logged = 1; int expected = 2;").size(), 0u);
+  EXPECT_EQ(floatingPointLines("char q = '\"'; int x = 1;").size(), 0u);
+  EXPECT_EQ(floatingPointLines("int big = 1'000'000;").size(), 0u);
 }
 
 TEST(FixedPointSourceGuardTest, AnAllowlistedLineIsExcusedOnlyInItsOwnFile)

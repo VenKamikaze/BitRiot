@@ -1371,6 +1371,11 @@ coord PlayerCharacterEntity::getNextTileFromPathfinding(int targetTileX, int tar
   // it used to get the next free +0.001 on a float key - so the order is the
   // same as it always was, including a slot freed by a node leaving the list
   // being reused by the next arrival with that total.
+  // The equivalence relies on fewer than 1000 nodes ever sharing one total, as 1000
+  // nudges of 0.001 would have reached the next whole total. The list holds each
+  // location at most once (a better path replaces, an equal or worse one is
+  // dropped), so it never holds more nodes than the map has tiles: 825 on the
+  // largest map the menu allows (33x25), far fewer in practice.
   typedef pair<int, int> OpenKey;
   map<OpenKey, Node *> open;
 

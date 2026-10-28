@@ -24,9 +24,8 @@ add_executable(bitriot_tests ${TEST_SOURCES})
 
 target_include_directories(bitriot_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-# GoogleTest >= 1.17 requires C++17; the game library stays at C++14. Both are
-# built by the same compiler and link cleanly.
-target_compile_features(bitriot_tests PRIVATE cxx_std_17)
+# The whole project builds as C++17 (CMAKE_CXX_STANDARD in the top-level
+# CMakeLists.txt), which GoogleTest >= 1.17 requires.
 
 # SimRandomSourceGuardTest scans src/ for libc random calls, and the tests may be
 # run from the build directory.

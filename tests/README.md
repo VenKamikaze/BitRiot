@@ -40,8 +40,9 @@ Two things do have to be supplied:
 
 CMake was restructured so this could work: everything except `main.cpp` now
 builds into a `bitriot_core` static library, which both `BitRiot` and
-`bitriot_tests` link. The game stays on C++14; the test target uses C++17
-because GoogleTest ≥ 1.17 requires it.
+`bitriot_tests` link. The whole project is pinned to C++17 (`CMAKE_CXX_STANDARD`, extensions
+off, in the top-level `CMakeLists.txt`) so every compiler agrees; GoogleTest ≥ 1.17
+requires it anyway.
 
 ## Writing a test
 
@@ -132,6 +133,11 @@ Do a seed sweep before trusting a new test:
 for s in $(seq 1 200); do BITRIOT_TEST_SEED=$s ./tests/bitriot_tests >/dev/null 2>&1 || echo "seed $s"; done
 ```
 
+The sweep is run from `build/` and needs the `BitRiot` target built at least
+once: building it creates the `data` and `assets` symlinks the tests read through
+(`cmake --build build -j8` builds everything). A tests-only build directory
+(`--target bitriot_tests`) has no symlinks, so run its binary from the source root.
+
 `std::cout` is swallowed during each test because `MickLogger`'s DEBUG level is
 compile-time enabled in Debug builds and is very chatty. Set
 `BITRIOT_TEST_VERBOSE=1` to see it. `std::cerr` is left alone, so warnings and
@@ -148,8 +154,12 @@ offset and velocity, so there is no floating point in sim code and
   and a tile is 2.0 wide (offsets run from -1 to +1).
 - Read positions the way the screen does: `entity.pixelX()` / `pixelY()` (tile
   origin plus `fixedToPixels(offset, TILE_WIDTH / 2)`, truncating toward zero).
-- `getOffsetX()` and friends return `fixed_t`. Do not compare them with float
-  literals: `EXPECT_EQ(e->getOffsetX(), 0.5f)` would silently truncate.
+- `getOffsetX()` and friends return `fixed_t`. The real hazard is the other
+  direction: `setOffsetX(0.5f)`, or any float passed to a `fixed_t` parameter,
+  compiles and silently truncates to 0. `-Wall` does not flag it; the library is
+  built with `-Wfloat-conversion`, which does, so keep the build free of those
+  warnings. The source guard cannot see an `auto` that carries a double, or an
+  int converted to a float parameter either.
 
 ## Singleton state — read this before adding tests
 

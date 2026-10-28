@@ -295,22 +295,26 @@ struct MoverCase
   // ticks (of 600) on which the fixed-point result is drawn a pixel away from
   // the original float maths (see ScriptedWalksStayWithinOnePixel...)
   int pixelsDifferingFromFloat;
+  // the digest the FLOAT code gave (recorded in 246f469, before the conversion);
+  // the float reference model below must reproduce it, which is what makes the
+  // model a faithful stand-in for the code that no longer exists
+  uint64_t floatDigest;
 };
 
 const MoverCase MOVER_CASES[] =
 {
-  { "player h200",       PLAYER,       200, 11, 0xe22fee89094c5921ull, 12, 32, 107, 0 },
-  { "player h100",       PLAYER,       100, 12, 0xe9fefcd6b269cd64ull, 23, 187, 224, 23 },
-  { "player h55",        PLAYER,        55, 13, 0x17b2cf5700f02250ull, 14, 89, 96, 0 },
-  { "player h10",        PLAYER,        10, 14, 0x669a10efd59834deull, 6, 37, 32, 2 },
-  { "robot h38",         ROBOT,         38, 15, 0x93f01f6fc3a42ae3ull, 19, 49, 96, 0 },
-  { "robot h12",         ROBOT,         12, 16, 0x26c2733c38370891ull, 4, 34, 32, 0 },
-  { "drone h35",         DRONE,         35, 17, 0x72359ff1f04e1c04ull, 18, 47, 96, 0 },
-  { "drone h9",          DRONE,          9, 18, 0xe179c002fcc746a4ull, 0, 32, 96, 1 },
-  { "wall eater h25",    WALL_EATER_K,  25, 19, 0x4df2343d864e0070ull, 10, 160, 143, 0 },
-  { "wall eater h7",     WALL_EATER_K,   7, 20, 0x3fb416e279d0f63eull, 0, 32, 71, 11 },
-  { "egg thief h20",     EGG_THIEF_K,   20, 21, 0xd9a2233cbe2358f9ull, 12, 32, 128, 0 },
-  { "egg thief h6",      EGG_THIEF_K,    6, 22, 0xedccf1386c3343bcull, 0, 33, 32, 0 },
+  { "player h200",       PLAYER,       200, 11, 0xe22fee89094c5921ull, 12, 32, 107, 0, 0xe22fee89094c5921ull },
+  { "player h100",       PLAYER,       100, 12, 0xe9fefcd6b269cd64ull, 23, 187, 224, 23, 0x43735d8ba130bc33ull },
+  { "player h55",        PLAYER,        55, 13, 0x17b2cf5700f02250ull, 14, 89, 96, 0, 0x17b2cf5700f02250ull },
+  { "player h10",        PLAYER,        10, 14, 0x669a10efd59834deull, 6, 37, 32, 2, 0xe720da5f525f135eull },
+  { "robot h38",         ROBOT,         38, 15, 0x93f01f6fc3a42ae3ull, 19, 49, 96, 0, 0x93f01f6fc3a42ae3ull },
+  { "robot h12",         ROBOT,         12, 16, 0x26c2733c38370891ull, 4, 34, 32, 0, 0x26c2733c38370891ull },
+  { "drone h35",         DRONE,         35, 17, 0x72359ff1f04e1c04ull, 18, 47, 96, 0, 0x72359ff1f04e1c04ull },
+  { "drone h9",          DRONE,          9, 18, 0xe179c002fcc746a4ull, 0, 32, 96, 1, 0x6935a6b5208f6433ull },
+  { "wall eater h25",    WALL_EATER_K,  25, 19, 0x4df2343d864e0070ull, 10, 160, 143, 0, 0x4df2343d864e0070ull },
+  { "wall eater h7",     WALL_EATER_K,   7, 20, 0x3fb416e279d0f63eull, 0, 32, 71, 11, 0xeb9cdb1cd4d00cefull },
+  { "egg thief h20",     EGG_THIEF_K,   20, 21, 0xd9a2233cbe2358f9ull, 12, 32, 128, 0, 0xd9a2233cbe2358f9ull },
+  { "egg thief h6",      EGG_THIEF_K,    6, 22, 0xedccf1386c3343bcull, 0, 33, 32, 0, 0xedccf1386c3343bcull },
 };
 
 TEST_F(FixedPointSimTest, ScriptedWalksAreDrawnOnTheExpectedPixels)
@@ -465,6 +469,7 @@ TEST_F(FixedPointSimTest, ScriptedWalksStayWithinOnePixelOfTheOriginalFloatMaths
     DIRECTION dir = RIGHT;
     int runLeft = 0;
     int differing = 0, worst = 0;
+    Digest refDigest;
     for (int t = 0; t < 600; ++t)
     {
       if (runLeft == 0)
@@ -476,6 +481,8 @@ TEST_F(FixedPointSimTest, ScriptedWalksStayWithinOnePixelOfTheOriginalFloatMaths
       ref.move(dir);
       const int px = ref.tileX * Map::TILE_WIDTH + (int)(ref.offX * (Map::TILE_WIDTH / 2));
       const int py = ref.tileY * Map::TILE_WIDTH + (int)(ref.offY * (Map::TILE_WIDTH / 2));
+      refDigest.add(px);
+      refDigest.add(py);
       const int dx = std::abs(px - actual[2 * t]);
       const int dy = std::abs(py - actual[2 * t + 1]);
       if (dx || dy)
@@ -487,6 +494,7 @@ TEST_F(FixedPointSimTest, ScriptedWalksStayWithinOnePixelOfTheOriginalFloatMaths
     totalDiffering += differing;
     EXPECT_LE(worst, 1) << c.name << ": drawn more than a pixel from the original float maths";
     EXPECT_EQ(differing, c.pixelsDifferingFromFloat) << c.name;
+    EXPECT_EQ(refDigest.value(), c.floatDigest) << c.name << ": the float reference model no longer reproduces the recorded float run";
   }
   // 37 of 7200 ticks (0.5%) are drawn one pixel off. Nothing is drawn further.
   EXPECT_EQ(totalDiffering, 37);
@@ -553,7 +561,7 @@ const BrainCase BRAIN_CASES[] =
   { "egg thief owner3",  EGG_THIEF_K,  3, 108, 0x25f587d0040615d4ull, 77 },
 };
 
-TEST_F(FixedPointSimTest, SelfSteeringEntitiesWalkTheSameRoutesAsTheOriginalMaths)
+TEST_F(FixedPointSimTest, SelfSteeringEntitiesWalkTheExpectedRoutes)
 {
   setMapSize(9, 9);
   prepareWalkBoard();
@@ -657,17 +665,17 @@ TEST_F(FixedPointSimTest, RocketsExplodeOnTheSameTickAsTheOriginalMaths)
 
   dump("rockets", d.value());
   EXPECT_EQ(flights, 52);
-  EXPECT_EQ(d.value(), 0x3aa149109fb5251full);
+  // the digest the FLOAT code gave for the same 52 flights (recorded in 246f469):
+  // every explosion tick and tile is the same as it was
+  EXPECT_EQ(d.value(), 0x0bdb3f6c29ac1b6full);
 
   // Fired from (1,1) along the open row at a target k tiles along, the rocket
-  // blows up in the target tile. With the old float velocity it did so on ticks
-  // 1, 4, 9, 14, 19, ...: in every tile after the first it was already "within
-  // one step of the middle" 0.4 short of it, because float rounding put the
-  // offset at -0.39999995 against a velocity of 0.4. The fixed velocity is
-  // 26214/65536, a hair under 0.4, and the offset there is -26216/65536, a hair
-  // outside it, so the rocket waits one more tick and explodes at the middle of
-  // the tile instead: 1, 5, 10, 15, 20, ... Tile spacing is unchanged, 5 ticks.
-  const int expectedTick[] = { 0, 1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70 };
+  // blows up in the target tile on ticks 1, 4, 9, 14, ... as it always did. (With
+  // the velocity rounded to NEAREST, 26214, it was ticks 1, 5, 10, 15, ...: in
+  // every tile after the first the offset lands on -0.4 one tick before the middle,
+  // and 26214 is a hair short of 0.4, so "within one step" failed by one unit. The
+  // rocket's velocity is rounded up, 26215, to keep the float timing.)
+  const int expectedTick[] = { 0, 1, 4, 9, 14, 19, 24, 29, 34, 39, 44, 49, 54, 59, 64, 69 };
   for (int to = 1; to <= 15; ++to)
   {
     RocketResult r = flyRocket(this, 1, 1, GameEntity::RIGHT_FLAG, to, 1);
@@ -676,7 +684,7 @@ TEST_F(FixedPointSimTest, RocketsExplodeOnTheSameTickAsTheOriginalMaths)
     EXPECT_EQ(r.tileY, 1);
   }
   // one fired past the end of the row is stopped by the wall, in the last open tile
-  EXPECT_EQ(beyond.tick, 70);
+  EXPECT_EQ(beyond.tick, 69);
   EXPECT_EQ(beyond.tileX, 15);
 }
 
