@@ -266,3 +266,12 @@ unsigned int SpawningPool::getRobotFlags()
   flagsToSet = flagsToSet | GameEntity::FIRE_ROCKETS;
   return flagsToSet;
 }
+void SpawningPool::hashState(StateHasher& h) const
+{
+  h.i32(m_pointsLeft);
+  h.i32(m_IQsLeft);
+  h.i32(m_ENsLeft);
+  h.i32(m_minDelay);
+  h.i32(m_maxDelay);
+  h.i32(m_delayCounter);
+}

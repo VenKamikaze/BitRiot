@@ -11,6 +11,7 @@
 #include "GameEntity.h"
 #include "GameSettings.h"
 #include "AIGameView.h"
+#include "StateHash.h"
 
 
 class SpawningPool
@@ -37,6 +38,9 @@ class SpawningPool
     {
       return m_pointsLeft > 0;
     }
+
+    // For the state hash (see Simulation.h): every counter the pool keeps.
+    void hashState(StateHasher& h) const;
 
   private:
     int m_pointsLeft;

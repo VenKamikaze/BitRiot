@@ -10,7 +10,7 @@
  *   SimRandom::sim()       Everything the simulation decides: spawn timing and
  *                          types, block seeding, bot AI choices, robot/brain
  *                          choices. Reseeded from the round seed at the very
- *                          start of every round (GameEngine::resetGame), so the
+ *                          start of every round (Simulation::start), so the
  *                          same seed plays the same round on every machine. It
  *                          may be hashed, recorded and sent.
  *
@@ -81,8 +81,15 @@ class SimRandom
     // Uniform-ish value in [0, n). Returns 0 for n <= 1. Always one draw.
     int nextInt(int n);
 
-    // The simulation stream. A process-lifetime instance until brief 03a moves
-    // it into the Simulation object.
+    // The generator's whole state, for the simulation's state hash
+    // (Simulation::stateHash()): two generators with the same pair produce the
+    // same sequence from here on. `inc` never changes after seed().
+    uint64_t stateValue() const { return m_state; }
+    uint64_t incValue() const { return m_inc; }
+
+    // The simulation stream. A process-lifetime instance (the entities and the
+    // spawning pool draw from it directly); Simulation::start() is what seeds it,
+    // from MatchConfig::seed, and Simulation::stateHash() covers its state.
     static SimRandom& sim();
 
     // The cosmetic stream. Seeded from std::random_device (or the clock) on

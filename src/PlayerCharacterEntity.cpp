@@ -1967,3 +1967,55 @@ void PlayerCharacterEntity::clearGoalsAndInstructions()
     m_insList.pop_front();
   }
 }
+
+void PlayerCharacterEntity::hashExtraState(StateHasher& h) const
+{
+  h.flag(alive);
+  h.flag(m_controlledByAI);
+  h.i32(m_IQ);
+  h.i32(m_numberBombsPlaced);
+  h.i32(m_numberEggsPlaced);
+  h.i32(m_checkTimer);
+  h.i32(m_aiFrame);
+
+  // The bot's plan. Entity ids inside it are written as walk positions (see
+  // StateHash.h), so the hash does not depend on the id counter.
+  h.count(m_goalList.size());
+  for (list<AIGoal *>::const_iterator it = m_goalList.begin(); it != m_goalList.end(); ++it)
+  {
+    const AIGoal * g = *it;
+    h.i32(g->m_goalType);
+    h.i32(g->m_targetAmount);
+    h.i32(g->m_tileX);
+    h.i32(g->m_tileY);
+    h.i32(g->m_targetType);
+    h.ref(g->m_targetID);
+  }
+  h.count(m_insList.size());
+  for (list<AIInstruction *>::const_iterator it = m_insList.begin(); it != m_insList.end(); ++it)
+  {
+    const AIInstruction * ins = *it;
+    h.i32(ins->m_type);
+    h.i32(ins->m_targetAmount);
+    h.i32(ins->m_targetType);
+    h.i32(ins->m_targetTileX);
+    h.i32(ins->m_targetTileY);
+  }
+  h.count(m_abandonedPickups.size());
+  for (map<int, int>::const_iterator it = m_abandonedPickups.begin(); it != m_abandonedPickups.end(); ++it)
+  {
+    h.ref(it->first);
+    h.i32(it->second);
+  }
+  h.count(m_pickupAttempts.size());
+  for (map<int, PickupAttempt>::const_iterator it = m_pickupAttempts.begin(); it != m_pickupAttempts.end(); ++it)
+  {
+    h.ref(it->first);
+    h.i32(it->second.bestBlocks);
+    h.i32(it->second.bestSteps);
+    h.i32(it->second.failures);
+  }
+  // Not hashed: attachedController (which local device drives the player),
+  // m_animCounter / m_animDelay (animation pacing), m_velocityModifier (a data
+  // constant).
+}

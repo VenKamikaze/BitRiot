@@ -90,13 +90,19 @@ int GameSettings::numConfiguredTeams()
   return (int) teams.size();
 }
 
-uint64_t GameSettings::beginRoundSeed()
+uint64_t GameSettings::pickRoundSeed()
 {
   if (!roundSeedPinned)
   {
     roundSeed = SimRandom::freshSeed();
   }
   roundSeedPinned = false; // a pin lasts for one round
+  return roundSeed;
+}
+
+uint64_t GameSettings::beginRoundSeed()
+{
+  pickRoundSeed();
   SimRandom::sim().seed(roundSeed);
   return roundSeed;
 }

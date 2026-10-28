@@ -7,7 +7,7 @@
 #ifndef _ENTITYMESSAGEQUEUE
 #define _ENTITYMESSAGEQUEUE
 
-#include <queue>
+#include <deque>
 #include "EntityMessage.h"
 
 class EntityMessageQueue
@@ -34,11 +34,24 @@ class EntityMessageQueue
       return m_msgQueue.empty();  // checks if the message queue is empty
     }
 
+    inline size_t size() const
+    {
+      return m_msgQueue.size();
+    }
+
+    // For the state hash: the pending messages, front (next to be processed)
+    // first. A runFrame() posts its collision results after it drains the queue,
+    // so every tick ends with messages still waiting; they are part of the state.
+    void hashState(StateHasher& h) const;
+
 
   private:
     EntityMessageQueue() {}
 
-    std::queue<EntityMessage *> m_msgQueue; // the actual queue of EntityMessage object pointers
+    // FIFO of EntityMessage object pointers (a deque rather than a std::queue so
+    // the state hash can walk it; it is only ever pushed at the back and popped
+    // at the front).
+    std::deque<EntityMessage *> m_msgQueue;
 
 };
 

@@ -190,13 +190,14 @@ class GameSettings
       return false;
     }
 
-    // Seed for the NEXT round's simulation RNG (SimRandom::sim()). Local play
-    // leaves this alone: GameEngine::resetGame() draws a fresh seed for every
-    // round. Calling setRoundSeed() pins the next round to exactly this value
-    // (a netplay host's MatchConfig, a replay, a debug override); the pin is
-    // used up by that one round, so "Play again" gets a fresh seed again.
+    // Seed for the NEXT local round's simulation RNG (SimRandom::sim()). Local
+    // play leaves this alone: GameEngine::resetGame() asks pickRoundSeed() for a
+    // fresh seed for every round and puts it in the round's MatchConfig. Calling
+    // setRoundSeed() pins the next local round to exactly this value (a replay, a
+    // debug override); the pin is used up by that one round, so "Play again" gets
+    // a fresh seed again. A netplay peer does not use any of this: the host's
+    // MatchConfig carries the seed, and Simulation::start() seeds from it.
     // After a round starts, getRoundSeed() is the seed that round used.
-    // 03a moves this into MatchConfig.
     inline uint64_t getRoundSeed()
     {
       return roundSeed;
@@ -214,10 +215,15 @@ class GameSettings
     {
       roundSeedPinned = false;
     }
-    // Called once at the very start of every round (GameEngine::resetGame(),
-    // before anything that draws random numbers is built): picks the round's
-    // seed (the pinned one, else a fresh one), releases the pin, reseeds
-    // SimRandom::sim() with it and returns it. Out-of-line in the .cpp.
+    // Picks the next local round's seed (the pinned one, else a fresh one),
+    // releases the pin, remembers it as getRoundSeed() and returns it. Does not
+    // touch SimRandom: Simulation::start() seeds the stream from the config.
+    // Out-of-line in the .cpp.
+    uint64_t pickRoundSeed();
+    // pickRoundSeed() and then reseed SimRandom::sim() with it, for code that
+    // wants both in one step. The game itself now goes through MatchConfig and
+    // Simulation::start() (which does the seeding), so only the harness's SetUp()
+    // and the seed tests call this.
     uint64_t beginRoundSeed();
 
     inline GAME_STATE getGameState()

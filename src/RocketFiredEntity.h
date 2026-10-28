@@ -18,6 +18,9 @@ class RocketFiredEntity : public GameEntity
 
     virtual void update();
 
+  protected:
+    void hashExtraState(StateHasher& h) const override;
+
   private:
     DIRECTION m_dir;
     int m_toX, m_toY; // used to explode rocket in tile targeted by RocketSpinEntity creator

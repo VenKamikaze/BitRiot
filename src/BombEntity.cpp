@@ -51,3 +51,8 @@ void BombEntity::update()
   // count down to explosion
 }
 
+
+void BombEntity::hashExtraState(StateHasher& h) const
+{
+  h.i32(m_fuse);
+}

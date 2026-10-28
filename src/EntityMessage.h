@@ -4,6 +4,7 @@
 #define _ENTITYMESSAGECLASS
 
 #include "Fixed.h"
+#include "StateHash.h"
 
 
 class EntityMessage
@@ -18,6 +19,11 @@ class EntityMessage
                   fixed_t offsetX = 0, fixed_t offsetY = 0,
                   int targetX = 0, int targetY = 0);
     ~EntityMessage() {}
+
+    // For the state hash: a message that is still queued is simulation state
+    // (the next tick will act on it). The sender id is written as a walk
+    // position, see StateHash.h.
+    void hashState(StateHasher& h) const;
 
 
     int getType()

@@ -102,6 +102,7 @@ set(SOURCES ./src/AIGameView.cpp
 ./src/InfoPanel.cpp
 ./src/InputHandler.cpp
 ./src/Map.cpp
+./src/MatchConfig.cpp
 ./src/MickSDLRenderer.cpp
 ./src/MenuSDLRenderer.cpp
 ./src/MickAssets.cpp
@@ -124,6 +125,7 @@ set(SOURCES ./src/AIGameView.cpp
 ./src/SDLHelper.cpp
 ./src/RmlUI/glue/ShellFileInterface.cpp
 ./src/SimRandom.cpp
+./src/Simulation.cpp
 ./src/SimpleBrain.cpp
 ./src/SimpleMovingEntity.cpp
 ./src/SpawningPool.cpp

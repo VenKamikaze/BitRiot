@@ -17,6 +17,9 @@ class IQPowerupEntity : public GameEntity
 
     virtual void update();
 
+  protected:
+    void hashExtraState(StateHasher& h) const override;
+
   private:
     int m_decayCounter;
     int m_initialDecayCount;

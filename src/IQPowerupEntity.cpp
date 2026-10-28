@@ -62,3 +62,8 @@ void IQPowerupEntity::update()
     EntityMessageQueue::getInstance()->postDestroyMessage(m_ID);
   }
 }
+
+void IQPowerupEntity::hashExtraState(StateHasher& h) const
+{
+  h.i32(m_decayCounter);
+}

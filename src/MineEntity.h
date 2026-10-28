@@ -22,6 +22,9 @@ class MineEntity : public GameEntity
     static const int ANIM_DELAY_MAX = 15;
 
 
+  protected:
+    void hashExtraState(StateHasher& h) const override;
+
   private:
     int m_fuse, m_animDelay;
 

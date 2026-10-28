@@ -11,6 +11,7 @@
 #include <assert.h>
 #include "GameSound.h"
 #include "Fixed.h"
+#include "StateHash.h"
 
 class GameEntity
 {
@@ -141,7 +142,18 @@ class GameEntity
     virtual void incAnimFrame();
     bool render(SDL_Surface* dest); // renders entity to destination surface
 
+    // Feeds this entity's simulation state into the state hash (see the "State
+    // hash specification" in Simulation.h): the fields below that every entity
+    // has, then whatever hashExtraState() adds for its own type. Never the
+    // render-only members (m_currentAnimFrame, the anim counters) and never the
+    // absolute id.
+    void hashState(StateHasher& h) const;
+
   protected:
+    // Each type's own simulation state (fuses, hatch and decay counters, AI
+    // timers, ...), in a fixed order. A subclass that adds state to update()'s
+    // behaviour must add it here too, calling its base class's first.
+    virtual void hashExtraState(StateHasher& h) const;
 
     int m_currentAnimState, m_currentAnimFrame; // used to reference specific tile for rendering
 

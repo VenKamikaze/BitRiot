@@ -120,3 +120,11 @@ void EggEntity::hatch()
   emq->postCreateMessage(m_hatchling, m_playerNumber, m_tileX, m_tileY, m_hatchFlags);
   emq->postDestroyMessage(m_ID);
 }
+
+void EggEntity::hashExtraState(StateHasher& h) const
+{
+  h.i32(m_hatchling);
+  h.i32(m_hatchCounter);
+  h.i32((int32_t) m_hatchFlags); // becomes the hatchling's flags
+  // m_animCounter only paces the animation
+}
