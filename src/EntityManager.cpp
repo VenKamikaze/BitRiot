@@ -3,6 +3,7 @@
 #include "GameEntity.h"
 #include "MickLogger.h"
 #include "PlayerCharacterEntity.h"
+#include <algorithm>
 #include <memory>
 #include <set>
 #include <string>
@@ -92,32 +93,38 @@ void EntityManager::runAI()
 
 bool EntityManager::removeFromEntityMap(int id, int & tileX, int & tileY)
 {
-  // try where the entity says it is first, then fall back to a full scan
   vector<vector<vector<int>>> & entityMap = m_pDynamicMap->entityMap;
-  for (int pass = 0; pass < 2; pass++)
+
+  // the tile the entity reports first - almost always where it is registered
+  vector<int> & reported = entityMap[tileX][tileY];
+  vector<int>::iterator found = std::find(reported.begin(), reported.end(), id);
+  if (found != reported.end())
   {
-    int firstX = (pass == 0) ? tileX : 0;
-    int lastX = (pass == 0) ? tileX : (int) entityMap.size() - 1;
-    for (int x = firstX; x <= lastX; x++)
+    reported.erase(found);
+    return true;
+  }
+
+  // otherwise it is registered somewhere else: scan every other tile
+  for (int x = 0; x < (int) entityMap.size(); x++)
+  {
+    for (int y = 0; y < (int) entityMap[x].size(); y++)
     {
-      int firstY = (pass == 0) ? tileY : 0;
-      int lastY = (pass == 0) ? tileY : (int) entityMap[x].size() - 1;
-      for (int y = firstY; y <= lastY; y++)
+      if (x == tileX && y == tileY)
       {
-        vector<int> & here = entityMap[x][y];
-        for (vector<int>::iterator it = here.begin(); it != here.end(); it++)
-        {
-          if (*it == id)
-          {
-            here.erase(it);
-            tileX = x;
-            tileY = y;
-            return true;
-          }
-        }
+        continue; // already checked
+      }
+      vector<int> & here = entityMap[x][y];
+      found = std::find(here.begin(), here.end(), id);
+      if (found != here.end())
+      {
+        here.erase(found);
+        tileX = x;
+        tileY = y;
+        return true;
       }
     }
   }
+
   return false;
 }
 
@@ -209,27 +216,39 @@ void EntityManager::processMessageQueue()
           int mapY = atY;
           bool foundOnMap = removeFromEntityMap(id, mapX, mapY);
 
-          if (foundOnMap) // may not be found on map due to multiple destroy messages
+          if (foundOnMap)
           {
-            m_pDynamicMap->entityIterator->second = 0;
-            m_pDynamicMap->entityList.erase(m_pDynamicMap->entityIterator);
-
             // also remove from AI Game View, where it is registered at the same
             // place as in the dynamic map
             AIGameView::getInstance()->removeEntity(id, mapX, mapY);
           }
           else
           {
-            // entity was still live in entityList (not a duplicate destroy) but was not
-            // found anywhere in entityMap - so it is NOT removed from
-            // entityList or AIGameView here. It keeps updating and stays visible to
-            // AIGameView lookups (e.g. RocketSpinEntity::enemyInTile) at whatever stale
-            // location it was last registered at - a candidate cause of "ghost" targets.
+            // Not registered anywhere in entityMap, which should be impossible: the
+            // reported tile and the full-map fallback have both been tried. The map
+            // bookkeeping is broken, but the entity has been destroyed, so it must
+            // not stay live (a dead player would keep running AI and laying eggs).
+            // Drop it from entityList regardless and log it. AIGameView mirrors the
+            // map, so it is only touched if it really holds the entity: removeEntity()
+            // asserts in Debug builds when asked for one that is absent.
+            const vector<EntityInfo> & viewed = AIGameView::getInstance()->getEntityInfoAtLocation(atX, atY);
+            for (vector<EntityInfo>::const_iterator it = viewed.begin(); it != viewed.end(); it++)
+            {
+              if (it->id == id)
+              {
+                AIGameView::getInstance()->removeEntity(id, atX, atY);
+                break;
+              }
+            }
+
             std::string msg = std::string("EntityManager DESTROY_ENTITY desync: id=") + std::to_string(id)
               + " not found in entityMap at its own (atX,atY)=(" + std::to_string(atX) + "," + std::to_string(atY) + ")"
-              + " or anywhere else - entity NOT removed from entityList/AIGameView";
+              + " or anywhere else - removing it from entityList anyway";
             MickLogger::getInstance()->warn(nullptr, msg);
           }
+
+          m_pDynamicMap->entityIterator->second = 0;
+          m_pDynamicMap->entityList.erase(m_pDynamicMap->entityIterator);
         }
 
         break;
@@ -239,6 +258,9 @@ void EntityManager::processMessageQueue()
           // after it is gone; there is nothing left to move
           if (m_pDynamicMap->entityList.find(message->getSender()) == m_pDynamicMap->entityList.end())
           {
+            std::string msg = std::string("ignoring MOVE_ENTITY for unknown/destroyed id=")
+              + std::to_string(message->getSender());
+            MickLogger::getInstance()->debug(this, msg);
             break;
           }
           m_pDynamicMap->moveEntityOnMap(message->getSender(),

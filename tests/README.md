@@ -196,7 +196,7 @@ files, run, swap back.
 
 ## Coverage today
 
-94 tests across eight files:
+95 tests across eight files:
 
 - `WinConditionTest.cpp` — free-for-all, team and co-op round-end rules,
   including the co-op "board cleared and pool exhausted" win and the
@@ -211,7 +211,8 @@ files, run, swap back.
 - `EntitySimTest.cpp` — round setup, multi-frame simulation on 4- and 6-player
   maps, `AIGameView` add/move/destroy bookkeeping, ghost-entity regression
   guards across repeated rounds, undelivered `EntityMessageQueue` messages not
-  leaking into the next round, and destroying an entity that has a MOVE pending.
+  leaking into the next round, and destroying an entity that has a MOVE pending
+  or is missing from the map.
 - `FullRoundTest.cpp` — whole rounds played to their natural end (PvP, team,
   2- and 4-player co-op), the scoreboard roster after a real round, plus
   consecutive rounds in one process.

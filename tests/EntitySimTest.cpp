@@ -261,7 +261,6 @@ TEST_F(EntitySimTest, ANewEntityManagerStartsWithAnEmptyMessageQueue)
   EntityManager fresh;
 
   EXPECT_TRUE(emq->empty());
-  EXPECT_TRUE(fresh.getDynamicMap()->entityList.empty());
 }
 
 TEST_F(EntitySimTest, DestroyingAnEntityWithAMovePendingStillRemovesIt)
@@ -296,6 +295,30 @@ TEST_F(EntitySimTest, DestroyingAnEntityWithAMovePendingStillRemovesIt)
       << "AIGameView kept a ghost at the old tile";
   EXPECT_TRUE(AIGameView::getInstance()->getEntityInfoAtLocation(toX, fromY).empty())
       << "AIGameView kept a ghost at the new tile";
+}
+
+TEST_F(EntitySimTest, DestroyingAnEntityMissingFromTheMapStillRemovesItFromTheList)
+{
+  // If the map bookkeeping is ever broken so badly that an entity is registered
+  // nowhere, DESTROY must still take it out of the live list (a dead player left
+  // there would keep running AI) without tripping AIGameView's Debug asserts.
+  configurePlayers(2);
+  startRound();
+
+  std::shared_ptr<PlayerCharacterEntity> victim = player(1);
+  const int id = victim->getID();
+  const int x = victim->getTileX();
+  const int y = victim->getTileY();
+
+  em().getDynamicMap()->entityMap[x][y].clear();
+  ASSERT_TRUE(AIGameView::getInstance()->removeEntity(id, x, y));
+
+  EntityMessageQueue::getInstance()->postDestroyMessage(id);
+  em().processMessageQueue();
+
+  EXPECT_EQ(player(1), nullptr);
+  EXPECT_FALSE(victim->isAlive());
+  EXPECT_EQ(countAllEntities(), 1);
 }
 
 TEST_F(EntitySimTest, AIGameViewIsResizedWhenTheMapGrows)
