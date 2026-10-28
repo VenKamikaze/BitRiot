@@ -1,93 +1,151 @@
 # 07 — Native lockstep netplay
 
-- **Repo:** BitRiot
+- **Repo:** BitRiot. The vnet repo must also be attached to the session: it is consumed here.
 - **Branch:** `netplay/07-lockstep`
-- **Depends on:** 05 (replay, `bitriot_headless`, data hash) and 06 (vnet with native UDP, loopback and impairment)
+- **Depends on:**
+  - 05b: D6 confirmed; `bitriot_headless`, the record format, the data hash and the build id (all from 05)
+  - 06: vnet with native UDP, loopback and impairment
+  - open question Q4 (player cap)
 - **Status:** todo
 
 ## Goal
 
-Two to six players on different machines play a Bit Riot match over the network. Each machine may also have local couch players. Every peer runs the same `Simulation`, and only `TickInputs` cross the network. Desyncs are detected within a second and produce diagnostics.
+Two to six players on different machines play a Bit Riot match over the network. Each machine may also have local couch players.
 
-This brief is native only and driven from the command line. The lobby UI is brief 08; browsers are brief 12.
+- Every peer runs the same `Simulation`, and only `TickInputs` cross the network.
+- Desyncs are detected within a second and produce usable diagnostics.
+
+This brief is native-only and driven from the command line. The lobby UI is brief 08 and browsers are brief 12.
 
 ## Read first
 
 - [`README.md`](README.md): decisions D1, D2, D5, D7 and D8.
-- The Outcome sections of briefs 02–06. Use the APIs as they actually landed.
-- [`research/code-facts.md`](research/code-facts.md) §1 (ESC/quit, the tick on which a round ends), §6 (join/takeover becomes events), §7 (settings to share) and §11.
+- The Outcome sections of briefs 03a–06. Use the APIs as they actually landed, especially `frame()`/`canStep()` (03b), the local slot mask (04a) and `ControlEvent`s (04b).
+- [`research/code-facts.md`](research/code-facts.md): §7 (settings to share) and §12 (scoreboard "Play Again", `setPointers`, `getopt`).
 
 ## Design (settled; refine the details)
 
-- **Topology:** one peer is the **host** (D2). The host is authoritative for:
-  - the final `TickInputs` of every tick (it merges every peer's slots plus control events);
-  - match settings, seed and slot assignment;
-  - round start, round end, and the next round.
-- **Input delay** (D8): a local input sampled at tick T is scheduled for tick T+D, with D=3 by default and configurable. A peer only steps tick T once it holds the host's confirmed `TickInputs` for T. Otherwise it **stalls** and shows "waiting for <player>".
-  - A host in a hurry must not run ahead of its slowest peer by more than D. Define how the host paces.
-- **Catch-up:** a peer that has fallen behind, i.e. holds more than D+2 confirmed ticks it hasn't stepped, may step up to 2 extra ticks per frame until it is level. This keeps clock drift between machines from building up.
-- **Loss tolerance** (D7):
-  - Every `INPUT` packet (peer → host) repeats all of that peer's not-yet-acknowledged ticks.
-  - Every `TICKS` packet (host → peer) repeats all confirmed ticks the peer hasn't acknowledged.
-  - Each side piggybacks an ack of the highest contiguous tick it has received.
-  - Cap packets at `VNET_MAX_DATAGRAM`. If the backlog is bigger, send the oldest first.
-- **Messages:** version every message, with a protocol version in `HELLO`.
+**Host authority (D2).** The host is authoritative for:
 
-  | Message | Content |
-  |---|---|
-  | `HELLO` | protocol version, build id, data hash (05), player name, number of local players wanted |
-  | `WELCOME` | assigned slots |
-  | `REJECT` | reason: version, data mismatch, full, … |
-  | `LOBBY` | host → all: slot table (host/peer/local/AI, team), settings |
-  | `START` | `MatchConfig` (with seed), first tick, input delay |
-  | `INPUT` | peer → host: ack, first tick, per tick: that peer's slots' `PlayerInput`s + its `ControlEvent`s |
-  | `TICKS` | host → peers: ack, first tick, per tick: full `TickInputs` |
-  | `CHECKSUM` | peer → host: tick, `stateHash()`, every 30 ticks |
-  | `DESYNC` | host → all: tick. Everyone dumps that tick's state (05's dump) and the match stops with a clear message. |
-  | `PING`/`PONG` | RTT for display |
-  | `LEAVE` | explicit quit (ESC) |
+- the final `TickInputs` of every tick, merging every peer's slots and control events;
+- the match settings, seed and slot assignment;
+- round start, round end and the next round.
 
-- **Leaving:** a peer that leaves (`LEAVE`) or times out (no packets for, say, 10 s) has its slots returned to AI. The host schedules a `RETURN_TO_AI` `ControlEvent` for those slots on a future confirmed tick. The match continues. Smarter disconnect handling and reconnection are brief 13.
-- **Rounds:**
-  - The round ends on the same tick everywhere, because the tick-based GameOverTimer (01) is part of the sim.
-  - Every peer shows the scoreboard.
-  - The host sends the next `START`, with a new seed. Peers can't advance the round themselves.
-- **Local players:** each peer owns some slots. Its local `InputSampler` (04) fills only those slots; everything else comes from the host.
-- **Mid-match takeover of AI slots** by a local player is a `ControlEvent` request sent to the host, which schedules it. Keep the request simple; the full hot-join for remote newcomers is brief 13.
-- **Module layout:** put the code in `src/net/`.
-  - Keep `LockstepSession` (protocol, buffering, acks, pacing) **free of SDL and of `Simulation`**. It exchanges `TickInputs` and hashes through a small interface, so it can be unit-tested with fake peers on vnet loopback in a single process. This matters because the singletons allow only one `Simulation` per process.
-- **vnet dependency:** add it as a submodule under `ext/vnet` (consistent with RmlUi) or through `FetchContent`, and justify the choice.
-  - Update `scripts/cloud-setup.sh` if anything new is needed.
-  - Put it behind a `BITRIOT_NETPLAY` CMake option, ON by default.
-- **CLI, until brief 08 adds UI:**
-  - `--host [port]`, `--join host:port`, `--name <n>` and `--local-players N`.
-  - Both peers then go straight to the lobby, the host starts with a key press, and existing local controls apply.
+**Input delay (D8).** A local input sampled at tick T is scheduled for T+D. A peer steps T only when it holds the host's confirmed `TickInputs` for T. Otherwise `canStep()` returns false, which stalls the peer, and it shows "waiting for <name>". Each `TICKS` packet tells peers who the host is still waiting on.
+
+- **The host chooses D** from lobby `PING` statistics:
+  - a peer's input needs a full round trip to come back confirmed, plus up to one frame of sampling and send phase;
+  - so take D = `ceil((max RTT + jitter) / 33 ms) + 1`, clamped to 2..8;
+  - send it in `START`, and log it;
+  - over a relay (brief 12) there are two relay hops, so expect a higher D;
+  - D=3 is only the default for tests and loopback.
+- **Ticks 0..D−1** have no sampled input. They are implicitly confirmed as empty at `START`.
+- **The host doesn't run ahead** of its slowest peer by more than D. Define exactly how it paces.
+
+**Catch-up.** A peer holding more than D+2 confirmed but unstepped ticks may step up to 2 extra ticks per frame (`frame()`'s accumulator from 03b) until it is level.
+
+**Sampling.** A peer samples once per stepped tick (04a). While stalled, local events accumulate into the next sample. **Only local slots are sampled**, using the local slot mask; remote humans must be excluded from the keyboard assignment in `setPointers` (code-facts §12).
+
+**Loss tolerance (D7).**
+
+- Every `INPUT` packet (peer → host) repeats all of that peer's unacknowledged ticks.
+- Every `TICKS` packet (host → peer) repeats all confirmed ticks the peer hasn't acknowledged.
+- Both piggyback an ack of the highest contiguous tick received.
+- Packets are capped at `VNET_MAX_DATAGRAM`, sending the oldest ticks first.
+
+**Messages.** All are versioned, with a protocol version in `HELLO`.
+
+| Message | Content |
+|---|---|
+| `HELLO` | protocol version, **build id**, **data hash** (05), name, number of local players wanted |
+| `WELCOME` | assigned slots, plus a reconnect token (used in 13) |
+| `REJECT` | the reason. A mismatched build id is rejected even if the protocol version matches. |
+| `LOBBY` | host → all: slot table (host / peer / local / AI, team) and settings |
+| `START` | `MatchConfig` including the seed, D, first tick |
+| `INPUT` | ack, first tick, then per tick this peer's slots' `PlayerInput`s and `ControlEvent` requests |
+| `TICKS` | ack, first tick, then per tick the full `TickInputs`, plus who the host is waiting on |
+| `CHECKSUM` | peer → host: tick, `stateHash()`, sent every 30 ticks |
+| `DESYNC` | host → all: tick (see below) |
+| `PING` / `PONG` | RTT measurement for choosing D, and for display |
+| `KEEPALIVE` | sent in every state, including menus |
+| `LEAVE` | explicit quit (ESC) |
+
+**Session pumping in every state.**
+
+- The session is polled and sends keepalives in `MENU_RUNNING` too: the scoreboard, between rounds and in the lobby. Otherwise a peer reading the scoreboard times out.
+- **On peers, the scoreboard's "Play Again" is disabled or ignored** (`scoreboard.rml` sets `GAME_INIT` locally, code-facts §12). Only the host's `START` begins a round.
+
+**Settings isolation.** Applying `MatchConfig` writes `GameSettings` (03a). A joining peer snapshots its local settings before the match and restores them when it leaves.
+
+**Rounds.**
+
+- The round ends on the same tick everywhere, because the round-end logic is part of the sim (01, 03a).
+- Every peer shows the scoreboard.
+- The host sends the next `START` with a new seed.
+
+**Leaving and timeouts.**
+
+- When a peer sends `LEAVE` or times out (no packets for ~10 s), its slots return to AI. The host schedules `RETURN_TO_AI` events on a future confirmed tick, and the match continues.
+- **Host loss:** there is no host migration. Peers detect the host timing out, end the match with a clear message, and return to the menu.
+- Reconnecting is brief 13.
+
+**Local takeover of an AI slot mid-match.** The local join selector produces a `ControlEvent` request. The peer sends it to the host in `INPUT`, and the host schedules it on a confirmed tick.
+
+**Desync diagnostics.**
+
+- By the time `DESYNC` arrives, peers are already past the tick in question, and undefined behaviour might not replay the same way. So **every peer keeps a ring buffer of state dumps for its last K checkpoint ticks**, using brief 05's dump format.
+- On `DESYNC`, every peer writes:
+  - the dump for that tick;
+  - its `MatchRecord` of the round so far.
+- The match then stops with a message giving the file paths.
+
+**Code layout.**
+
+- Put the code in `src/net/`.
+- **`LockstepSession` stays free of SDL and of `Simulation`.** It handles the protocol, buffering, acks, pacing and the choice of D, and exchanges `TickInputs` and hashes through a small interface. That lets it be unit-tested with N fake peers on vnet loopback in a single process, even though the singletons allow only one `Simulation` per process.
+
+**Dependency.**
+
+- Pull in vnet as a submodule at `ext/vnet` or through `FetchContent` with `GIT_REPOSITORY`. Justify the choice.
+- Update `scripts/cloud-setup.sh` as needed. A private vnet repo needs credentials; see Q3.
+- Add a `BITRIOT_NETPLAY` CMake option: ON by default, and OFF on MinGW unless brief 06 verified that vnet builds there.
+
+**Command line until brief 08.**
+
+- Options: `--host [port]`, `--join host:port`, `--name <n>`, `--local-players N`. Switch to `getopt_long`.
+- Both peers enter a text-mode or minimal lobby, and the host starts the match with a key.
 
 ## Tests
 
-- **`LockstepSession` unit tests,** with N fake peers in one process over vnet loopback with impairment:
-  - Every peer receives every tick's identical `TickInputs`, in order.
-  - This holds under 0%, 5% and 20% loss, duplication and reordering, at an 80 ms latency.
-  - Stall when the host withholds a tick.
-  - Catch-up behaviour.
-  - Leave and timeout produce a scheduled `RETURN_TO_AI`.
-  - Version mismatch and data-hash mismatch are rejected.
-- **Multi-process integration:**
-  - A test that starts 2–3 `bitriot_headless` processes (extend 05's tool with `--host`/`--join`) over native UDP on 127.0.0.1 with impairment.
-  - They play an AI-only match, with some scripted human inputs, to the end.
-  - Assert that all processes report identical final and checkpoint hashes and the same winner.
-  - Run it under ctest with a timeout. A `--gtest_filter` that excludes it from the fast default suite is fine, provided the README documents it and the coordinator runs it.
-- **Desync detection:** deliberately perturb one peer, for example through a test-only flag that changes one entity's health. The host reports `DESYNC` at the first checkpoint after the perturbation, and both peers write dumps.
-- Prove the new tests fail without the code where that makes sense (for example, the session tests with redundancy disabled under loss).
+**`LockstepSession` unit tests**, with N fake peers on vnet loopback with impairment:
+
+- identical, in-order `TickInputs` on every peer, at 0%, 5% and 20% loss plus duplication and reordering, at 80 ms latency;
+- stall and catch-up;
+- the choice of D from simulated RTTs;
+- leave and timeout schedule `RETURN_TO_AI`;
+- host loss is detected;
+- version, build-id and data-hash mismatches are rejected;
+- keepalives flow while no round is running.
+
+**Multi-process integration.**
+
+- 2–3 `bitriot_headless` processes, extended with `--host`/`--join`, over native UDP on 127.0.0.1, with impairment from `VNET_IMPAIR`.
+- Use **ephemeral ports**, so parallel ctest runs don't collide.
+- Play an AI-heavy round with scripted inputs to its end. All processes must report identical checkpoint and final hashes and the same winner. Then play a second round started by the host.
+- Run it under ctest with a timeout. It may be excluded from the fast default suite if `tests/README.md` documents that, and the coordinator still runs it.
+
+**Desync detection.** A test-only flag perturbs one peer. `DESYNC` must fire at the first checkpoint after the perturbation, and both peers' ring-buffer dumps and records must be written.
+
+Prove that tests fail without the code where it makes sense: for example, session tests with redundancy disabled, run under loss.
 
 ## Acceptance criteria
 
-- **Two real game windows on one machine:** `--host` and `--join 127.0.0.1:port` play a full match. There is no window access in the cloud container, so ask the user to play-test this, and give them exact commands.
-- **The multi-process headless test passes** under impairment.
-- **Desyncs:** they are detected and reported with dumps.
-- **Disconnects:** a lost peer's slots become AI, and the match continues.
-- **No regressions in local play:** `--host`/`--join` absent means exactly today's behaviour.
-- **Protocol doc:** `doco/netplay/protocol.md` documents every message's fields and versioning.
+- **Two real windows on one machine play a full match.** For example, `--host` and `--join 127.0.0.1:<port>`. This needs a user play-test, which may be pending at merge; give the user exact commands.
+- **The multi-process headless test passes under impairment.**
+- **Desyncs are detected,** and their dumps and records are written.
+- **Peer loss turns that player into AI. Host loss ends the match cleanly.**
+- **Local play is unchanged** when no netplay flags are given.
+- **`doco/netplay/protocol.md`** documents every message and the versioning.
 
 ## Outcome
 

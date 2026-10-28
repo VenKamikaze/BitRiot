@@ -30,8 +30,11 @@ Together these let browser and native players share a "room" and exchange vnet d
     - a UDP port for native clients.
   - Configured by flags and env.
   - Has a `Dockerfile`.
-- **Framing:** identical over WebSocket frames and UDP datagrams.
-  - A 1-byte message type, then the fields.
+- **Framing:** the same message set over WebSocket frames and UDP datagrams, with these UDP differences:
+  - **Every UDP frame after `ROOM` carries the session token.**
+  - Control messages can be lost over UDP. `CREATE_ROOM` and `JOIN_ROOM` are therefore retried by the client and must be **idempotent**, keyed by a client nonce, so a retry never creates a second room.
+  - **Anti-reflection:** never answer an unauthenticated UDP packet with a larger packet, and rate-limit replies to unknown sources.
+  - Each frame is a 1-byte message type, then the fields.
   - Control messages: `CREATE_ROOM` → `ROOM(code, your_vaddr)`, `JOIN_ROOM(code)` → `ROOM(...)` | `ERROR(reason)`, `LEAVE`, `KEEPALIVE`.
   - Data: `DATA(dst_vaddr, dst_port, src_port, payload)`. The relay fills in the source vaddr when forwarding.
   - Document the format in `doco/relay-protocol.md`, and version it in the first message.
@@ -43,7 +46,8 @@ Together these let browser and native players share a "room" and exchange vnet d
 - **Native relay identity:** native clients over UDP are identified by a session token issued in `ROOM`, not by their source IP:port, so a NAT rebinding doesn't break them. Keepalive interval: about 5 s.
 - **Limits:** max payload `VNET_MAX_DATAGRAM`; per-client packet-rate and byte-rate limits; a room cap; a cap on total rooms.
 - **Client backends**
-  - **`VNET_BACKEND_RELAY_WS`** (browser): an Emscripten `--js-library` (`vnet_ws.js`) plus C glue.
+  - **`VNET_BACKEND_RELAY_WS`** (browser): use Emscripten's `<emscripten/websocket.h>` API (`-lwebsocket.js`) if it fits. Otherwise write a small `--js-library` (`vnet_ws.js`) plus C glue.
+    - The vnet repo needs its own emsdk setup script for this (pinned version). See the BitRiot README's network notes on GitHub archive downloads. This backend needs no Emscripten ports.
     - It queues incoming frames in JS.
     - `vnet_poll()` moves them into a C ring buffer, and `vnet_recvfrom` reads that buffer, so it never blocks.
     - Connection and room setup are asynchronous, which shows as a status the game can poll (`vnet_status()`: CONNECTING, IN_ROOM, ERROR). Add that to the API carefully, and keep it generic.

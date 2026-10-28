@@ -288,3 +288,46 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
 - **`GameSettings::setNumberOfPlayers`** keeps existing slots. `InputHandler::setPointers` writes keyboard assignments back into `GameSettings` (InputHandler.cpp:106).
 - **Debug logging** is compiled in by default (the default build type is Debug), and `MickLogger` writes debug output to `cout` every frame.
 - **`Map::~Map`** uses `delete` rather than `delete[]` (Map.cpp:122).
+
+## 12. Further facts (from the brief review)
+
+**`m_currentAnimState` is sim state, not render state.** It drives movement (PlayerCharacterEntity.cpp:741; SimpleMovingEntity.cpp:90-92), and `SimpleBrain` holds a reference to it (`rAnimState`). Only `m_currentAnimFrame` and `m_animCounter` are render-only.
+
+**A second SDL-surface coupling.** `Map::init(SDL_Surface*)` (Map.cpp:37, ~85-92) loads BMPs and converts them against the primary surface. Together with `EntityRendererFactory`'s frame counts, this is why the sim currently needs bitmaps.
+
+**The sim reads `GameSettings` all the time.** Examples:
+
+- `GameEntity::getTeamNumber`/`isTeammatePlayer` go through `teamNumberForPlayer` on every collision.
+- EntityManager.cpp ~342 reads `numConfiguredTeams`.
+- There are many `getMapWidth`/`getMapHeight` reads.
+
+**RNG is consumed before world seeding.** `SpawningPool`'s constructor (SpawningPool.cpp:19) and the `PlayerCharacterEntity` constructors draw from `rand()` before `seedBlocksOnMap`.
+
+**`% 0` is undefined behaviour.** `rand() % (m_maxDelay - m_minDelay)` in SpawningPool divides by zero if the two delays are equal.
+
+**The round-end tick.** On the tick the GameOverTimer completes, the state flips to `MENU_RUNNING`, but input, pool and `runFrame` still run for that tick (GameEngine.cpp ~156-177). An ESC quit behaves the same way.
+
+**Action input rules today** (InputHandler.cpp ~494-619):
+
+- `isReleased` is only checked inside the matching action-down branch (~:565, ~:604).
+- Holding an action blocks movement, and turns directions into item or egg selection.
+- An ACTION2 press selects EGG1 immediately.
+- A release with no prior down state is ignored.
+- Keyboard players are processed only when `isAKeyDown()||isAKeyReleased()` (~:653). This gate changes only when the UI updates, not sim behaviour.
+
+**`InputHandler::setPointers`** (~:93-112) gives keyboard sets to every human slot, and writes those assignments back into `GameSettings`.
+
+**`MickSDLRenderer` throws pointers.** It does `throw new runtime_error(msg)` (MickSDLRenderer.cpp:35-143), so `catch (const exception&)` never catches them, and a renderer-init failure aborts without a useful message.
+
+**The scoreboard's "Play Again"** (assets/menu/scoreboard.rml ~:34) sets `GAME_INIT` locally (EventManager.cpp ~:114).
+
+**`main` parses options with `getopt("fb")`.** Long options need `getopt_long`.
+
+**`InputHandler`'s id-keyed maps** are cleared in `setPointers`, so resetting entity ids per round is safe for them.
+
+**libstdc++ vs libc++** (Emscripten uses libc++): no known divergence.
+
+- The sim uses only `map`, `set`, `list`, `queue`, `vector` and `std::find`.
+- The single `std::sort` is in UI code, over unique keys.
+- There is no `long`/`size_t` arithmetic in the sim, so wasm32's 32-bit `long` doesn't matter.
+- Function-argument evaluation order *does* differ between GCC and Clang, which only matters if two RNG draws share one expression. There are none today.

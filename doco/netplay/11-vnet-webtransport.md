@@ -36,7 +36,7 @@ These are claims from the original design discussion. **Re-verify them, since br
    - Add `VNET_BACKEND_RELAY_AUTO`: try WebTransport, and fall back to WebSocket after a timeout or error.
    - Report which transport was chosen via `vnet_status()` or `vnet_transport_name()`.
    - Keep the same C ring-buffer approach as 10.
-   - Datagram size: `VNET_MAX_DATAGRAM` (1200) plus vnet framing must fit the browser's datagram size limit. Check `datagrams.maxDatagramSize` at runtime and fail clearly if it's smaller.
+   - Datagram size: `VNET_MAX_DATAGRAM` (1100) plus vnet framing must fit the browser's datagram size limit. Check `datagrams.maxDatagramSize` at runtime and fail clearly if it's smaller.
 4. **Docs:** a transport comparison table in vnet's README: semantics, browser support, hosting requirements.
 
 ## Out of scope
@@ -48,7 +48,11 @@ These are claims from the original design discussion. **Re-verify them, since br
 
 - **Go tests:** a WebTransport session joins a room, and exchanges datagrams with a UDP member and with a WS member.
 - **Playwright Chromium:** the test page connects to a local relay in dev-cert mode, using `serverCertificateHashes` passed via the page URL. It shows `transport == webtransport`, exchanges datagrams with a native client, and under a deliberately broken WT endpoint falls back to WS. Check Chromium's flags for local QUIC if needed.
-- **Loss behaviour:** with impairment at the relay (or using `tc netem`, if available) at 10% loss, the WT path shows lost datagrams but no stalls, and the WS path shows stalls but no loss. Record the numbers in the Outcome.
+- **Loss behaviour (report only):**
+  - With impairment at the relay at 10% loss, the WT path shows lost datagrams arriving without stalls.
+  - The WebSocket path can't be tested the same way. Application-level drops at the relay show up as loss, not as TCP head-of-line stalls. Real stalls need kernel-level loss (`tc netem`, which needs NET_ADMIN and is probably unavailable).
+  - Measure the WS stall behaviour only if `tc netem` works. Otherwise say so, and record whatever numbers you have in the Outcome.
+- **Datagram size:** check `datagrams.maxDatagramSize` in Chromium against `VNET_MAX_DATAGRAM` (1100) plus framing.
 
 ## Acceptance criteria
 

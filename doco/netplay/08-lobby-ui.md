@@ -39,7 +39,8 @@ Let players host and join online games from the menus, without command-line flag
    - "Desync at tick N — dumps written to <path>".
    - Ping per peer in the InfoPanel is optional.
 5. **Between rounds:** the scoreboard shows "Waiting for host…" on peers. The host gets a "Next round" button and can return everyone to the lobby.
-6. **Persist the last used name, address and port.** This means adding a small settings file, because nothing is written to disk today. Keep it simple, under the user config dir via `SDL_GetPrefPath`.
+6. **Settings isolation.** Brief 07 snapshots the joiner's local `GameSettings` before applying the host's settings, and restores them on leaving. Make sure the menu flow goes through that path, so a joiner's own local-play settings survive an online session.
+7. **Persist the last used name, address and port.** This means adding a small settings file, because nothing is written to disk today. Keep it simple, under the user config dir via `SDL_GetPrefPath`.
 
 ## Out of scope
 

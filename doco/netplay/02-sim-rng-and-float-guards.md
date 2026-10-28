@@ -2,67 +2,75 @@
 
 - **Repo:** BitRiot
 - **Branch:** `netplay/02-sim-rng`
-- **Depends on:** 01, and on `fix/ai-seek-energy` being merged first, since it touches the bot AI's `rand()` calls.
+- **Depends on:**
+  - brief 01
+  - open question Q2 (D6 confirmed)
+  - `fix/ai-seek-energy` already merged, since it changes the bot AI's `rand()` calls
 - **Status:** todo
 
 ## Goal
 
-Every random decision the simulation makes comes from a game-owned PRNG, seeded per round from a value that can be shared with peers. Cosmetic and UI randomness must never consume that stream. The build must also be configured so float results are bit-identical across x86-64, aarch64 and wasm.
+Every random decision the simulation makes comes from a game-owned PRNG, seeded per round from a value that can be shared with peers. Cosmetic and UI randomness never consume that stream. The build is set up so that float results are bit-identical across x86-64, aarch64 and wasm.
 
 ## Read first
 
-- [`README.md`](README.md): decision D6.
-- [`research/code-facts.md`](research/code-facts.md): §2 (every `rand()` site with file:line), §4 (floats, flags), §10 (harness seeding).
-- `tests/test_main.cpp` (how `BITRIOT_TEST_SEED` seeds today) and `tests/README.md` (determinism notes).
+- [`README.md`](README.md): D6.
+- [`research/code-facts.md`](research/code-facts.md):
+  - §2: every `rand()` site, with file:line
+  - §4: floats and compiler flags
+  - §10: how the harness seeds today
+  - §12: RNG consumed in constructors, `% 0`, evaluation order
+- `tests/test_main.cpp` and `tests/README.md` (determinism notes).
+- Re-find the `rand()` sites with `grep -rn "rand(" src`. `fix/ai-seek-energy` changed PlayerCharacterEntity.
 
 ## In scope
 
-1. **Add a small PRNG** in `src/`, for example `SimRandom`:
-   - PCG32 or xorshift-family.
-   - All `uint32_t` arithmetic, with no platform-dependent types or libc calls.
-   - API along the lines of `seed(uint64_t)`, `nextU32()`, and `nextInt(n)` (returns `[0,n)`).
-   - Document the exact algorithm in a header comment. Other implementations, such as a future JS or Go tool, may need to reproduce it.
-   - Plain modulo for `nextInt` is fine and matches today's `rand() % n` distribution. Being identical everywhere matters more than avoiding modulo bias.
-2. **Two streams:**
-   - The **sim stream**, which every peer advances identically.
-   - A **cosmetic stream**, which may differ per machine. It covers the damage-effect animation frame (`EffectEntity.cpp:23`) and the scoreboard win text (`ScoreBoardBinder.cpp:114`).
-   - Decide for each site in code-facts §2 which stream it uses. Default to the sim stream when unsure, and list your choice for every site in the Outcome section.
-   - Watch for any "cosmetic" value that feeds back into sim logic, such as an animation frame used for timing.
-3. **Replace every `rand()`/`srand()` in `src/`.** Afterwards, `grep -rn "rand(" src` should find only the PRNG implementation. Keep each site's semantics: `rand() % n` becomes `nextInt(n)`. SimpleBrain.cpp:70 calls in a loop, so keep the call count the same.
-4. **Seed per round:**
-   - The match/round config, in `GameSettings` or a new `MatchConfig` struct (brief 03 formalises this; keep it simple here), gets a `uint64_t seed`.
-   - Local play picks a fresh seed per round from the clock or `std::random_device`, at the point where the round is set up.
-   - Reset the sim stream from that seed in `resetGame()`.
-   - Log the seed at info level, so a bad round can be reproduced.
+1. **A small PRNG** in `src/` (e.g. `SimRandom`).
+   - PCG32 or a xorshift-family generator, using only `uint32_t`/`uint64_t` arithmetic and no libc.
+   - API: `seed(uint64_t)`, `nextU32()`, `nextInt(n)` returning a value in `[0,n)`.
+   - **`nextInt(0)` and `nextInt(1)` return 0.** Today `rand() % 0` is undefined behaviour when SpawningPool's min and max delay are equal.
+   - Document the exact algorithm in a header comment, so other implementations (JS or Go tools) can reproduce it.
+   - Plain modulo is fine. Being the same everywhere matters more than modulo bias.
+2. **Two streams.**
+   - **Sim stream:** every peer advances it identically.
+   - **Cosmetic stream:** may differ per machine. It covers `EffectEntity.cpp:23` (damage-effect animation frame) and `ScoreBoardBinder.cpp:114` (win text).
+   - **The cosmetic stream is never hashed, recorded or sent.** Its values must not feed back into sim logic. Check that the effect's animation frame doesn't drive any timing.
+   - Decide the stream for every site, defaulting to sim, and list each choice in the Outcome.
+3. **Replace every `rand()`/`srand()` in `src/`.**
+   - `rand() % n` becomes `nextInt(n)`. Keep the call counts the same, including SimpleBrain's loop.
+   - **Rule: at most one sim-RNG draw per full-expression, directly or through helpers.** GCC and Clang (which Emscripten uses) evaluate function arguments in different orders. Put the rule in the PRNG header.
+4. **Seed per round.**
+   - Add a `uint64_t seed` to the round configuration. Put it in `GameSettings` for now; 03a moves it into `MatchConfig`.
+   - Local play picks a fresh seed each round from the clock or `std::random_device`.
+   - **Reseed the sim stream as the very first thing in `resetGame()`**, before the `SpawningPool` and player constructors, which consume RNG (code-facts §12).
+   - Log the seed at info level.
    - Remove `srand(SDL_GetTicks())` from `MickSDLRenderer.cpp`.
-5. **Harness:**
-   - `BITRIOT_TEST_SEED` now seeds the round seed. A test can set the seed per round, so two rounds with the same seed are identical.
-   - Update `tests/README.md` (the determinism section and the seed-sweep recipe).
-6. **Float guards in CMake:**
-   - Add `-ffp-contract=off` for GCC/Clang, on all targets including tests.
-   - Fail configuration if `-ffast-math` or `-Ofast` is present in the flags.
+5. **Harness.** `BITRIOT_TEST_SEED` sets the round seed, and a test can also set it per round. Update `tests/README.md`.
+6. **CMake float guards.**
+   - Add `-ffp-contract=off` for GCC and Clang, on all targets.
+   - Fail at configure time if `-ffast-math` or `-Ofast` appears in the flags.
    - On 32-bit x86, add `-msse2 -mfpmath=sse`.
-   - Add a short comment pointing to D6.
+   - Add a comment pointing at D6.
 
 ## Out of scope
 
-- A state hash and replay (briefs 03 and 05).
-- Fixed-point (D6 contingency only).
+- The state hash and replay (03a, 05).
+- Fixed-point maths (the D6 contingency).
 - Changing gameplay probabilities.
 
 ## Tests
 
-- **PRNG known-answer test:** fixed seed → the first N outputs match hard-coded values, so a platform or compiler change that alters the sequence is caught.
-- **Same seed, same round:** run a full AI-only round twice in one process with the same round seed, using the existing harness round runner. Assert identical outcomes: winner, frame count, and entity count per frame, or a cheap ad-hoc digest until brief 03 adds the real hash. This fails today without a reseed.
-- **Different seeds diverge:** sanity check that the seed is actually used.
-- **Cosmetic isolation:** consuming the cosmetic stream (e.g. calling the win-text function) between two runs does not change the sim outcome.
-- Run the full suite plus a 200-seed sweep. Results will change from today, because the random sequence is different. Report failures, not a comparison of seed numbers.
+- **PRNG known-answer test:** a fixed seed produces the first N outputs, hard-coded in the test.
+- **Same seed, same round:** play a full AI-only round twice in one process with the same seed, and compare a cheap digest: winner, frame count, and entity count per frame. This test fails today.
+- **Different seeds diverge.**
+- **Cosmetic isolation:** consuming the cosmetic stream between two runs doesn't change the sim outcome.
+- Run the full suite and a 200-seed sweep. Outcomes will change because the sequence changes, so report failures, not seed-by-seed comparisons.
 
 ## Acceptance criteria
 
-- No libc `rand`/`srand` in `src/`.
-- Each round's seed is explicit, logged and settable.
-- Two rounds with the same seed in one process produce identical simulations.
+- No libc `rand`/`srand` left in `src/`.
+- The round seed is explicit, logged and settable.
+- Same seed gives an identical simulation.
 - CMake enforces the float guards.
 - `tests/README.md` is updated.
 

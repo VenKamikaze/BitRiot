@@ -2,7 +2,7 @@
 
 - **Repo:** BitRiot
 - **Branch:** `netplay/13-hot-join`
-- **Depends on:** 07. Brief 12 is also needed for browser peers.
+- **Depends on:** 05 (record and `bitriot_headless`), 07 and 08 (overlay UI). Brief 12 is also needed for browser peers.
 - **Status:** todo
 
 ## Goal
@@ -23,7 +23,9 @@ All of this is done without state snapshots. The joiner receives the match recor
 
 ## Design
 
-- **The host keeps the authoritative `MatchRecord`** of the current round as it goes: `MatchConfig` plus every confirmed `TickInputs`. Memory is about 6 bytes per slot per tick, so a 5-minute round is well under 1 MB.
+- **The host keeps the authoritative `MatchRecord`** of the current round as it goes: `MatchConfig` plus every confirmed `TickInputs`. Memory is about 1 byte per slot per tick plus occasional control events, which is roughly 54 KB for 9,000 ticks × 6 slots.
+
+Brief 01's per-round entity-id reset is a **hard requirement** here, because a fresh joiner process starts at id 1.
 - **Hot-join flow**
   1. The new peer sends `HELLO`.
   2. The host replies `WELCOME_MIDMATCH` and streams the record so far in chunks, with flow control because a record can be larger than one datagram.
@@ -38,7 +40,10 @@ All of this is done without state snapshots. The joiner receives the match recor
   - Measure how long fast-forwarding a 9,000-tick round (5 minutes) takes, native and wasm, with 4 AI players doing A*.
   - Target: under 3 s native and under 10 s wasm.
   - If wasm is too slow, record the numbers and propose options in the Outcome: periodic host-side checkpoints of the full sim state, or AI pathfinding optimisation. Don't implement snapshots without the user's agreement; they are the big job this design avoids.
+- **Time-sliced fast-forward.** Fast-forward in chunks per `frame()`, for example 300–1000 ticks, and keep calling `vnet_poll`, sending keepalives and updating progress between chunks.
+  - A long synchronous fast-forward would block networking. In the browser that trips the relay's ~5 s and the host's ~10 s timeouts.
 - **Pacing during the join:** the live match must not stall while someone joins. Only the joiner is behind, and the host doesn't wait for a joiner until `READY_AT`.
+- **Host loss** remains out of scope (no migration), as in brief 07.
 
 ## In scope
 
