@@ -8,8 +8,11 @@
 #include "AIGameView.h"
 #include "EntityMessageQueue.h"
 #include "EntityRendererFactory.h"
+#include "GameOverTimer.h"
 #include "GameSettings.h"
 #include "Map.h"
+#include "MatchConfig.h"
+#include "Simulation.h"
 
 namespace bitriot_test
 {
@@ -18,39 +21,6 @@ namespace
 {
 SDL_Surface* g_surface = nullptr;
 NullSound* g_sound = nullptr;
-
-// Mirrors GameEngine::initPlayerCharacters(): players 1..6 start in fixed
-// corners/edges. Kept in sync by hand - if the game's layout changes, the
-// StartingPositionsMatchGameEngine test in EntitySimTest.cpp will not catch it,
-// but every positional test here will start failing in an obvious way.
-void startingTileFor(int playerNumber, int mapWidth, int mapHeight, int& atX, int& atY)
-{
-  switch (playerNumber)
-  {
-    case 1:
-    case 4:
-      atX = 1;
-      break;
-    case 2:
-    case 3:
-      atX = mapWidth - 2;
-      break;
-    default: // 5, 6
-      atX = mapWidth / 2;
-      break;
-  }
-  switch (playerNumber)
-  {
-    case 1:
-    case 3:
-    case 5:
-      atY = 1;
-      break;
-    default: // 2, 4, 6
-      atY = mapHeight - 2;
-      break;
-  }
-}
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -198,8 +168,7 @@ void HeadlessGameTest::TearDown()
     std::cerr << "\n[bitriot] replay one with setRoundSeed(<seed>) before startRound()" << std::endl;
   }
 
-  m_spawningPool.reset();
-  m_entityManager.reset();
+  m_sim.reset();
 
   if (m_savedCout != nullptr)
   {
@@ -212,8 +181,7 @@ void HeadlessGameTest::resetSingletons()
 {
   // Order matters. Tear the world down first so nothing observes a half-reset
   // GameSettings, then restore settings, then rebuild the map-sized singletons.
-  m_spawningPool.reset();
-  m_entityManager.reset();
+  m_sim.reset();
 
   // Drop anything a previous test posted but never processed. EntityManager's
   // constructor does this too (that is what protects a real "play again"), but
@@ -223,7 +191,7 @@ void HeadlessGameTest::resetSingletons()
   std::GameSettings* settings = std::GameSettings::getInstance();
   settings->setGameState(std::GameSettings::GAME_RUNNING);
   settings->setNpcSpawnerEnabled(true);
-  settings->setBlockSpawnPercentage(55);
+  settings->setBlockSpawnPercentage(0); // the harness default; see setBlockPercentage()
 
   m_mapWidth = DEFAULT_MAP_WIDTH;
   m_mapHeight = DEFAULT_MAP_HEIGHT;
@@ -293,66 +261,71 @@ void HeadlessGameTest::setMapSize(int width, int height)
   AIGameView::getInstance()->setMapSize(width, height);
 }
 
+Simulation& HeadlessGameTest::sim()
+{
+  if (!m_sim)
+  {
+    m_sim.reset(new Simulation());
+  }
+  return *m_sim;
+}
+
+void HeadlessGameTest::discardSimulation()
+{
+  m_sim.reset();
+}
+
+void HeadlessGameTest::setBlockPercentage(int percent)
+{
+  std::GameSettings::getInstance()->setBlockSpawnPercentage(percent);
+}
+
 void HeadlessGameTest::startRound()
 {
-  // Tearing down the old manager before building the new one reproduces the
-  // real "play again" sequence, including the AIGameView clear that
-  // DynamicMap's constructor performs.
-  m_entityManager.reset();
-  m_spawningPool.reset();
-
-  // First thing, as in GameEngine::resetGame(): the SpawningPool and player
-  // constructors draw random numbers.
-  beginRoundRng();
-
-  m_entityManager.reset(new EntityManager());
-
   std::GameSettings* settings = std::GameSettings::getInstance();
-  const int numPlayers = settings->getNumberOfPlayers();
 
-  // Sized exactly as GameEngine::resetGame() sizes it.
-  m_spawningPool.reset(new SpawningPool(numPlayers * 100));
-
-  std::vector<bool>* playerAIs = settings->getPlayerAIs();
-
-  EntityMessageQueue* emq = EntityMessageQueue::getInstance();
-
-  for (int i = 1; i <= numPlayers; i++)
+  // The round's seed: a pin (setRoundSeed) or, failing that, one derived from
+  // (base seed, test name, rounds started so far). Either way it goes through
+  // the production pickRoundSeed() and into the config, and Simulation::start()
+  // reseeds the sim RNG from it before anything that draws is built, as
+  // GameEngine::resetGame() does.
+  if (!settings->isRoundSeedPinned())
   {
-    int atX = 0;
-    int atY = 0;
-    startingTileFor(i, settings->getMapWidth(), settings->getMapHeight(), atX, atY);
-
-    unsigned int flags = 0;
-    if (playerAIs->at(i - 1))
-    {
-      flags |= GameEntity::AI_CONTROLLED_BOT_FLAG;
-    }
-
-    emq->postCreateMessage(PLAYER_CHARACTER, i, atX, atY, flags);
-    m_entityManager->processMessageQueue();
+    const ::testing::TestInfo* info = ::testing::UnitTest::GetInstance()->current_test_info();
+    const std::string name = info ? std::string(info->test_suite_name()) + "." + info->name() : "";
+    settings->setRoundSeed(mixSeed(g_baseSeed, name, m_roundsStarted));
   }
+  m_roundsStarted++;
+
+  MatchConfig config = MatchConfig::fromSettings(*settings);
+  config.seed = settings->pickRoundSeed();
+  m_roundSeedsUsed.push_back(config.seed);
+
+  // Tears the previous round down first (the real "play again" sequence, including
+  // the AIGameView clear that DynamicMap's constructor performs) and builds the
+  // new one.
+  sim().start(config);
 }
 
 EntityManager& HeadlessGameTest::em()
 {
-  if (!m_entityManager)
+  if (!m_sim || !m_sim->started())
   {
     ADD_FAILURE() << "em() called before startRound()";
     // Keep the process alive so the failure is reported rather than a segfault.
-    m_entityManager.reset(new EntityManager());
+    startRound();
   }
-  return *m_entityManager;
+  return m_sim->entityManager();
 }
 
 SpawningPool& HeadlessGameTest::pool()
 {
-  if (!m_spawningPool)
+  if (!m_sim || !m_sim->started())
   {
     ADD_FAILURE() << "pool() called before startRound()";
-    m_spawningPool.reset(new SpawningPool(0));
+    startRound();
   }
-  return *m_spawningPool;
+  return m_sim->spawningPool();
 }
 
 void HeadlessGameTest::runFrames(int frames)
@@ -366,20 +339,21 @@ void HeadlessGameTest::runFrames(int frames)
 RoundOutcome HeadlessGameTest::runRoundToCompletion(int maxFrames)
 {
   RoundOutcome out;
+  Simulation& s = sim();
+  std::GameTimer* timer = std::GameOverTimer::getInstance();
 
-  for (int frame = 0; frame < maxFrames; frame++)
+  uint64_t conditionHeldAtTick = 0;
+  while (out.ticks < maxFrames && !s.roundOver())
   {
-    // Top of tick, before the pool updates - same as GameEngine::runEngine().
-    if (em().oneOrZeroPlayersRemain(pool().canSpawnMore()))
+    s.step();
+    out.ticks++;
+    if (conditionHeldAtTick == 0 && timer->isTimerTriggered())
     {
-      out.ended = true;
-      break;
+      conditionHeldAtTick = s.tick(); // the end condition first held at the top of this tick
     }
-
-    pool().update();
-    em().runFrame();
-    out.frames++;
   }
+  out.ended = s.roundOver();
+  out.frames = conditionHeldAtTick != 0 ? (int) (conditionHeldAtTick - 1) : out.ticks;
 
   out.playersAlive = em().numPlayersAlive();
   out.aliveTeams = em().numAliveTeams();
@@ -401,6 +375,7 @@ std::string RoundOutcome::describe() const
   std::ostringstream ss;
   ss << "{ended=" << (ended ? "true" : "false")
      << " frames=" << frames
+     << " ticks=" << ticks
      << " playersAlive=" << playersAlive
      << " aliveTeams=" << aliveTeams
      << " hostilesRemain=" << (hostilesRemain ? "true" : "false")

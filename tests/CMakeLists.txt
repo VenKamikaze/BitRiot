@@ -18,6 +18,7 @@ set(TEST_SOURCES
   FixedPointSimTest.cpp
   FixedMathTest.cpp
   FixedPointGuardTest.cpp
+  SimulationTest.cpp
 )
 
 add_executable(bitriot_tests ${TEST_SOURCES})
