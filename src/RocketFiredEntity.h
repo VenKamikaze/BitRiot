@@ -8,7 +8,7 @@ class RocketFiredEntity : public GameEntity
 {
   public:
     RocketFiredEntity(int uniqueID, int playerNumber, int atX, int atY,
-                      unsigned int flags, float toX, float toY);
+                      unsigned int flags, int toX, int toY);
     virtual ~RocketFiredEntity();
 
     // overridden virtual methods

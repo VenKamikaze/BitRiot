@@ -10,7 +10,7 @@ WallEaterEntity::WallEaterEntity(int uniqueID, int playerNumber, int atX, int at
 
   m_health = DataReader::getInstance()->getIntFromFile("WALL_EATER_INITIAL_HEALTH", "data/entity.txt");
   m_velocityModifier = DataReader::getInstance()->getIntFromFile("WALL_EATER_VELOCITY_MODIFIER", "data/entity.txt");
-  m_velocity = ((float)m_health + 2)/m_velocityModifier;
+  m_velocity = fixedFromRatio(m_health + 2, m_velocityModifier);
 
   GameSound::playSound(GameSound::EATER_CREATE);
 }

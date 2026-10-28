@@ -3,9 +3,9 @@
 #include "SimRandom.h"
 
 SimpleBrain::SimpleBrain(int &rTileXref, int &rTileYref,
-                         float &rOffsetXref, float &rOffsetYref,
+                         fixed_t &rOffsetXref, fixed_t &rOffsetYref,
                          int &animStateRef, bool & rWalkThroughBlocksRef,
-                         float & rVelocityRef)
+                         fixed_t & rVelocityRef)
   :
   rTileX(rTileXref),
   rTileY(rTileYref),
@@ -191,9 +191,8 @@ void SimpleBrain::setDirectionToMove()
 
 bool SimpleBrain::nearTileCenter()
 {
-  float absOffsetX, absOffsetY;
-  absOffsetX = (rOffsetX < 0) ? -rOffsetX : rOffsetX;
-  absOffsetY = (rOffsetY < 0) ? -rOffsetY : rOffsetY;
+  const fixed_t absOffsetX = fixedAbs(rOffsetX);
+  const fixed_t absOffsetY = fixedAbs(rOffsetY);
 
   if ((absOffsetX <= rVelocity) && (absOffsetY <= rVelocity))
   {

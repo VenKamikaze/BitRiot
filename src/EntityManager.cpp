@@ -162,7 +162,8 @@ void EntityManager::processMessageQueue()
 
           EntityType typeToCreate = (EntityType)message->getTypeToCreate();
           shared_ptr<GameEntity> entity = ef->getEntity(typeToCreate, message->getTeamToCreate(),
-                                              x, y, message->getFlags(), message->getOffsetX(), message->getOffsetY());
+                                              x, y, message->getFlags(), message->getOffsetX(), message->getOffsetY(),
+                                              message->getTargetX(), message->getTargetY());
 
           int id = entity->getID();
 

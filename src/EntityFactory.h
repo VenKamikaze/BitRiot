@@ -43,7 +43,8 @@ class EntityFactory
     void resetIds();
 
     shared_ptr<GameEntity> getEntity(EntityType t, int playerNumber, int atX, int atY,
-                           unsigned int flags, float offsetX = 0, float offsetY = 0);
+                           unsigned int flags, fixed_t offsetX = 0, fixed_t offsetY = 0,
+                           int targetX = 0, int targetY = 0);
 
   private:
     int m_idCount; // used to assign a unique ID to each entity

@@ -12,7 +12,7 @@ DroneEntity::DroneEntity(int uniqueID, int playerNumber, int atX, int atY)
 
   m_health = DataReader::getInstance()->getIntFromFile("DRONE_INITIAL_HEALTH", "data/entity.txt");
   m_velocityModifier = DataReader::getInstance()->getIntFromFile("DRONE_VELOCITY_MODIFIER", "data/entity.txt");
-  m_velocity = ((float)m_health + 2)/m_velocityModifier;
+  m_velocity = fixedFromRatio(m_health + 2, m_velocityModifier);
 
   GameSound::playSound(GameSound::DRONE_CREATE);
 }

@@ -18,8 +18,8 @@ BlockEntity::BlockEntity(int uniqueID, int playerNumber, int atX, int atY)
   m_mapGeneration = Map::getInstance()->generation();
   Map::getInstance()->setBlockAt(atX, atY, true);
 
-  m_offsetX = 0.0F;
-  m_offsetY = 0.0F;
+  m_offsetX = 0;
+  m_offsetY = 0;
   m_health = 1;
   m_velocity = 0;
   m_currentAnimState = EntityRenderer::IDLE;

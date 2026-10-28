@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "AIInstruction.h"
+#include "DataReader.h"
 #include "DroneEntity.h"
 #include "EggThiefEntity.h"
 #include "EntityMessageQueue.h"
@@ -40,23 +41,23 @@ namespace
 // Representation: the only code that knows what an offset is
 // ---------------------------------------------------------------------------
 
-typedef float Offset;
+typedef fixed_t Offset;
 
 double offsetToDouble(Offset o)
 {
-  return o;
+  return o / 65536.0;
 }
 
 Offset offsetFromDouble(double d)
 {
-  return (float)d;
+  return (Offset)(d * 65536.0 + (d < 0 ? -0.5 : 0.5));
 }
 
-// The sprite's pixel offset from its tile's top-left, exactly as
-// GameEntity::render() computes it.
+// The sprite's pixel offset from its tile's top-left, as GameEntity::render()
+// computes it.
 int pixelOffset(Offset o)
 {
-  return (int)(o * (Map::TILE_WIDTH / 2));
+  return fixedToPixels(o, Map::TILE_WIDTH / 2);
 }
 
 Offset getVelocityOf(GameEntity & e)
@@ -68,13 +69,13 @@ std::unique_ptr<RocketFiredEntity> makeRocket(int id, int owner, int atX, int at
     unsigned int flags, int toX, int toY)
 {
   return std::unique_ptr<RocketFiredEntity>(
-           new RocketFiredEntity(id, owner, atX, atY, flags, (float)toX, (float)toY));
+           new RocketFiredEntity(id, owner, atX, atY, flags, toX, toY));
 }
 
 void postRocket(int owner, int atX, int atY, unsigned int flags, int toX, int toY)
 {
   EntityMessageQueue::getInstance()->postCreateMessage(ROCKET_FIRED, owner, atX, atY, flags,
-      (float)toX, (float)toY);
+      0, 0, toX, toY);
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +213,8 @@ struct TraceResult
 // drawn on every tick. The script is long and varied enough to bring in
 // cornering (move toward the centre line first), stopping against walls and
 // blocks, and every tile wrap.
-TraceResult walkScript(GameEntity & e, uint32_t scriptSeed, int ticks)
+TraceResult walkScript(GameEntity & e, uint32_t scriptSeed, int ticks,
+                       std::vector<int> * pixels = nullptr)
 {
   Lcg lcg(scriptSeed);
   Digest d;
@@ -237,6 +239,11 @@ TraceResult walkScript(GameEntity & e, uint32_t scriptSeed, int ticks)
     }
     d.add(e.getTileX() * Map::TILE_WIDTH + pixelOffset(e.getOffsetX()));
     d.add(e.getTileY() * Map::TILE_WIDTH + pixelOffset(e.getOffsetY()));
+    if (pixels)
+    {
+      pixels->push_back(e.getTileX() * Map::TILE_WIDTH + pixelOffset(e.getOffsetX()));
+      pixels->push_back(e.getTileY() * Map::TILE_WIDTH + pixelOffset(e.getOffsetY()));
+    }
   }
   TraceResult r;
   r.digest = d.value();
@@ -260,35 +267,35 @@ void prepareWalkBoard()
 
 enum Kind { PLAYER, ROBOT, DRONE, WALL_EATER_K, EGG_THIEF_K };
 
-TraceResult traceKind(Kind k, int health, uint32_t seed)
+TraceResult traceKind(Kind k, int health, uint32_t seed, std::vector<int> * pixels = nullptr)
 {
   switch (k)
   {
     case PLAYER:
     {
       Mover<PlayerCharacterEntity> e(health, 9001, 1, 1, 1, 0u);
-      return walkScript(e, seed, 600);
+      return walkScript(e, seed, 600, pixels);
     }
     case ROBOT:
     {
       Mover<RobotEntity> e(health, 9001, 0, 1, 1, 0u);
-      return walkScript(e, seed, 600);
+      return walkScript(e, seed, 600, pixels);
     }
     case DRONE:
     {
       Mover<DroneEntity> e(health, 9001, 0, 1, 1);
-      return walkScript(e, seed, 600);
+      return walkScript(e, seed, 600, pixels);
     }
     case WALL_EATER_K:
     {
       Mover<WallEaterEntity> e(health, 9001, 0, 1, 1);
-      return walkScript(e, seed, 600);
+      return walkScript(e, seed, 600, pixels);
     }
     case EGG_THIEF_K:
     default:
     {
       Mover<EggThiefEntity> e(health, 9001, 0, 1, 1);
-      return walkScript(e, seed, 600);
+      return walkScript(e, seed, 600, pixels);
     }
   }
 }
@@ -299,30 +306,37 @@ struct MoverCase
   Kind kind;
   int health;
   uint32_t seed;
-  // what the original float maths produced
+  // the fixed-point result: a digest of every tick's drawn position, the tile
+  // changes in x, and the final drawn position. Eight of the twelve are identical
+  // to what the float maths gave; the four that are not (player h100 and h10,
+  // drone h9, wall eater h7) were e.g. 0x43735d8ba130bc33 for player h100 in float
+  // and differ by one pixel on the ticks counted in the last column.
   uint64_t digest;
   int crossingsX;
   int pixelX;
   int pixelY;
+  // ticks (of 600) on which the fixed-point result is drawn a pixel away from
+  // the original float maths (see ScriptedWalksStayWithinOnePixel...)
+  int pixelsDifferingFromFloat;
 };
 
 const MoverCase MOVER_CASES[] =
 {
-  { "player h200",       PLAYER,       200, 11, 0xe22fee89094c5921ull, 12, 32, 107 },
-  { "player h100",       PLAYER,       100, 12, 0x43735d8ba130bc33ull, 23, 187, 224 },
-  { "player h55",        PLAYER,        55, 13, 0x17b2cf5700f02250ull, 14, 89, 96 },
-  { "player h10",        PLAYER,        10, 14, 0xe720da5f525f135eull, 6, 37, 32 },
-  { "robot h38",         ROBOT,         38, 15, 0x93f01f6fc3a42ae3ull, 19, 49, 96 },
-  { "robot h12",         ROBOT,         12, 16, 0x26c2733c38370891ull, 4, 34, 32 },
-  { "drone h35",         DRONE,         35, 17, 0x72359ff1f04e1c04ull, 18, 47, 96 },
-  { "drone h9",          DRONE,          9, 18, 0x6935a6b5208f6433ull, 0, 32, 96 },
-  { "wall eater h25",    WALL_EATER_K,  25, 19, 0x4df2343d864e0070ull, 10, 160, 143 },
-  { "wall eater h7",     WALL_EATER_K,   7, 20, 0xeb9cdb1cd4d00cefull, 0, 32, 71 },
-  { "egg thief h20",     EGG_THIEF_K,   20, 21, 0xd9a2233cbe2358f9ull, 12, 32, 128 },
-  { "egg thief h6",      EGG_THIEF_K,    6, 22, 0xedccf1386c3343bcull, 0, 33, 32 },
+  { "player h200",       PLAYER,       200, 11, 0xe22fee89094c5921ull, 12, 32, 107, 0 },
+  { "player h100",       PLAYER,       100, 12, 0xe9fefcd6b269cd64ull, 23, 187, 224, 23 },
+  { "player h55",        PLAYER,        55, 13, 0x17b2cf5700f02250ull, 14, 89, 96, 0 },
+  { "player h10",        PLAYER,        10, 14, 0x669a10efd59834deull, 6, 37, 32, 2 },
+  { "robot h38",         ROBOT,         38, 15, 0x93f01f6fc3a42ae3ull, 19, 49, 96, 0 },
+  { "robot h12",         ROBOT,         12, 16, 0x26c2733c38370891ull, 4, 34, 32, 0 },
+  { "drone h35",         DRONE,         35, 17, 0x72359ff1f04e1c04ull, 18, 47, 96, 0 },
+  { "drone h9",          DRONE,          9, 18, 0xe179c002fcc746a4ull, 0, 32, 96, 1 },
+  { "wall eater h25",    WALL_EATER_K,  25, 19, 0x4df2343d864e0070ull, 10, 160, 143, 0 },
+  { "wall eater h7",     WALL_EATER_K,   7, 20, 0x3fb416e279d0f63eull, 0, 32, 71, 11 },
+  { "egg thief h20",     EGG_THIEF_K,   20, 21, 0xd9a2233cbe2358f9ull, 12, 32, 128, 0 },
+  { "egg thief h6",      EGG_THIEF_K,    6, 22, 0xedccf1386c3343bcull, 0, 33, 32, 0 },
 };
 
-TEST_F(FixedPointSimTest, ScriptedWalksDrawEverySpriteOnTheSamePixelsAsTheOriginalMaths)
+TEST_F(FixedPointSimTest, ScriptedWalksAreDrawnOnTheExpectedPixels)
 {
   setMapSize(9, 9);
   prepareWalkBoard();
@@ -346,6 +360,159 @@ TEST_F(FixedPointSimTest, ScriptedWalksDrawEverySpriteOnTheSamePixelsAsTheOrigin
       EXPECT_EQ(r.finalPixelY, c.pixelY) << c.name;
     }
   }
+}
+
+// The original float implementation of GameEntity::moveInDirection, kept here
+// as a reference to measure the fixed-point code against. It follows the
+// original branch for branch (every direction was the same code with the axes
+// swapped), using 32-bit floats. This is test code: floats are fine here.
+struct FloatMover
+{
+  int tileX, tileY;
+  float offX, offY;
+  float velocity;
+  bool walkThroughBlocks;
+
+  void move(DIRECTION d)
+  {
+    Map * map = Map::getInstance();
+    const bool horizontal = (d == LEFT || d == RIGHT);
+    const bool towardNegative = (d == UP || d == LEFT);
+    const int nextX = tileX + (d == RIGHT) - (d == LEFT);
+    const int nextY = tileY + (d == DOWN) - (d == UP);
+    float & main = horizontal ? offX : offY;     // offset along the direction of travel
+    float & across = horizontal ? offY : offX;   // offset across it, centred first
+
+    float thisMove = velocity;
+    const Map::StaticTile ahead = map->staticTileAt(nextX, nextY);
+    if (ahead == Map::WALL || (ahead == Map::BLOCK && !walkThroughBlocks))
+    {
+      if (towardNegative)
+      {
+        if (main - velocity < 0)
+        {
+          thisMove = main;
+        }
+      }
+      else
+      {
+        if (main + velocity > 0)
+        {
+          thisMove = -main;
+        }
+      }
+    }
+
+    // move toward the centre line before travelling
+    if (across < 0.0f)
+    {
+      if (across + thisMove <= 0.0f)
+      {
+        across += thisMove;
+      }
+      else
+      {
+        const float remaining = across + thisMove;
+        across = 0.0f;
+        main = towardNegative ? main - remaining : main + remaining;
+      }
+    }
+    else if (across > 0.0f)
+    {
+      if (across - thisMove >= 0.0f)
+      {
+        across -= thisMove;
+      }
+      else
+      {
+        const float remaining = thisMove - across;
+        across = 0.0f;
+        main = towardNegative ? main - remaining : main + remaining;
+      }
+    }
+    else
+    {
+      main = towardNegative ? main - thisMove : main + thisMove;
+    }
+
+    if (offX < -1.0f) { offX += 2.0f; tileX--; }
+    else if (offX > 1.0f) { offX -= 2.0f; tileX++; }
+    if (offY < -1.0f) { offY += 2.0f; tileY--; }
+    else if (offY > 1.0f) { offY -= 2.0f; tileY++; }
+  }
+};
+
+// (health + extra) / modifier in 32-bit float, as the original computed velocity.
+float floatVelocity(int health, int extra, const char * key, const char * file)
+{
+  return ((float)health + extra) / DataReader::getInstance()->getIntFromFile(key, file);
+}
+
+TEST_F(FixedPointSimTest, ScriptedWalksStayWithinOnePixelOfTheOriginalFloatMaths)
+{
+  setMapSize(9, 9);
+  prepareWalkBoard();
+  SimRandom::sim().seed(4242);
+
+  int totalDiffering = 0;
+  for (size_t i = 0; i < sizeof(MOVER_CASES) / sizeof(MOVER_CASES[0]); ++i)
+  {
+    const MoverCase & c = MOVER_CASES[i];
+
+    FloatMover ref = { 1, 1, 0.0f, 0.0f, 0.0f, false };
+    switch (c.kind)
+    {
+      case PLAYER:
+        ref.velocity = floatVelocity(c.health, 10, "PLAYER_VELOCITY_MODIFIER", "data/player.txt");
+        break;
+      case ROBOT:
+        ref.velocity = floatVelocity(c.health, 2, "ROBOT_VELOCITY_MODIFIER", "data/entity.txt");
+        break;
+      case DRONE:
+        ref.velocity = floatVelocity(c.health, 2, "DRONE_VELOCITY_MODIFIER", "data/entity.txt");
+        break;
+      case WALL_EATER_K:
+        ref.velocity = floatVelocity(c.health, 2, "WALL_EATER_VELOCITY_MODIFIER", "data/entity.txt");
+        ref.walkThroughBlocks = true;
+        break;
+      default:
+        ref.velocity = floatVelocity(c.health, 2, "BASE_VELOCITY_MODIFIER", "data/entity.txt");
+        break;
+    }
+
+    std::vector<int> actual;
+    traceKind(c.kind, c.health, c.seed, &actual);
+
+    // the same script, on the float reference
+    Lcg lcg(c.seed);
+    DIRECTION dir = RIGHT;
+    int runLeft = 0;
+    int differing = 0, worst = 0;
+    for (int t = 0; t < 600; ++t)
+    {
+      if (runLeft == 0)
+      {
+        dir = (DIRECTION)lcg.below(4);
+        runLeft = 1 + lcg.below(12);
+      }
+      --runLeft;
+      ref.move(dir);
+      const int px = ref.tileX * Map::TILE_WIDTH + (int)(ref.offX * (Map::TILE_WIDTH / 2));
+      const int py = ref.tileY * Map::TILE_WIDTH + (int)(ref.offY * (Map::TILE_WIDTH / 2));
+      const int dx = std::abs(px - actual[2 * t]);
+      const int dy = std::abs(py - actual[2 * t + 1]);
+      if (dx || dy)
+      {
+        ++differing;
+      }
+      worst = std::max(worst, std::max(dx, dy));
+    }
+    totalDiffering += differing;
+    EXPECT_LE(worst, 1) << c.name << ": drawn more than a pixel from the original float maths";
+    EXPECT_EQ(differing, c.pixelsDifferingFromFloat) << c.name;
+  }
+  // 37 of 7200 ticks (0.5%) are drawn one pixel off. Nothing is drawn further.
+  EXPECT_EQ(totalDiffering, 37);
 }
 
 // ---------------------------------------------------------------------------
@@ -377,6 +544,15 @@ uint64_t brainWalk(int owner, uint32_t rngSeed, int ticks, int * tilesVisited, E
   return d.value();
 }
 
+// A self-steering entity turns when it is within one step of the middle of a
+// tile (|offset| <= velocity). For many velocities (4/19 for a robot, say) the
+// offset lands on exactly +-velocity every other tile, so whether that counts as
+// "within one step" was decided by the float rounding of the day, and the fixed
+// rounding decides it the other way on some of them. The entity then turns one
+// step earlier or later, and from there its (random) walk is a different one: the
+// digests differ for robot, drone and egg thief, though wall eaters (whose
+// velocity is not a tie) walk exactly as before. The tile changes over 1500 ticks
+// show the pace is unchanged: float 161/130/160/125/127/90/120/77, fixed as below.
 struct BrainCase
 {
   const char * name;
@@ -389,14 +565,14 @@ struct BrainCase
 
 const BrainCase BRAIN_CASES[] =
 {
-  { "robot owner0",      ROBOT,        0, 101, 0xf494f283f9f310d7ull, 161 },
-  { "robot owner1",      ROBOT,        1, 102, 0xfdd19c715b2ccda9ull, 130 },
-  { "drone owner0",      DRONE,        0, 103, 0x1ee497211d7badc0ull, 160 },
-  { "drone owner2",      DRONE,        2, 104, 0x434f4aba2e5d5db0ull, 125 },
+  { "robot owner0",      ROBOT,        0, 101, 0xff95e4d9640ef62aull, 161 },
+  { "robot owner1",      ROBOT,        1, 102, 0x76908f828d86cbedull, 131 },
+  { "drone owner0",      DRONE,        0, 103, 0xf24c65ba5dab2ff1ull, 160 },
+  { "drone owner2",      DRONE,        2, 104, 0xb823152a7668dbb4ull, 125 },
   { "wall eater owner0", WALL_EATER_K, 0, 105, 0xcdc85dafb27268d3ull, 127 },
   { "wall eater owner1", WALL_EATER_K, 1, 106, 0x5b6641f74261d630ull, 90 },
-  { "egg thief owner0",  EGG_THIEF_K,  0, 107, 0xaa3925b742d38f8aull, 120 },
-  { "egg thief owner3",  EGG_THIEF_K,  3, 108, 0x0c1ab876855679e4ull, 77 },
+  { "egg thief owner0",  EGG_THIEF_K,  0, 107, 0x0ac8740d2c26e1b6ull, 120 },
+  { "egg thief owner3",  EGG_THIEF_K,  3, 108, 0x25f587d0040615d4ull, 77 },
 };
 
 TEST_F(FixedPointSimTest, SelfSteeringEntitiesWalkTheSameRoutesAsTheOriginalMaths)
@@ -503,16 +679,26 @@ TEST_F(FixedPointSimTest, RocketsExplodeOnTheSameTickAsTheOriginalMaths)
 
   dump("rockets", d.value());
   EXPECT_EQ(flights, 52);
-  EXPECT_EQ(d.value(), 0x0bdb3f6c29ac1b6full);
+  EXPECT_EQ(d.value(), 0x3aa149109fb5251full);
 
-  // the same flights, read off for the first one: fired from (1,1) at (5,1) it
-  // blows up in the target tile on tick 19, and one fired past the end of the
-  // row is stopped by the wall and blows up in the last open tile
-  RocketResult five = flyRocket(this, 1, 1, GameEntity::RIGHT_FLAG, 5, 1);
-  EXPECT_EQ(five.tick, 19);
-  EXPECT_EQ(five.tileX, 5);
-  EXPECT_EQ(five.tileY, 1);
-  EXPECT_EQ(beyond.tick, 69);
+  // Fired from (1,1) along the open row at a target k tiles along, the rocket
+  // blows up in the target tile. With the old float velocity it did so on ticks
+  // 1, 4, 9, 14, 19, ...: in every tile after the first it was already "within
+  // one step of the middle" 0.4 short of it, because float rounding put the
+  // offset at -0.39999995 against a velocity of 0.4. The fixed velocity is
+  // 26214/65536, a hair under 0.4, and the offset there is -26216/65536, a hair
+  // outside it, so the rocket waits one more tick and explodes at the middle of
+  // the tile instead: 1, 5, 10, 15, 20, ... Tile spacing is unchanged, 5 ticks.
+  const int expectedTick[] = { 0, 1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70 };
+  for (int to = 1; to <= 15; ++to)
+  {
+    RocketResult r = flyRocket(this, 1, 1, GameEntity::RIGHT_FLAG, to, 1);
+    EXPECT_EQ(r.tick, expectedTick[to]) << "target " << to;
+    EXPECT_EQ(r.tileX, to);
+    EXPECT_EQ(r.tileY, 1);
+  }
+  // one fired past the end of the row is stopped by the wall, in the last open tile
+  EXPECT_EQ(beyond.tick, 70);
   EXPECT_EQ(beyond.tileX, 15);
 }
 

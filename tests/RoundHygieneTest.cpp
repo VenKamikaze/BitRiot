@@ -317,7 +317,7 @@ TEST_F(RoundHygieneTest, GameEntityScalarsAreInitialisedByTheConstructor)
   BareEntity* e = new (storage) BareEntity; // no (): value-initialisation would zero the members first
 
   EXPECT_EQ(e->getHealth(), 0);
-  EXPECT_EQ(e->getVelocity(), 0.0f);
+  EXPECT_EQ(e->getVelocity(), 0);
   EXPECT_EQ(e->getID(), 0);
   EXPECT_EQ(e->getPlayerNumber(), 0);
   EXPECT_EQ(e->getType(), BLOCK);

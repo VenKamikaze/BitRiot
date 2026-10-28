@@ -1,6 +1,6 @@
 #include "SimpleMovingEntity.h"
 
-SimpleMovingEntity::SimpleMovingEntity(int uniqueID, int playerNumber, int atX, int atY, float offX, float offY)
+SimpleMovingEntity::SimpleMovingEntity(int uniqueID, int playerNumber, int atX, int atY, fixed_t offX, fixed_t offY)
 {
 
   m_initialAnimCount = DataReader::getInstance()->getIntFromFile("BASE_ANIM_COUNT", "data/entity.txt");
@@ -24,7 +24,7 @@ SimpleMovingEntity::SimpleMovingEntity(int uniqueID, int playerNumber, int atX, 
   m_currentAnimFrame = 0;
 
   m_velocityModifier = DataReader::getInstance()->getIntFromFile("BASE_VELOCITY_MODIFIER", "data/entity.txt"); // can be changed
-  m_velocity = ((float)m_health + 2)/m_velocityModifier;
+  m_velocity = fixedFromRatio(m_health + 2, m_velocityModifier);
 }
 
 SimpleMovingEntity::~SimpleMovingEntity()
@@ -82,7 +82,7 @@ void SimpleMovingEntity::update()
     return;
   }
 
-  m_velocity = ((float)m_health + 2)/m_velocityModifier;
+  m_velocity = fixedFromRatio(m_health + 2, m_velocityModifier);
 
   // do movement AI
   m_pBrain->setDirectionToMove();

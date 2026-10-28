@@ -3,6 +3,8 @@
 #ifndef _ENTITYMESSAGECLASS
 #define _ENTITYMESSAGECLASS
 
+#include "Fixed.h"
+
 
 class EntityMessage
 {
@@ -13,7 +15,8 @@ class EntityMessage
                   int typeParam = 0, int teamParam = 0,
                   int toX = 1, int toY = 1,
                   int fromX = 1, int fromY = 1, unsigned int EMflags = 0,
-                  float offsetX = 0.0f, float offsetY = 0.0f);
+                  fixed_t offsetX = 0, fixed_t offsetY = 0,
+                  int targetX = 0, int targetY = 0);
     ~EntityMessage() {}
 
 
@@ -49,13 +52,21 @@ class EntityMessage
     {
       return m_toY;
     }
-    float getOffsetX()
+    fixed_t getOffsetX()
     {
       return m_offsetX;
     }
-    float getOffsetY()
+    fixed_t getOffsetY()
     {
       return m_offsetY;
+    }
+    int getTargetX()
+    {
+      return m_targetX;
+    }
+    int getTargetY()
+    {
+      return m_targetY;
     }
     unsigned int getFlags()
     {
@@ -76,7 +87,8 @@ class EntityMessage
 
 
     unsigned int m_entityMessageFlags; // bit flipped flags for extended behaviour
-    float m_offsetX, m_offsetY;
+    fixed_t m_offsetX, m_offsetY;     // CREATE_ENTITY: starting offset within the tile
+    int m_targetX, m_targetY;       // CREATE_ENTITY of a ROCKET_FIRED: the tile it is aimed at
 
 };
 

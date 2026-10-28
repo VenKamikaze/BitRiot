@@ -39,13 +39,13 @@ PlayerCharacterEntity::PlayerCharacterEntity(int uniqueID, int playerNumber, int
 
   m_tileX = atX;
   m_tileY = atY;
-  m_offsetX = 0.0F;
-  m_offsetY = 0.0F;
+  m_offsetX = 0;
+  m_offsetY = 0;
   m_health = DataReader::getInstance()->getIntFromFile("PLAYER_INITIAL_HEALTH", "data/player.txt");
   setAlive(m_health > 0);
   
   m_velocityModifier = DataReader::getInstance()->getIntFromFile("PLAYER_VELOCITY_MODIFIER", "data/player.txt");
-  m_velocity = ((float)m_health + 10)/m_velocityModifier;
+  m_velocity = fixedFromRatio(m_health + 10, m_velocityModifier);
 
   m_currentAnimState = EntityRenderer::IDLE;
   m_currentAnimFrame = 0;
@@ -89,7 +89,7 @@ PlayerCharacterEntity::~PlayerCharacterEntity()
 
 void PlayerCharacterEntity::update()
 {
-  m_velocity = ((float)m_health + 10)/m_velocityModifier;
+  m_velocity = fixedFromRatio(m_health + 10, m_velocityModifier);
 
   if (m_controlledByAI == true)
   {
@@ -1294,9 +1294,8 @@ bool PlayerCharacterEntity::goNumTilesAway(int numToMove)
 
 bool PlayerCharacterEntity::nearTileCenter()
 {
-  float absOffsetX, absOffsetY;
-  absOffsetX = (m_offsetX < 0) ? -m_offsetX : m_offsetX;
-  absOffsetY = (m_offsetY < 0) ? -m_offsetY : m_offsetY;
+  const fixed_t absOffsetX = fixedAbs(m_offsetX);
+  const fixed_t absOffsetY = fixedAbs(m_offsetY);
 
   if ((absOffsetX <= m_velocity) && (absOffsetY <= m_velocity))
   {
@@ -1366,7 +1365,14 @@ coord PlayerCharacterEntity::getNextTileFromPathfinding(int targetTileX, int tar
   } maker = { nodes };
 
   map<coord, Node *> closed; // previously explored nodes
-  map<float, Node *> open; // nodes to be explored, with approx heuristic + cost mapping
+  // Nodes to be explored, in the order they are tried: cost + heuristic first,
+  // and among equal totals the lowest tie-break number. A node whose total is
+  // already taken by another gets the next free number, counting up from 0, as
+  // it used to get the next free +0.001 on a float key - so the order is the
+  // same as it always was, including a slot freed by a node leaving the list
+  // being reused by the next arrival with that total.
+  typedef pair<int, int> OpenKey;
+  map<OpenKey, Node *> open;
 
   coord result(m_tileX, m_tileY);
 
@@ -1375,7 +1381,7 @@ coord PlayerCharacterEntity::getNextTileFromPathfinding(int targetTileX, int tar
                               abs(m_tileX - targetTileX) + abs(m_tileY - targetTileY), 0, NULL);
 
   // add to open
-  open.insert(pair<float, Node *>((float)initial->heuristic, initial));
+  open.insert(pair<OpenKey, Node *>(OpenKey(initial->heuristic, 0), initial));
 
   while (!open.empty())
   {
@@ -1511,9 +1517,9 @@ coord PlayerCharacterEntity::getNextTileFromPathfinding(int targetTileX, int tar
         }
 
         // is this location already on open list?
-        float total = (float)(cost + heuristic);
+        OpenKey key(cost + heuristic, 0);
         bool onOpenList = false;
-        map<float, Node *>::iterator openIt;
+        map<OpenKey, Node *>::iterator openIt;
         for (openIt = open.begin(); openIt != open.end(); ++openIt)
         {
           Node * onOpen = openIt->second;
@@ -1538,12 +1544,12 @@ coord PlayerCharacterEntity::getNextTileFromPathfinding(int targetTileX, int tar
           continue;
         }
 
-        // add to open map, slightly increasing the total if needed so that
+        // add to open map, taking the next tie-break number if needed so that
         // different nodes get different keys
         Node * child = maker.make(x, y, heuristic, cost, current);
-        while (!open.insert(pair<float, Node *>(total, child)).second)
+        while (!open.insert(pair<OpenKey, Node *>(key, child)).second)
         {
-          total += 0.001f;
+          ++key.second;
         }
 
       } // end for 0..3

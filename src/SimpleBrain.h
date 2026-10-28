@@ -8,14 +8,15 @@
 #define _SIMPLEBRAINCLASS
 
 #include "Map.h"
+#include "Fixed.h"
 
 class SimpleBrain
 {
   public:
     SimpleBrain(int & tileXref, int & tileYref,
-                float & offsetXref, float & offsetYref,
+                fixed_t & offsetXref, fixed_t & offsetYref,
                 int & animStateRef, bool & walkThroughBlocksRef,
-                float & velocityRef);
+                fixed_t & velocityRef);
     ~SimpleBrain();
 
     enum ANIM_STATE
@@ -29,11 +30,11 @@ class SimpleBrain
     // data references
     const int & rTileX;
     const int & rTileY;
-    const float & rOffsetX;
-    const float & rOffsetY;
+    const fixed_t & rOffsetX;
+    const fixed_t & rOffsetY;
     int & rAnimState;
     const bool & rWalkThroughBlocks;
-    const float & rVelocity;
+    const fixed_t & rVelocity;
 
     // private functions
     bool nearTileCenter();

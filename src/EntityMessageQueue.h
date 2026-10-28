@@ -18,7 +18,8 @@ class EntityMessageQueue
 
     void postDestroyMessage(int sender);
     void postCreateMessage(int typeParam, int teamParam, int atX, int atY,
-                           unsigned int flags, float offsetX = 0.0f, float offsetY = 0.0f);
+                           unsigned int flags, fixed_t offsetX = 0, fixed_t offsetY = 0,
+                           int targetX = 0, int targetY = 0);
     void postMoveMessage(int sender, int fromX, int fromY, int toX, int toY);
 
     EntityMessage * getMessageAtFront(); // messages returned from
