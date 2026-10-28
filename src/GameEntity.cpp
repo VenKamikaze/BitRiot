@@ -355,8 +355,8 @@ bool GameEntity::render(SDL_Surface* dest)
 {
   EntityRenderer * er = getEntityRenderer();
 
-  int destX = (m_tileX * Map::TILE_WIDTH) + fixedToPixels(m_offsetX, Map::TILE_WIDTH/2);
-  int destY = (m_tileY * Map::TILE_WIDTH) + fixedToPixels(m_offsetY, Map::TILE_WIDTH/2);
+  int destX = pixelX();
+  int destY = pixelY();
 
   // Render in the entity's alliance-team colour (teammates share a colour), not
   // its per-player slot colour. getTeamNumber() -> the same colour-table index.

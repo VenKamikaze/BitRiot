@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <memory>
+#include <set>
 #include <vector>
 
 #include "AIInstruction.h"
@@ -40,30 +41,6 @@ namespace
 // ---------------------------------------------------------------------------
 // Representation: the only code that knows what an offset is
 // ---------------------------------------------------------------------------
-
-typedef fixed_t Offset;
-
-double offsetToDouble(Offset o)
-{
-  return o / 65536.0;
-}
-
-Offset offsetFromDouble(double d)
-{
-  return (Offset)(d * 65536.0 + (d < 0 ? -0.5 : 0.5));
-}
-
-// The sprite's pixel offset from its tile's top-left, as GameEntity::render()
-// computes it.
-int pixelOffset(Offset o)
-{
-  return fixedToPixels(o, Map::TILE_WIDTH / 2);
-}
-
-Offset getVelocityOf(GameEntity & e)
-{
-  return e.getVelocity();
-}
 
 std::unique_ptr<RocketFiredEntity> makeRocket(int id, int owner, int atX, int atY,
     unsigned int flags, int toX, int toY)
@@ -237,19 +214,19 @@ TraceResult walkScript(GameEntity & e, uint32_t scriptSeed, int ticks,
       ++crossings;
       lastTileX = e.getTileX();
     }
-    d.add(e.getTileX() * Map::TILE_WIDTH + pixelOffset(e.getOffsetX()));
-    d.add(e.getTileY() * Map::TILE_WIDTH + pixelOffset(e.getOffsetY()));
+    d.add(e.pixelX());
+    d.add(e.pixelY());
     if (pixels)
     {
-      pixels->push_back(e.getTileX() * Map::TILE_WIDTH + pixelOffset(e.getOffsetX()));
-      pixels->push_back(e.getTileY() * Map::TILE_WIDTH + pixelOffset(e.getOffsetY()));
+      pixels->push_back(e.pixelX());
+      pixels->push_back(e.pixelY());
     }
   }
   TraceResult r;
   r.digest = d.value();
   r.crossingsX = crossings;
-  r.finalPixelX = e.getTileX() * Map::TILE_WIDTH + pixelOffset(e.getOffsetX());
-  r.finalPixelY = e.getTileY() * Map::TILE_WIDTH + pixelOffset(e.getOffsetY());
+  r.finalPixelX = e.pixelX();
+  r.finalPixelY = e.pixelY();
   return r;
 }
 
@@ -537,22 +514,23 @@ uint64_t brainWalk(int owner, uint32_t rngSeed, int ticks, int * tilesVisited, E
       lastX = e.getTileX();
       lastY = e.getTileY();
     }
-    d.add(e.getTileX() * Map::TILE_WIDTH + pixelOffset(e.getOffsetX()));
-    d.add(e.getTileY() * Map::TILE_WIDTH + pixelOffset(e.getOffsetY()));
+    d.add(e.pixelX());
+    d.add(e.pixelY());
   }
   *tilesVisited = crossings;
   return d.value();
 }
 
 // A self-steering entity turns when it is within one step of the middle of a
-// tile (|offset| <= velocity). For many velocities (4/19 for a robot, say) the
-// offset lands on exactly +-velocity every other tile, so whether that counts as
-// "within one step" was decided by the float rounding of the day, and the fixed
-// rounding decides it the other way on some of them. The entity then turns one
-// step earlier or later, and from there its (random) walk is a different one: the
-// digests differ for robot, drone and egg thief, though wall eaters (whose
-// velocity is not a tie) walk exactly as before. The tile changes over 1500 ticks
-// show the pace is unchanged: float 161/130/160/125/127/90/120/77, fixed as below.
+// tile (|offset| <= velocity). For a velocity like a full-health robot's 4/19 the
+// offset lands on exactly +-velocity every 19 ticks, and whether that counts as
+// "within one step" was decided by float rounding noise; the fixed rounding
+// decides some of those ties the other way. The entity then turns one step
+// earlier or later and, being random, goes on to a different walk from there. Which
+// velocities that happens to is arbitrary: here the robot, drone and egg thief walks
+// differ from the float ones (different digests) and the wall eater walks match
+// exactly. The pace is the same: tile changes over 1500 ticks were
+// float 161/130/160/125/127/90/120/77 and fixed are as below.
 struct BrainCase
 {
   const char * name;
@@ -710,6 +688,8 @@ TEST_F(FixedPointSimTest, ARocketCreatedByMessageExplodesInTheTileItWasAimedAt)
   configurePlayers(2);
   setMapSize(17, 13);
   startRound();
+  destroyPlayer(1); // nothing but the rocket on the board: no bot to walk into its path
+  destroyPlayer(2);
   clearBlocks();
 
   const int targets[] = { 5, 9, 13 };
@@ -747,6 +727,69 @@ TEST_F(FixedPointSimTest, ARocketCreatedByMessageExplodesInTheTileItWasAimedAt)
 
     runFrames(30); // let the blast die out before the next rocket
   }
+}
+
+// The real path: a bot-style rocket spinner sees an enemy in line, fires, and the
+// rocket it creates carries the enemy's tile as its target. The enemy is taken
+// away after the launch, so the rocket can only explode in the target tile
+// because it was told to (not by running into someone, or into the wall).
+TEST_F(FixedPointSimTest, ARocketFiredByASpinnerExplodesInTheEnemyTileEvenIfTheEnemyLeaves)
+{
+  configurePlayers(2);
+  setMapSize(9, 9);
+  startRound();
+  destroyPlayer(1);
+  clearBlocks();
+  player(2)->m_controlledByAI = false; // a human nobody is steering: it stays put
+  // stand it in the middle of the bottom row, with open floor beyond it, so a
+  // rocket that missed its target would visibly fly on past
+  const int targetX = 5, targetY = 7;
+  {
+    std::shared_ptr<PlayerCharacterEntity> p = player(2);
+    const int fromX = p->getTileX(), fromY = p->getTileY();
+    p->setTileX(targetX);
+    p->setTileY(targetY);
+    EntityMessageQueue::getInstance()->postMoveMessage(p->getID(), fromX, fromY, targetX, targetY);
+    em().processMessageQueue();
+  }
+
+  spawnEntity(ROCKET_SPIN, 1, targetX - 4, targetY); // 4 tiles to its left
+  for (int f = 0; f < 50 && countOfType(ROCKET_FIRED) == 0; ++f)
+  {
+    runFrames(1);
+  }
+  ASSERT_EQ(countOfType(ROCKET_FIRED), 1) << "the spinner never fired";
+  destroyPlayer(2); // gone before the rocket gets there
+
+  std::vector<std::pair<int, int> > blast;
+  for (int f = 0; f < 100 && blast.empty(); ++f)
+  {
+    runFrames(1);
+    DynamicMap * map = em().getDynamicMap();
+    for (auto it = map->entityList.begin(); it != map->entityList.end(); ++it)
+    {
+      if (it->second->getType() == EXPLOSION)
+      {
+        blast.push_back(std::make_pair(it->second->getTileX(), it->second->getTileY()));
+      }
+    }
+  }
+  ASSERT_FALSE(blast.empty()) << "the rocket never exploded";
+  // the plus-shaped blast around the target, wherever there is no wall (a rocket
+  // next to a wall explodes twice in one tick, so compare as sets)
+  std::set<std::pair<int, int> > expected;
+  expected.insert(std::make_pair(targetX, targetY));
+  const int dx[4] = { -1, 1, 0, 0 };
+  const int dy[4] = { 0, 0, -1, 1 };
+  for (int i = 0; i < 4; ++i)
+  {
+    if (Map::getInstance()->staticTileAt(targetX + dx[i], targetY + dy[i]) != Map::WALL)
+    {
+      expected.insert(std::make_pair(targetX + dx[i], targetY + dy[i]));
+    }
+  }
+  const std::set<std::pair<int, int> > actual(blast.begin(), blast.end());
+  EXPECT_EQ(actual, expected);
 }
 
 // ---------------------------------------------------------------------------

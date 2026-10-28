@@ -98,6 +98,19 @@ class GameEntity
       return m_groupType;
     }
 
+    // Where the sprite's top-left corner is drawn on the play field, in pixels.
+    // An offset of -1..+1 is half a tile either side of the tile's origin; the
+    // fraction is truncated toward zero, as the old (int)(offset * n) cast did.
+    // Rendering reads the sim through these and never writes back.
+    inline int pixelX() const
+    {
+      return (m_tileX * Map::TILE_WIDTH) + fixedToPixels(m_offsetX, Map::TILE_WIDTH / 2);
+    }
+    inline int pixelY() const
+    {
+      return (m_tileY * Map::TILE_WIDTH) + fixedToPixels(m_offsetY, Map::TILE_WIDTH / 2);
+    }
+
     inline void setTileX(int x)
     {
       m_tileX = x;
