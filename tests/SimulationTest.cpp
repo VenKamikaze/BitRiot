@@ -39,6 +39,9 @@ struct Access : public PlayerCharacterEntity
   static int GameEntity::* health() { return &Access::m_health; }
   static int GameEntity::* animState() { return &Access::m_currentAnimState; }
   static int GameEntity::* animFrame() { return &Access::m_currentAnimFrame; }
+  static fixed_t GameEntity::* velocity() { return &Access::m_velocity; }
+  static int GameEntity::* owner() { return &Access::m_playerNumber; }
+  static bool GameEntity::* walkThroughBlocks() { return &Access::m_walkThroughBlocks; }
   static int PlayerCharacterEntity::* iq() { return &Access::m_IQ; }
   static int PlayerCharacterEntity::* animCounter() { return &Access::m_animCounter; }
 };
@@ -467,12 +470,18 @@ TEST_F(SimulationTest, TheFinalTickRunsInFullAndTheWinnerIsFixedAtTheTopOfIt)
   ASSERT_TRUE(survivor->isAlive());
   EntityMessageQueue::getInstance()->postDestroyMessage(survivor->getID());
 
+  StateHasher poolBefore;
+  sim().spawningPool().hashState(poolBefore);
+
   sim().step(); // tick n + 1: the round ends
 
   ASSERT_TRUE(sim().roundOver());
   EXPECT_EQ(sim().roundEndedAtTick(), (uint64_t) n + 1);
   EXPECT_EQ(effect->getHealth(), effectHealth - 1) << "runFrame ran on the final tick";
   EXPECT_FALSE(survivor->isAlive()) << "and so did its message processing";
+  StateHasher poolAfter;
+  sim().spawningPool().hashState(poolAfter);
+  EXPECT_NE(poolAfter.value(), poolBefore.value()) << "and the spawning pool's update";
 
   // The winner was decided at the top of the tick, before the survivor died; the
   // state afterwards is the state after the whole step.
@@ -785,6 +794,13 @@ TEST_F(StateHashTest, AnEntitysOffsetsAreHashedAsRawBits)
   EXPECT_TRUE(changeMovesTheHash([&] { player(1)->setOffsetX(player(1)->getOffsetX() + 1); }))
       << "one least-significant bit of Q16.16 is a different state";
   EXPECT_TRUE(changeMovesTheHash([&] { player(2)->setOffsetY(player(2)->getOffsetY() - 1); }));
+}
+
+TEST_F(StateHashTest, AnEntitysVelocityOwnerAndBlockPassageAreHashed)
+{
+  EXPECT_TRUE(changeMovesTheHash([&] { (*player(1)).*Access::velocity() += 1; })) << "velocity";
+  EXPECT_TRUE(changeMovesTheHash([&] { (*player(1)).*Access::owner() = 2; })) << "owner (egg theft changes it)";
+  EXPECT_TRUE(changeMovesTheHash([&] { (*player(1)).*Access::walkThroughBlocks() = true; })) << "walk through blocks";
 }
 
 TEST_F(StateHashTest, AnEntitysAnimStateIsHashedBecauseItDrivesMovement)
