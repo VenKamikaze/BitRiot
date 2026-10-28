@@ -318,6 +318,12 @@ TEST_F(SimulationTest, AConfigFromAnotherMachineIsHeldToTheMenuLimits)
   EXPECT_FALSE(makeConfig(1, 4, 17, 13, 10).problem().empty()) << "fewer blocks than the menu allows";
   EXPECT_FALSE(makeConfig(1, 4, 17, 13, 100).problem().empty()) << "more blocks than the menu allows";
   EXPECT_FALSE(makeConfig(1, 7, 17, 13, 55).problem().empty()) << "the runnable limits apply too";
+  MatchConfig alone = makeConfig(1, 2, 17, 13, 55);
+  alone.slots.pop_back();
+  EXPECT_FALSE(alone.problem().empty()) << "one player";
+  MatchConfig negative = makeConfig(1, 3, 17, 13, 55);
+  negative.slots[1].team = -1;
+  EXPECT_FALSE(negative.problem().empty()) << "a negative team";
 }
 
 TEST_F(SimulationTest, ARefusedConfigLeavesTheRunningRoundAndTheSettingsAlone)
