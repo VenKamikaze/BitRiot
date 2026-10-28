@@ -219,6 +219,108 @@ TEST_F(EntitySimTest, AIGameViewHasNoGhostsAcrossThreeRounds)
   EXPECT_EQ(aiGameViewEntryCount(DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT), 2);
 }
 
+TEST_F(EntitySimTest, MessagesPostedInTheLastFrameDoNotLeakIntoTheNextRound)
+{
+  // Regression guard for the stray-entity-in-round-two bug. EntityManager::
+  // runFrame() drains the queue and *then* runs collisions, and collision
+  // handlers post follow-ups (damage effects, drops, destroys). Those sit in the
+  // process-lifetime EntityMessageQueue when the round ends - nobody runs
+  // another frame - and the next round's first processMessageQueue() used to
+  // spawn them into its brand-new map. This posts the messages by hand so it
+  // does not depend on a seed or on what a real round happens to leave behind.
+  configurePlayers(2);
+  startRound();
+  const int staleId = player(1)->getID();
+
+  EntityMessageQueue* emq = EntityMessageQueue::getInstance();
+  emq->postCreateMessage(DAMAGE_EFFECT, 1, 3, 1, 0);
+  emq->postCreateMessage(EGG1, 0, 5, 3, 0);
+  emq->postMoveMessage(staleId, 1, 1, 2, 1);
+  emq->postDestroyMessage(staleId);
+  ASSERT_FALSE(emq->empty()) << "precondition: the previous round left messages behind";
+
+  startRound(); // "play again": the old messages were never processed
+
+  EXPECT_EQ(countAllEntities(), 2) << "only the two fresh player characters belong here";
+  EXPECT_EQ(countEntities(EFFECT_GROUP), 0) << "last round's damage effect leaked";
+  EXPECT_EQ(countEntities(EGG_GROUP), 0) << "last round's egg leaked";
+  EXPECT_TRUE(AIGameView::getInstance()->getEntityInfoAtLocation(5, 3).empty());
+  EXPECT_EQ(em().numPlayersAlive(), 2);
+  EXPECT_EQ((int) em().getRoundPlayerRoster().size(), 2);
+}
+
+TEST_F(EntitySimTest, ANewEntityManagerStartsWithAnEmptyMessageQueue)
+{
+  // The seam itself: constructing the manager is what every new round (the real
+  // GameEngine::resetGame() and this harness' startRound()) goes through.
+  EntityMessageQueue* emq = EntityMessageQueue::getInstance();
+  emq->postCreateMessage(EXPLOSION, 0, 4, 4, 0);
+  emq->postDestroyMessage(12345);
+  ASSERT_FALSE(emq->empty());
+
+  EntityManager fresh;
+
+  EXPECT_TRUE(emq->empty());
+}
+
+TEST_F(EntitySimTest, DestroyingAnEntityWithAMovePendingStillRemovesIt)
+{
+  // GameEntity::update() changes the entity's own tile immediately but only
+  // *posts* the MOVE. If a DESTROY for it was queued earlier in the same frame
+  // (an explosion that happened to update first), the DESTROY is processed while
+  // the map still has the entity one tile behind where it believes it is. That
+  // used to leave a dead player in the live entity list - a zombie that skipped
+  // the scoreboard bookkeeping and made round results depend on update order.
+  configurePlayers(2);
+  startRound();
+
+  std::shared_ptr<PlayerCharacterEntity> victim = player(1);
+  const int id = victim->getID();
+  const int fromX = victim->getTileX();
+  const int fromY = victim->getTileY();
+  const int toX = fromX + 1;
+
+  victim->setTileX(toX); // what update() does just before posting the move
+
+  EntityMessageQueue* emq = EntityMessageQueue::getInstance();
+  emq->postDestroyMessage(id);                          // queued first, by another entity
+  emq->postMoveMessage(id, fromX, fromY, toX, fromY);   // queued second, by the victim
+  em().processMessageQueue();
+
+  EXPECT_EQ(player(1), nullptr) << "the destroyed player must leave the live entity list";
+  EXPECT_FALSE(victim->isAlive());
+  EXPECT_EQ(em().numPlayersAlive(), 1);
+  EXPECT_EQ(countAllEntities(), 1);
+  EXPECT_TRUE(AIGameView::getInstance()->getEntityInfoAtLocation(fromX, fromY).empty())
+      << "AIGameView kept a ghost at the old tile";
+  EXPECT_TRUE(AIGameView::getInstance()->getEntityInfoAtLocation(toX, fromY).empty())
+      << "AIGameView kept a ghost at the new tile";
+}
+
+TEST_F(EntitySimTest, DestroyingAnEntityMissingFromTheMapStillRemovesItFromTheList)
+{
+  // If the map bookkeeping is ever broken so badly that an entity is registered
+  // nowhere, DESTROY must still take it out of the live list (a dead player left
+  // there would keep running AI) without tripping AIGameView's Debug asserts.
+  configurePlayers(2);
+  startRound();
+
+  std::shared_ptr<PlayerCharacterEntity> victim = player(1);
+  const int id = victim->getID();
+  const int x = victim->getTileX();
+  const int y = victim->getTileY();
+
+  em().getDynamicMap()->entityMap[x][y].clear();
+  ASSERT_TRUE(AIGameView::getInstance()->removeEntity(id, x, y));
+
+  EntityMessageQueue::getInstance()->postDestroyMessage(id);
+  em().processMessageQueue();
+
+  EXPECT_EQ(player(1), nullptr);
+  EXPECT_FALSE(victim->isAlive());
+  EXPECT_EQ(countAllEntities(), 1);
+}
+
 TEST_F(EntitySimTest, AIGameViewIsResizedWhenTheMapGrows)
 {
   configurePlayers(2);

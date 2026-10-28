@@ -92,8 +92,18 @@ BITRIOT_TEST_SEED=42 ./tests/bitriot_tests   # any seed; 0 = time-based
 ./tests/bitriot_tests --gtest_shuffle        # randomise test order
 ```
 
-The suite currently passes under shuffling and across several seeds. If you add
-a test that only passes on seed 1, it is testing luck, not behaviour.
+If you add a test that only passes on seed 1, it is testing luck, not behaviour.
+A test that waits for a random event should pump until it happens (with a
+generous cap) rather than guess a tick count: `ADisabledPoolStillLetsPowerUpsThrough`
+used a fixed 4000 ticks, which misses a 10%-per-attempt power-up ~2.5% of the
+time, and failed on those seeds and on whichever test orderings happened to
+hand it one.
+
+Do a seed sweep before trusting a new test:
+
+```bash
+for s in $(seq 1 200); do BITRIOT_TEST_SEED=$s ./tests/bitriot_tests >/dev/null 2>&1 || echo "seed $s"; done
+```
 
 `std::cout` is swallowed during each test because `MickLogger`'s DEBUG level is
 compile-time enabled in Debug builds and is very chatty. Set
@@ -112,7 +122,7 @@ rockets fire at nothing" bug (`AIGameView` was never cleared between games).
 | `AIGameView` | `setMapSize()` clears it |
 | `Map` | `init()` rebuilds walls and clears blocks |
 | `GameSettings` | Every field restored explicitly — note `setNumberOfPlayers()` deliberately *preserves* existing slots, so it is not a reset |
-| `EntityMessageQueue` | Drained |
+| `EntityMessageQueue` | Cleared by `SetUp()`, and by `EntityManager`'s constructor on every `startRound()` |
 
 **Known gaps** — no reset path exists for these. They do not currently affect
 any test, but they are real:
@@ -186,7 +196,7 @@ files, run, swap back.
 
 ## Coverage today
 
-91 tests across eight files:
+95 tests across eight files:
 
 - `WinConditionTest.cpp` — free-for-all, team and co-op round-end rules,
   including the co-op "board cleared and pool exhausted" win and the
@@ -199,8 +209,10 @@ files, run, swap back.
 - `SpawningPoolTest.cpp` — both ways the pool stops producing hostiles (points
   spent, spawner toggled off) and that power-ups are exempt from the toggle.
 - `EntitySimTest.cpp` — round setup, multi-frame simulation on 4- and 6-player
-  maps, `AIGameView` add/move/destroy bookkeeping, and ghost-entity regression
-  guards across repeated rounds.
+  maps, `AIGameView` add/move/destroy bookkeeping, ghost-entity regression
+  guards across repeated rounds, undelivered `EntityMessageQueue` messages not
+  leaking into the next round, and destroying an entity that has a MOVE pending
+  or is missing from the map.
 - `FullRoundTest.cpp` — whole rounds played to their natural end (PvP, team,
   2- and 4-player co-op), the scoreboard roster after a real round, plus
   consecutive rounds in one process.

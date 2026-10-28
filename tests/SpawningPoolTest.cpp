@@ -116,11 +116,22 @@ TEST_F(SpawningPoolTest, ADisabledPoolStillLetsPowerUpsThrough)
 
   std::GameSettings::getInstance()->setNpcSpawnerEnabled(false);
 
+  // Each spawn attempt is a random roll against SPAWN_POWERUP_CHANCE (10%), and
+  // attempts are 45-180 ticks apart, so a fixed 4000 ticks (about 35 attempts)
+  // misses every power-up roughly 2.5% of the time - which is what made this test
+  // depend on the RNG seed and on which tests ran before it. Pump until one lands
+  // instead; the cap is so generous (~900 attempts, a 1-in-10^41 miss) that
+  // reaching it means power-ups really are being suppressed.
   SpawningPool pool(400);
-  pumpPool(pool, 4000);
+  const int maxTicks = 100000;
+  for (int tick = 0; tick < maxTicks && countEntities(POWERUP_GROUP) == 0; tick++)
+  {
+    pumpPool(pool, 1);
+  }
 
   EXPECT_GT(countEntities(POWERUP_GROUP), 0)
       << "EN+/IQ+ pick-ups are exempt from the NPC spawner toggle";
+  EXPECT_EQ(countEntities(EGG_GROUP, 0), 0) << "...but the eggs are still suppressed";
 }
 
 TEST_F(SpawningPoolTest, PoolSpawnsExhaustItsBudget)

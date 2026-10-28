@@ -156,12 +156,10 @@ void HeadlessGameTest::resetSingletons()
   m_spawningPool.reset();
   m_entityManager.reset();
 
-  // Drain anything a previous test posted but never processed.
-  EntityMessageQueue* emq = EntityMessageQueue::getInstance();
-  while (!emq->empty())
-  {
-    emq->deleteMessageAtFront();
-  }
+  // Drop anything a previous test posted but never processed. EntityManager's
+  // constructor does this too (that is what protects a real "play again"), but
+  // a test that never calls startRound() would otherwise inherit stale messages.
+  EntityMessageQueue::getInstance()->clear();
 
   std::GameSettings* settings = std::GameSettings::getInstance();
   settings->setGameState(std::GameSettings::GAME_RUNNING);

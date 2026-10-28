@@ -15,6 +15,11 @@ EntityMessageQueue * EntityMessageQueue::getInstance()
 
 EntityMessageQueue::~EntityMessageQueue()
 {
+  clear();
+}
+
+void EntityMessageQueue::clear()
+{
   // delete any messages still in queue
   while (!m_msgQueue.empty())
   {
@@ -25,7 +30,6 @@ EntityMessageQueue::~EntityMessageQueue()
     }
     m_msgQueue.pop();
   }
-
 }
 
 void EntityMessageQueue::postDestroyMessage(int sender)

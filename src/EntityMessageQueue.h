@@ -24,6 +24,10 @@ class EntityMessageQueue
     EntityMessage * getMessageAtFront(); // messages returned from
     bool deleteMessageAtFront(); // pops and deletes message at front of queue
 
+    // Deletes every pending message. A message only means something to the world
+    // it was posted in, so a new world must not inherit the previous one's.
+    void clear();
+
     inline bool empty()
     {
       return m_msgQueue.empty();  // checks if the message queue is empty
