@@ -64,6 +64,18 @@ class AIProbe : public PlayerCharacterEntity
       return result;
     }
 
+    // Makes one decision and works out the instructions for it, as the bot
+    // would over its next few frames. Returns how many A* searches that took.
+    long searchesNeededToDecide()
+    {
+      const long before = PlayerCharacterEntity::pathSearchesRun();
+      clearGoalsAndInstructions();
+      determineGoals();
+      determineInstructionsFromGoal();
+      clearGoalsAndInstructions();
+      return PlayerCharacterEntity::pathSearchesRun() - before;
+    }
+
     void advance(int frames) { m_aiFrame += frames; }
 
     // First step of the A* route, (own tile) if none. Queued bomb instructions
@@ -462,21 +474,103 @@ TEST_F(AISeekEnergyTest, BotBelowTheLayLimitSurvivesBombingItselfOutAcrossTheRan
   }
 }
 
-TEST_F(AISeekEnergyTest, BotBelowTheLayLimitDoesNotBombNextToAnEgg)
+TEST_F(AISeekEnergyTest, BotBelowTheLayLimitBombsOutToAPickupTwoTilesAwayThatTheBlastDoesNotReach)
 {
-  // The blast would set the egg off, which would blast the bot a second time.
+  // The bomb's blast reaches only the four tiles around it, so a drop two
+  // tiles off is neither hurt by it nor a chain-blast risk. (Used to be refused
+  // for being "near" the bomb, and the bot never got out.)
+  for (int health = 12; health <= 14; health++)
+  {
+    startRound();
+    destroyPlayer(2);
+    clearBlocks();
+    setPlayerHealth(1, health);
+    spawnEntity(BLOCK, 0, 2, 1);
+    spawnEntity(BLOCK, 0, 1, 2);
+    spawnEntity(ENERGY_DROP, 0, 3, 1);
+
+    EXPECT_GT(framesUntilFewerThan(ENERGY_DROP, 1, 1500), 0)
+        << "health " << health << " never bombed out to the drop";
+    EXPECT_NE(player(1), nullptr) << "health " << health << " died getting out";
+  }
+}
+
+TEST_F(AISeekEnergyTest, BotBelowTheLayLimitBombsDownACorridorToADropBehindTheBlock)
+{
+  // The bomb has to be laid from (1,2), a tile away from where the bot starts,
+  // with the drop two tiles from it.
+  for (int health = 12; health <= 14; health++)
+  {
+    startRound();
+    destroyPlayer(2);
+    clearBlocks();
+    setPlayerHealth(1, health);
+    spawnEntity(BLOCK, 0, 2, 1);
+    spawnEntity(BLOCK, 0, 1, 3);
+    spawnEntity(ENERGY_DROP, 0, 1, 4);
+
+    EXPECT_GT(framesUntilFewerThan(ENERGY_DROP, 1, 1500), 0)
+        << "health " << health << " never bombed through the corridor block";
+    EXPECT_NE(player(1), nullptr) << "health " << health << " died getting out";
+  }
+}
+
+TEST_F(AISeekEnergyTest, BotBelowTheLayLimitDoesNotBombWithAnEggNextToTheBombTile)
+{
+  // Same corridor, but an enemy egg sits on (1,1), right beside the bomb tile
+  // (1,2). The blast would set it off, and its blast would hit the bot again:
+  // 9 + 8 is more than this bot has.
   setPlayerHealth(1, 13);
   spawnEntity(BLOCK, 0, 2, 1);
-  spawnEntity(BLOCK, 0, 1, 2);
-  spawnEntity(EGG3, 0, 1, 3); // a slow hatcher, two tiles from the bot
-  spawnEntity(ENERGY_DROP, 0, 1, 6);
+  spawnEntity(BLOCK, 0, 1, 3);
+  spawnEntity(EGG3, 0, 1, 1); // takes 280 frames to hatch
+  spawnEntity(ENERGY_DROP, 0, 1, 4);
 
-  for (int frame = 0; frame < 150; frame++)
+  for (int frame = 0; frame < 200; frame++)
   {
     runFrames(1);
-    ASSERT_EQ(countOfType(BOMB), 0) << "bot bombed with an egg in chain-blast range, frame " << frame;
+    ASSERT_EQ(countOfType(BOMB), 0) << "bot bombed beside an egg, frame " << frame;
   }
   EXPECT_EQ(player(1)->getHealth(), 13);
+}
+
+TEST_F(AISeekEnergyTest, BotAtTheSameCorridorBombsWhenNothingIsBesideTheBombTile)
+{
+  // The control for the test above: same board, no egg, and the bot bombs.
+  setPlayerHealth(1, 13);
+  spawnEntity(BLOCK, 0, 2, 1);
+  spawnEntity(BLOCK, 0, 1, 3);
+  spawnEntity(ENERGY_DROP, 0, 1, 4);
+
+  int bombedAt = -1;
+  for (int frame = 0; frame < 400 && bombedAt < 0; frame++)
+  {
+    runFrames(1);
+    if (countOfType(BOMB) > 0)
+    {
+      bombedAt = frame;
+    }
+  }
+  EXPECT_GE(bombedAt, 0);
+}
+
+TEST_F(AISeekEnergyTest, PlannerDoesNotSetOutOnARouteWhoseFirstBombWouldBeRefused)
+{
+  // The first block on the route is bombed from (1,2). With an enemy egg beside
+  // that tile a weak bot would refuse to lay the bomb, so it should not choose
+  // the route at all (and so waste attempts on it until it gives up).
+  spawnEntity(BLOCK, 0, 2, 1);
+  spawnEntity(BLOCK, 0, 1, 3);
+  spawnEntity(ENERGY_DROP, 0, 1, 4);
+
+  AIProbe weak(1, 1, 13);
+  EXPECT_EQ(weak.decide(), coord(1, 4)) << "control: nothing beside the bomb tile";
+
+  spawnEntity(EGG3, 0, 1, 1);
+  EXPECT_EQ(weak.decide(), coord(-1, -1));
+
+  AIProbe healthy(1, 1, 60); // 15+ health does not chain-blast check
+  EXPECT_EQ(healthy.decide(), coord(1, 4));
 }
 
 // -- route finding -------------------------------------------------------------
@@ -536,13 +630,26 @@ TEST_F(AISeekEnergyTest, PathSearchFreesEveryNodeItAllocates)
   }
 }
 
-TEST_F(AISeekEnergyTest, ManyUnreachablePickupsOnABigMapAreCheapToDecideAbout)
+TEST_F(AISeekEnergyTest, BotRanksPickupsByTheRouteToThemNotByStraightLineDistance)
+{
+  // From (1,3): the drop at (1,1) is two tiles off in a straight line but the
+  // block at (1,2) sends the bot round the long way (six tiles); the one at
+  // (1,6) is three tiles off and straight down the corridor.
+  spawnEntity(BLOCK, 0, 1, 2);
+  spawnEntity(ENERGY_DROP, 0, 1, 1);
+  spawnEntity(ENERGY_DROP, 0, 1, 6);
+
+  AIProbe bot(1, 3, 60);
+  EXPECT_EQ(bot.decide(), coord(1, 6));
+  EXPECT_EQ(bot.lastRoute, 0);
+}
+
+TEST_F(AISeekEnergyTest, ManyUnreachablePickupsOnABigMapNeedNoPathSearchToRuleOut)
 {
   // 20 pickups, each walled in, a bot too weak to bomb, on a map the size of the
-  // game's largest. Used to take minutes per decision (a full-map path search
-  // per pickup, each flooding the board with duplicate nodes); now one flood
-  // fill. Judged by node count rather than wall-clock time: no path search at
-  // all should be needed to see that none of them can be reached.
+  // game's largest. Used to take minutes per decision: a full-map A* search per
+  // pickup, each flooding the board with duplicate nodes. Now one flood fill
+  // classifies them all, and A* only ever runs for the pickup chosen.
   setMapSize(33, 25);
   startRound();
   destroyPlayer(2);
@@ -561,16 +668,40 @@ TEST_F(AISeekEnergyTest, ManyUnreachablePickupsOnABigMapAreCheapToDecideAbout)
 
   AIProbe bot(1, 1, 11);
   const auto started = std::chrono::steady_clock::now();
-  EXPECT_EQ(bot.decide(), coord(-1, -1));
+  EXPECT_EQ(bot.searchesNeededToDecide(), 0) << "nothing is reachable, so nothing to search for";
   const auto elapsed = std::chrono::steady_clock::now() - started;
+  EXPECT_EQ(bot.decide(), coord(-1, -1));
   EXPECT_EQ(PlayerCharacterEntity::livePathNodes(), 0);
-  // Generous: a decision takes well under a millisecond; the per-pickup path
-  // searches it replaced took two minutes on this board.
+  // Generous: this takes well under a millisecond. The counter is the real check.
   EXPECT_LT(std::chrono::duration_cast<std::chrono::seconds>(elapsed).count(), 5);
 
   setPlayerHealth(1, 11);
   runFrames(300);
   EXPECT_EQ(PlayerCharacterEntity::livePathNodes(), 0);
+}
+
+TEST_F(AISeekEnergyTest, ChoosingAReachablePickupRunsExactlyOnePathSearch)
+{
+  // Twenty candidates, one of them reachable: one search, for the chosen one.
+  setMapSize(33, 25);
+  startRound();
+  destroyPlayer(2);
+  clearBlocks();
+
+  int placed = 0;
+  for (int x = 5; x <= 29 && placed < 19; x += 4)
+  {
+    for (int y = 5; y <= 21 && placed < 19; y += 4)
+    {
+      boxIn(x, y);
+      spawnEntity(ENERGY_DROP, 0, x, y);
+      placed++;
+    }
+  }
+  spawnEntity(ENERGY_DROP, 0, 1, 9); // open ground
+
+  AIProbe bot(1, 1, 11);
+  EXPECT_EQ(bot.searchesNeededToDecide(), 1);
 }
 
 // -- determinism ---------------------------------------------------------------

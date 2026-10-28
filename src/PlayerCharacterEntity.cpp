@@ -15,11 +15,6 @@ static const int MIN_HEALTH_TO_LAY = 15;
 // much health left (the blast alone can take the full EXPLOSION_INITIAL_HEALTH).
 static const int MIN_HEALTH_AFTER_OWN_BLAST = 3;
 
-// A bomb's blast reaches one tile each way, and anything it sets off reaches one
-// tile further, so a bot about to bomb on low health wants nothing explosive
-// within this many tiles that could hit it a second time.
-static const int CHAIN_BLAST_RADIUS = 2;
-
 // How long (in AI frames) a bot stays off a pickup it gave up on before it is
 // willing to try again.
 static const int PICKUP_RETRY_FRAMES = 600;
@@ -447,6 +442,13 @@ bool PlayerCharacterEntity::seekPickup()
       const int id = c.info.id;
       const RouteInfo & route = routes[c.y * mapWidth + c.x];
 
+      // A route through blocks starts with a bomb; if that bomb would be
+      // refused when the time came, don't set out on it only to fail.
+      if (route.blocks > 0 && !bombSiteAcceptable(route.bombFromX, route.bombFromY))
+      {
+        continue;
+      }
+
       // Have we set out for this one before and got nowhere? Being picked again
       // with no fewer blocks to bomb and no fewer tiles to walk than last time
       // means the instructions for reaching it keep failing (or being
@@ -533,6 +535,21 @@ void PlayerCharacterEntity::floodRoutes(bool allowBlockBombing, vector<RouteInfo
         routes[next].reachable = true;
         routes[next].steps = routes[here].steps + 1;
         routes[next].blocks = routes[here].blocks + (block ? 1 : 0);
+        // where the first block on the way gets bombed from: the tile before it
+        if (routes[here].bombFromX >= 0)
+        {
+          routes[next].bombFromX = routes[here].bombFromX;
+          routes[next].bombFromY = routes[here].bombFromY;
+        }
+        else if (block)
+        {
+          routes[next].bombFromX = x;
+          routes[next].bombFromY = y;
+        }
+        else
+        {
+          routes[next].bombFromX = routes[next].bombFromY = -1;
+        }
         frontier.push(Entry(nextCost, pair<int, int>(ny, nx)));
       }
     }
@@ -571,37 +588,47 @@ bool PlayerCharacterEntity::canBombBlocks()
          >= MIN_HEALTH_AFTER_OWN_BLAST;
 }
 
-bool PlayerCharacterEntity::explosivesNear(int tileX, int tileY, int radius)
+bool PlayerCharacterEntity::explosivesAdjacent(int tileX, int tileY)
 {
-  // anything here goes off when a bomb next to it does, and then goes off again
-  // next to us: eggs (anyone's), mines, other bombs and energy drops
+  // A bomb's blast (GameEntity::explode) covers its own tile and the four
+  // orthogonal neighbours, so only something on those four tiles is set off by
+  // it - and what it sets off blasts the bomb's tile again, and whoever stands
+  // on it, a second time. Eggs (anyone's), mines and other bombs do that. Energy
+  // drops and powerups next to the bomb are no danger to us but are destroyed,
+  // and teammates' eggs are lost; safeLocationToBomb() already refuses those.
+  static const int dx[4] = { 1, -1, 0, 0 };
+  static const int dy[4] = { 0, 0, 1, -1 };
   AIGameView * view = AIGameView::getInstance();
-  GameSettings * settings = GameSettings::getInstance();
 
-  for (int x = tileX - radius; x <= tileX + radius; ++x)
+  for (int i = 0; i < 4; ++i)
   {
-    for (int y = tileY - radius; y <= tileY + radius; ++y)
+    const int x = tileX + dx[i];
+    const int y = tileY + dy[i];
+    if (x < 0 || x >= GameSettings::getInstance()->getMapWidth()
+        || y < 0 || y >= GameSettings::getInstance()->getMapHeight())
     {
-      if (abs(x - tileX) + abs(y - tileY) > radius
-          || x < 0 || x >= settings->getMapWidth()
-          || y < 0 || y >= settings->getMapHeight())
-      {
-        continue;
-      }
+      continue;
+    }
 
-      const vector<EntityInfo> & info = view->getEntityInfoAtLocation(x, y);
-      vector<EntityInfo>::const_iterator it;
-      for (it = info.begin(); it != info.end(); ++it)
+    const vector<EntityInfo> & info = view->getEntityInfoAtLocation(x, y);
+    vector<EntityInfo>::const_iterator it;
+    for (it = info.begin(); it != info.end(); ++it)
+    {
+      if (it->groupType == EGG_GROUP || it->type == MINE || it->type == BOMB)
       {
-        if (it->groupType == EGG_GROUP || it->type == MINE
-            || it->type == BOMB || it->type == ENERGY_DROP)
-        {
-          return true;
-        }
+        return true;
       }
     }
   }
   return false;
+}
+
+bool PlayerCharacterEntity::bombSiteAcceptable(int tileX, int tileY)
+{
+  // would a bomb laid here to clear a block be allowed? Same rules as the
+  // CREATE_ENTITY instruction applies when it comes to laying it.
+  return safeLocationToBomb(tileX, tileY)
+         && (m_health >= MIN_HEALTH_TO_LAY || !explosivesAdjacent(tileX, tileY));
 }
 
 void PlayerCharacterEntity::determineInstructionsFromGoal()
@@ -814,7 +841,7 @@ void PlayerCharacterEntity::processNextInstruction()
       {
         if (m_health < MIN_HEALTH_TO_LAY
             && !(ins->m_targetType == BOMB && canBombBlocks()
-                 && !explosivesNear(m_tileX, m_tileY, CHAIN_BLAST_RADIUS)))
+                 && !explosivesAdjacent(m_tileX, m_tileY)))
         {
           break;
         }
@@ -1304,10 +1331,18 @@ long PlayerCharacterEntity::livePathNodes()
   return s_livePathNodes;
 }
 
+static long s_pathSearches = 0;
+
+long PlayerCharacterEntity::pathSearchesRun()
+{
+  return s_pathSearches;
+}
+
 coord PlayerCharacterEntity::getNextTileFromPathfinding(int targetTileX, int targetTileY,
     bool allowBlockBombing)
 {
   // pretty standard A* pathfinding
+  ++s_pathSearches;
 
   // Every node is owned here, so all of them are freed however we leave. The
   // closed and open maps only point into it. (Nodes used to be deleted by hand

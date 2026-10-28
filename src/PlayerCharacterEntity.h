@@ -94,8 +94,11 @@ class PlayerCharacterEntity : public GameEntity
     bool seekPickup(); // queues GOAL_GET_POWERUP for the best reachable pickup, if any
     bool pickupIsHazardous(int tileX, int tileY);
     bool canBombBlocks(); // true if bombing our way through a block is affordable and survivable
-    // true if anything that would explode in a chain is within `radius` tiles
-    bool explosivesNear(int tileX, int tileY, int radius);
+    // true if a bomb here would set off an egg, mine or bomb next to it, whose
+    // blast would hit this tile a second time
+    bool explosivesAdjacent(int tileX, int tileY);
+    // true if a bomb laid here to clear a block would be allowed
+    bool bombSiteAcceptable(int tileX, int tileY);
     void determineInstructionsFromGoal();
     void processNextInstruction();
 
@@ -118,6 +121,8 @@ class PlayerCharacterEntity : public GameEntity
       bool reachable = false;
       int steps = 0;  // tiles walked
       int blocks = 0; // blocks that have to be bombed on the way
+      int bombFromX = -1; // tile the first of them is bombed from (-1 if none)
+      int bombFromY = -1;
     };
     void floodRoutes(bool allowBlockBombing, vector<RouteInfo> & routes);
     bool safeLocationToBomb(int tileX, int tileY); // returns false if a bomb here would be stupid
@@ -146,6 +151,8 @@ class PlayerCharacterEntity : public GameEntity
     // Path search nodes currently allocated, across all bots. Zero between
     // searches; anything else is a leak. For tests.
     static long livePathNodes();
+    // A* searches run so far, across all bots. For tests.
+    static long pathSearchesRun();
 
   protected:
     void clearGoalsAndInstructions(); // wipes m_insList and m_goalList
