@@ -1,7 +1,7 @@
 #include "EffectEntity.h"
 #include "SimRandom.h"
 
-EffectEntity::EffectEntity(int uniqueID, EntityType effectType, int atX, int atY, float offX, float offY)
+EffectEntity::EffectEntity(int uniqueID, EntityType effectType, int atX, int atY, fixed_t offX, fixed_t offY)
 {
   // constructor
   m_ID = uniqueID;

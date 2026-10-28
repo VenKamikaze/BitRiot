@@ -1,8 +1,7 @@
 #include "RocketFiredEntity.h"
-#include <cmath>
 
 RocketFiredEntity::RocketFiredEntity(int uniqueID, int playerNumber, int atX, int atY,
-                                     unsigned int flags, float fToX, float fToY)
+                                     unsigned int flags, int toX, int toY)
 {
   // constructor
   m_ID = uniqueID;
@@ -15,11 +14,16 @@ RocketFiredEntity::RocketFiredEntity(int uniqueID, int playerNumber, int atX, in
 
   m_tileX = atX;
   m_tileY = atY;
-  m_offsetX = 0.0F;
-  m_offsetY = 0.0F;
+  m_offsetX = 0;
+  m_offsetY = 0;
   m_health = 10;
 
-  m_velocity = (float)m_health/(float)DataReader::getInstance()->getIntFromFile("ROCKET_VELOCITY", "data/entity.txt");
+  // Rounded UP, not to nearest: 10/25 is 0.4 = 26214.4 in Q16.16, and 26214 is a
+  // hair short of it. With 26214 the rocket's offset reaches -0.4 one unit outside
+  // "within one step of the tile middle" and the rocket explodes a tick later than
+  // it did with floats (where noise happened to put it inside). 26215 keeps the
+  // rocket's timing identical to the float code, wall and block stops included.
+  m_velocity = fixedFromRatioCeil(m_health, DataReader::getInstance()->getIntFromFile("ROCKET_VELOCITY", "data/entity.txt"));
 
   m_dir = UP;
   m_currentAnimState = EntityRenderer::IDLE;
@@ -47,8 +51,8 @@ RocketFiredEntity::RocketFiredEntity(int uniqueID, int playerNumber, int atX, in
     m_currentAnimState = EntityRenderer::MOVE_RIGHT;
   }
   // set target tile
-  m_toX = (int)fToX; // although a cast from an int to a float back to an int isn't ideal,
-  m_toY = (int)fToY; // it saves us from introducing rarely used parameters in EntityFactory
+  m_toX = toX;
+  m_toY = toY;
 
   GameSound::playSound(GameSound::ROCKET_FIRED);
 }
@@ -75,13 +79,13 @@ void RocketFiredEntity::update()
   moveInDirection(m_dir);
 
   // if in destination, explode
-  if ((m_tileX == m_toX) && (m_tileY == m_toY) && (abs(m_offsetX) <= m_velocity) && (abs(m_offsetY) <= m_velocity))
+  if ((m_tileX == m_toX) && (m_tileY == m_toY) && (fixedAbs(m_offsetX) <= m_velocity) && (fixedAbs(m_offsetY) <= m_velocity))
   {
     explode();
   }
 
   // if in center of tile, and next tile is a block, explode
-  if ((abs(m_offsetX) <= m_velocity) && (abs(m_offsetY) <= m_velocity))
+  if ((fixedAbs(m_offsetX) <= m_velocity) && (fixedAbs(m_offsetY) <= m_velocity))
   {
     // get next tile
     Map * map = Map::getInstance();

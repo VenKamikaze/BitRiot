@@ -353,8 +353,8 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
     {
       if (m_playerPointers.at(i) && m_playerPointers.at(i)->isAlive())
       {
-        int destX = (m_playerPointers.at(i)->getTileX() * Map::TILE_WIDTH) + (int)(m_playerPointers.at(i)->getOffsetX() * (Map::TILE_WIDTH/2));
-        int destY = (m_playerPointers.at(i)->getTileY() * Map::TILE_WIDTH) + (int)(m_playerPointers.at(i)->getOffsetY() * (Map::TILE_WIDTH/2)) + Map::TILE_WIDTH + 2;
+        int destX = m_playerPointers.at(i)->pixelX();
+        int destY = m_playerPointers.at(i)->pixelY() + Map::TILE_WIDTH + 2;
 
         destRect.x = destX;
         destRect.y = destY;
@@ -362,7 +362,7 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
         destRect.h = 3;
 
         int maxWidth=Map::TILE_WIDTH;
-        int width=   ((float)health/100.0f) *maxWidth;
+        int width=   (int)(((float)health/100.0f) *maxWidth);
         if (width > maxWidth)
         {
           width = maxWidth;

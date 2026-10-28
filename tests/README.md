@@ -40,8 +40,9 @@ Two things do have to be supplied:
 
 CMake was restructured so this could work: everything except `main.cpp` now
 builds into a `bitriot_core` static library, which both `BitRiot` and
-`bitriot_tests` link. The game stays on C++14; the test target uses C++17
-because GoogleTest ≥ 1.17 requires it.
+`bitriot_tests` link. The whole project is pinned to C++17 (`CMAKE_CXX_STANDARD`, extensions
+off, in the top-level `CMakeLists.txt`) so every compiler agrees; GoogleTest ≥ 1.17
+requires it anyway.
 
 ## Writing a test
 
@@ -132,10 +133,33 @@ Do a seed sweep before trusting a new test:
 for s in $(seq 1 200); do BITRIOT_TEST_SEED=$s ./tests/bitriot_tests >/dev/null 2>&1 || echo "seed $s"; done
 ```
 
+The sweep is run from `build/` and needs the `BitRiot` target built at least
+once: building it creates the `data` and `assets` symlinks the tests read through
+(`cmake --build build -j8` builds everything). A tests-only build directory
+(`--target bitriot_tests`) has no symlinks, so run its binary from the source root.
+
 `std::cout` is swallowed during each test because `MickLogger`'s DEBUG level is
 compile-time enabled in Debug builds and is very chatty. Set
 `BITRIOT_TEST_VERBOSE=1` to see it. `std::cerr` is left alone, so warnings and
 errors (including `DynamicMap::moveEntityOnMap` desync warnings) always show.
+
+## Fixed-point maths
+
+The simulation uses `fixed_t` (`src/Fixed.h`, Q16.16 in an `int32_t`) for every
+offset and velocity, so there is no floating point in sim code and
+`FixedPointSourceGuardTest` keeps it that way. In tests:
+
+- Floats are fine in test code (a float reference model is how the conversion was
+  checked), but write expectations about the sim as raw integers: 65536 is 1.0,
+  and a tile is 2.0 wide (offsets run from -1 to +1).
+- Read positions the way the screen does: `entity.pixelX()` / `pixelY()` (tile
+  origin plus `fixedToPixels(offset, TILE_WIDTH / 2)`, truncating toward zero).
+- `getOffsetX()` and friends return `fixed_t`. The real hazard is the other
+  direction: `setOffsetX(0.5f)`, or any float passed to a `fixed_t` parameter,
+  compiles and silently truncates to 0. `-Wall` does not flag it; the library is
+  built with `-Wfloat-conversion`, which does, so keep the build free of those
+  warnings. The source guard cannot see an `auto` that carries a double, or an
+  int converted to a float parameter either.
 
 ## Singleton state — read this before adding tests
 
@@ -251,7 +275,7 @@ files, run, swap back.
 
 ## Coverage today
 
-155 tests across eleven files:
+186 tests across fourteen files:
 
 - `WinConditionTest.cpp` — free-for-all, team and co-op round-end rules,
   including the co-op "board cleared and pool exhausted" win and the
@@ -307,6 +331,30 @@ files, run, swap back.
   nothing), that a damage effect and the scoreboard win text each draw exactly
   one cosmetic value and no sim value, and a source guard that fails if libc
   `rand`/`srand` or a std random engine appears in `src/`.
+
+- `FixedMathTest.cpp` - fixed-point maths (brief 02b): `src/Fixed.h` rounding
+  (positive, negative, exact ties, round-up for the rocket, saturation, zero and negative denominators),
+  `fixedToPixels` equal to the old `(int)(offset * 16)` for every offset in range;
+  every entity type's velocity at initial, max and low health against raw
+  expected values (with the float value and ticks per tile alongside); 240
+  movement rows (4 directions, open and blocked, assorted start offsets) from an
+  independent integer model of the original algorithm; walls stopping entities
+  exactly on the middle of a tile; `nearTileCenter` at the +-velocity boundary for
+  players and `SimpleBrain`.
+- `FixedPointSimTest.cpp` - characterisation of the sim's maths, written against
+  the float code first and kept passing across the conversion: scripted walks
+  compared tick by tick, pixel by pixel with a float reference model of the old
+  `moveInDirection` kept in the test, self-steering robots/drones/wall eaters/egg
+  thieves, the tick and tile each rocket explodes on, a rocket created by message
+  and a rocket fired by a real spinner exploding in its target tile, and the A* routes on 48 block layouts (2592
+  searches). Where fixed-point differs from float the test says why next to the
+  expected value. `BITRIOT_FIXED_DUMP=1` prints the digests for regenerating them.
+- `FixedPointGuardTest.cpp` - no `float`, `double`, floating literal, `<cmath>` or
+  libm call in any `src/` file that is not on its allowlist (each entry has a
+  reason; a new file counts as simulation code until listed). The scan, and the
+  line-level exception for the rumble call in `PlayerCharacterEntity.cpp`
+  (removed by brief 04b), are tested too. Shared scanning helpers are in
+  `support/SourceScan.h`.
 
 Not covered: rendering (rasterisation), input and device assignment, and
 specific weapon behaviours and most AI behaviours. Input would need real refactoring to test;

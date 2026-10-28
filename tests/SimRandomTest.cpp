@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "support/HeadlessGame.h"
+#include "support/SourceScan.h"
 
 #include "GameSettings.h"
 #include "RmlUI/binders/ScoreBoardBinder.h"
@@ -346,41 +347,6 @@ TEST_F(SimRoundTest, TheScoreboardWinTextDrawsOneCosmeticValueAndNoSimValue)
 }
 
 // -- source guard -------------------------------------------------------------
-
-// Strips // and /* */ comments and string literals (crudely, which is enough
-// for a guard) so commentary about rand() does not trip it.
-std::string stripCommentsAndStrings(const std::string& in)
-{
-  std::string out;
-  size_t i = 0;
-  while (i < in.size())
-  {
-    if (in.compare(i, 2, "//") == 0)
-    {
-      while (i < in.size() && in[i] != '\n') i++;
-    }
-    else if (in.compare(i, 2, "/*") == 0)
-    {
-      const size_t end = in.find("*/", i + 2);
-      i = (end == std::string::npos) ? in.size() : end + 2;
-    }
-    else if (in[i] == '"')
-    {
-      i++;
-      while (i < in.size() && in[i] != '"')
-      {
-        if (in[i] == '\\') i++;
-        i++;
-      }
-      i++;
-    }
-    else
-    {
-      out += in[i++];
-    }
-  }
-  return out;
-}
 
 TEST(SimRandomSourceGuardTest, NoLibcRandomNumbersInSrc)
 {

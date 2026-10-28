@@ -18,7 +18,7 @@ Each brief (`NN-*.md`) is one unit of work, sized for a single implement → rev
 |---|---|---|---|---|
 | 01 | [Round lifecycle hygiene](01-round-lifecycle-hygiene.md) | BitRiot | — | done |
 | 02 | [Seeded simulation RNG](02-sim-rng.md) | BitRiot | 01 | done |
-| 02b | [Fixed-point simulation maths](02b-fixed-point-sim.md) | BitRiot | 01, 02 | todo |
+| 02b | [Fixed-point simulation maths](02b-fixed-point-sim.md) | BitRiot | 01, 02 | done (play-test pending) |
 | 03a | [`Simulation`, `MatchConfig` and state hash](03a-simulation-and-state-hash.md) | BitRiot | 01, 02, 02b | todo |
 | 03b | [Surface-free sim library and frame loop](03b-surface-free-sim-and-frame-loop.md) | BitRiot | 03a | todo |
 | 04a | [Input sampling and `step(inputs)`](04a-input-sampling.md) | BitRiot | 03b | todo |
@@ -58,16 +58,16 @@ Don't reopen these inside a brief. If one turns out to be wrong, stop and raise 
   - A session working on 06, 10 or 11 needs the vnet repo attached. Briefs 07 and 12 need both repos.
 - **D4. The relay is written in Go**, using `quic-go/webtransport-go` plus a WebSocket library, built as one static binary. Python is fine for test tools. Not Java/Spring.
 - **D5. No SDL_net.** Native netplay uses vnet's native UDP backend. vnet also has an in-process **loopback backend** with simulated delay and loss, for tests.
-- **D6. Fixed-point sim maths, then prove it.** *(The user's answer to Q2, Oct 2026.)*
-  - The sim uses no floating point. Brief **02b** converts offsets, velocities, the A\* keys and the rocket target to integer fixed-point (Q16.16), before 03a's state hash exists. About 12 files change, and play feel shifts very slightly, so 02b carries a play-test.
-  - Floats remain only outside the sim (rendering, rumble, UI, audio), and a test stops them creeping back into sim files.
+- **D6. Fixed-point sim maths, then prove it.** *(The user's answer to Q2, Oct 2026. Brief 02b landed it.)*
+  - The sim uses no floating point. Offsets, velocities, the A\* open-list keys and the rocket's target are integers: `fixed_t`, Q16.16, in `src/Fixed.h` (brief **02b**, done; it carries a play-test because play feel shifts very slightly).
+  - Floats remain only outside the sim (rendering and HUD, rumble, window scaling, RmlUi, audio). `FixedPointSourceGuardTest` fails if a `float`, `double`, floating literal or libm call appears in any `src/` file that is not on its allowlist, so they cannot creep back. (It is a text scan: it cannot see an `auto` carrying a double or an implicit int-to-float conversion, so brief 03b adds an object-level check on the `bitriot_sim` objects.)
   - Brief **05b** still runs **before** netplay is built, as a confirmation gate for other sources of divergence (UB, libstdc++ vs libc++, evaluation order):
     - GCC vs Clang;
     - an aggressive-flags build;
     - optionally aarch64 under qemu;
     - wasm under Node.
   - A 05b failure is a bug to find and fix, not a reason to revisit D6. If it can't be fixed within 05b's scope, stop and ask the user.
-  - *(History: the plan first kept floats, guarded by `-ffp-contract=off` and no `-ffast-math`, with fixed-point only as a contingency. The sim's float maths is only add, subtract, divide and compare (code-facts §4), so that would probably have worked, but the user preferred integers by construction.)*
+  - *(History: the plan first kept floats, guarded by `-ffp-contract=off` and no `-ffast-math`, with fixed-point only as a contingency. The sim's float maths is only add, subtract, divide and compare, so that would probably have worked, but the user preferred integers by construction.)*
 - **D7. A loss-tolerant, transport-agnostic protocol.** Every input packet repeats all unacknowledged inputs, so it works unchanged over lossy UDP and over reliable WebSocket.
 - **D8. Input delay with no rollback.** A local input sampled at tick T applies at T+D. If a tick's inputs are missing, the sim stalls rather than guessing.
   - D is chosen by the host from measured round-trip times at match start (07). D=3 is the default for tests and loopback only.

@@ -40,10 +40,12 @@ void EntityMessageQueue::postDestroyMessage(int sender)
 }
 
 void EntityMessageQueue::postCreateMessage(int typeParam, int teamParam, int atX, int atY,
-    unsigned int flags, float offsetX, float offsetY)
+    unsigned int flags, fixed_t offsetX, fixed_t offsetY,
+    int targetX, int targetY)
 {
   EntityMessage * msg = new EntityMessage(EntityMessage::CREATE_ENTITY, 0, typeParam,
-                                          teamParam, atX, atY, 1, 1, flags, offsetX, offsetY);
+                                          teamParam, atX, atY, 1, 1, flags, offsetX, offsetY,
+                                          targetX, targetY);
 
   m_msgQueue.push(msg);
 }

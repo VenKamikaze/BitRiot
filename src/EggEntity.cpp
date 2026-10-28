@@ -41,8 +41,8 @@ EggEntity::EggEntity(int uniqueID, int playerNumber, EntityType eggType,
 
   m_tileX = atX;
   m_tileY = atY;
-  m_offsetX = 0.0F;
-  m_offsetY = 0.0F;
+  m_offsetX = 0;
+  m_offsetY = 0;
   m_health = 1;
   m_velocity = 0;
   m_currentAnimState = EntityRenderer::IDLE;

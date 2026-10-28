@@ -10,6 +10,7 @@
 #include "EntityMessageQueue.h"
 #include <assert.h>
 #include "GameSound.h"
+#include "Fixed.h"
 
 class GameEntity
 {
@@ -42,15 +43,15 @@ class GameEntity
     {
       return m_tileY;
     }
-    inline const float getOffsetX()
+    inline const fixed_t getOffsetX()
     {
       return m_offsetX;
     }
-    inline const float getOffsetY()
+    inline const fixed_t getOffsetY()
     {
       return m_offsetY;
     }
-    inline const float getVelocity()
+    inline const fixed_t getVelocity()
     {
       return m_velocity;
     }
@@ -97,6 +98,19 @@ class GameEntity
       return m_groupType;
     }
 
+    // Where the sprite's top-left corner is drawn on the play field, in pixels.
+    // An offset of -1..+1 is half a tile either side of the tile's origin; the
+    // fraction is truncated toward zero, as the old (int)(offset * n) cast did.
+    // Rendering reads the sim through these and never writes back.
+    inline int pixelX() const
+    {
+      return (m_tileX * Map::TILE_WIDTH) + fixedToPixels(m_offsetX, Map::TILE_WIDTH / 2);
+    }
+    inline int pixelY() const
+    {
+      return (m_tileY * Map::TILE_WIDTH) + fixedToPixels(m_offsetY, Map::TILE_WIDTH / 2);
+    }
+
     inline void setTileX(int x)
     {
       m_tileX = x;
@@ -105,11 +119,11 @@ class GameEntity
     {
       m_tileY = y;
     }
-    inline void setOffsetX(float x)
+    inline void setOffsetX(fixed_t x)
     {
       m_offsetX = x;
     }
-    inline void setOffsetY(float y)
+    inline void setOffsetY(fixed_t y)
     {
       m_offsetY = y;
     }
@@ -141,9 +155,9 @@ class GameEntity
     // object data
     int m_ID; // each entity has a unique id
     int m_tileX, m_tileY; // which absolute tile the entity is closest to
-    float m_offsetX, m_offsetY; // offset from tile cordinate with value -1 < offset < 1
+    fixed_t m_offsetX, m_offsetY; // offset from tile cordinate with value -1 < offset < 1 (Q16.16, see Fixed.h)
     int m_health; // init to a starting value, lose health when hit or even when move
-    float m_velocity; // should be speed really, but i prefer this,
+    fixed_t m_velocity; // offset units per tick (Q16.16; a tile is 2.0 wide); should be speed really, but i prefer this,
     // also should be a function of health for most entities
     int m_playerNumber; // 0 is monsters, 1 for player1, 2 for player2 etc...
 

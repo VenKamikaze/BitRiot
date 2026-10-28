@@ -44,7 +44,7 @@ void GameEntity::moveInDirection(DIRECTION d)
   //EntityRenderer * er = getEntityRenderer();
 
 
-  float thisMoveVelocity = m_velocity;
+  fixed_t thisMoveVelocity = m_velocity;
 
   switch (d)
   {
@@ -62,10 +62,10 @@ void GameEntity::moveInDirection(DIRECTION d)
 
       // now try and move up in Y
       // if offsetX is not 0.0, move towards center
-      if (m_offsetX < 0.0f)
+      if (m_offsetX < 0)
       {
         // move +ve in x direction
-        if (m_offsetX + thisMoveVelocity <= 0.0f)
+        if (m_offsetX + thisMoveVelocity <= 0)
         {
           // need to move entire move in x direction
           m_offsetX += thisMoveVelocity;
@@ -73,17 +73,17 @@ void GameEntity::moveInDirection(DIRECTION d)
         else
         {
           // only move part of move in x direction
-          float remainingMove = m_offsetX + thisMoveVelocity;
-          m_offsetX = 0.0f;
+          fixed_t remainingMove = m_offsetX + thisMoveVelocity;
+          m_offsetX = 0;
           m_offsetY -= remainingMove;
         }
       }
       else
       {
-        if (m_offsetX > 0.0f)
+        if (m_offsetX > 0)
         {
           // move +ve in x direction
-          if (m_offsetX - thisMoveVelocity >= 0.0f)
+          if (m_offsetX - thisMoveVelocity >= 0)
           {
             // need to move entire move in x direction
             m_offsetX -= thisMoveVelocity;
@@ -91,8 +91,8 @@ void GameEntity::moveInDirection(DIRECTION d)
           else
           {
             // only move part of move in x direction
-            float remainingMove = thisMoveVelocity - m_offsetX;
-            m_offsetX = 0.0f;
+            fixed_t remainingMove = thisMoveVelocity - m_offsetX;
+            m_offsetX = 0;
             m_offsetY -= remainingMove;
           }
 
@@ -126,10 +126,10 @@ void GameEntity::moveInDirection(DIRECTION d)
 
       // now try and move down in Y
       // if offsetX is not 0.0, move towards center
-      if (m_offsetX < 0.0f)
+      if (m_offsetX < 0)
       {
         // move +ve in x direction
-        if (m_offsetX + thisMoveVelocity <= 0.0f)
+        if (m_offsetX + thisMoveVelocity <= 0)
         {
           // need to move entire move in x direction
           m_offsetX += thisMoveVelocity;
@@ -137,17 +137,17 @@ void GameEntity::moveInDirection(DIRECTION d)
         else
         {
           // only move part of move in x direction
-          float remainingMove = m_offsetX + thisMoveVelocity;
-          m_offsetX = 0.0f;
+          fixed_t remainingMove = m_offsetX + thisMoveVelocity;
+          m_offsetX = 0;
           m_offsetY += remainingMove;
         }
       }
       else
       {
-        if (m_offsetX > 0.0f)
+        if (m_offsetX > 0)
         {
           // move +ve in x direction
-          if (m_offsetX - thisMoveVelocity >= 0.0f)
+          if (m_offsetX - thisMoveVelocity >= 0)
           {
             // need to move entire move in x direction
             m_offsetX -= thisMoveVelocity;
@@ -155,8 +155,8 @@ void GameEntity::moveInDirection(DIRECTION d)
           else
           {
             // only move part of move in x direction
-            float remainingMove = thisMoveVelocity - m_offsetX;
-            m_offsetX = 0.0f;
+            fixed_t remainingMove = thisMoveVelocity - m_offsetX;
+            m_offsetX = 0;
             m_offsetY += remainingMove;
           }
 
@@ -191,10 +191,10 @@ void GameEntity::moveInDirection(DIRECTION d)
 
       // now try and move left in X
       // if offsetY is not 0.0, move towards center
-      if (m_offsetY < 0.0f)
+      if (m_offsetY < 0)
       {
         // move +ve in y direction
-        if (m_offsetY + thisMoveVelocity <= 0.0f)
+        if (m_offsetY + thisMoveVelocity <= 0)
         {
           // need to move entire move in y direction
           m_offsetY += thisMoveVelocity;
@@ -202,17 +202,17 @@ void GameEntity::moveInDirection(DIRECTION d)
         else
         {
           // only move part of move in y direction
-          float remainingMove = m_offsetY + thisMoveVelocity;
-          m_offsetY = 0.0f;
+          fixed_t remainingMove = m_offsetY + thisMoveVelocity;
+          m_offsetY = 0;
           m_offsetX -= remainingMove;
         }
       }
       else
       {
-        if (m_offsetY > 0.0f)
+        if (m_offsetY > 0)
         {
           // move +ve in y direction
-          if (m_offsetY - thisMoveVelocity >= 0.0f)
+          if (m_offsetY - thisMoveVelocity >= 0)
           {
             // need to move entire move in y direction
             m_offsetY -= thisMoveVelocity;
@@ -220,8 +220,8 @@ void GameEntity::moveInDirection(DIRECTION d)
           else
           {
             // only move part of move in y direction
-            float remainingMove = thisMoveVelocity - m_offsetY;
-            m_offsetY = 0.0f;
+            fixed_t remainingMove = thisMoveVelocity - m_offsetY;
+            m_offsetY = 0;
             m_offsetX -= remainingMove;
           }
 
@@ -253,10 +253,10 @@ void GameEntity::moveInDirection(DIRECTION d)
         }
       }
 
-      if (m_offsetY < 0.0f)
+      if (m_offsetY < 0)
       {
         // move +ve in y direction
-        if (m_offsetY + thisMoveVelocity <= 0.0f)
+        if (m_offsetY + thisMoveVelocity <= 0)
         {
           // need to move entire move in y direction
           m_offsetY += thisMoveVelocity;
@@ -264,17 +264,17 @@ void GameEntity::moveInDirection(DIRECTION d)
         else
         {
           // only move part of move in y direction
-          float remainingMove = m_offsetY + thisMoveVelocity;
-          m_offsetY = 0.0f;
+          fixed_t remainingMove = m_offsetY + thisMoveVelocity;
+          m_offsetY = 0;
           m_offsetX += remainingMove;
         }
       }
       else
       {
-        if (m_offsetY > 0.0f)
+        if (m_offsetY > 0)
         {
           // move +ve in y direction
-          if (m_offsetY - thisMoveVelocity >= 0.0f)
+          if (m_offsetY - thisMoveVelocity >= 0)
           {
             // need to move entire move in y direction
             m_offsetY -= thisMoveVelocity;
@@ -282,8 +282,8 @@ void GameEntity::moveInDirection(DIRECTION d)
           else
           {
             // only move part of move in x direction
-            float remainingMove = thisMoveVelocity - m_offsetY;
-            m_offsetY = 0.0f;
+            fixed_t remainingMove = thisMoveVelocity - m_offsetY;
+            m_offsetY = 0;
             m_offsetX += remainingMove;
           }
 
@@ -308,33 +308,33 @@ void GameEntity::moveInDirection(DIRECTION d)
   // see if tile positions need updating
   EntityMessageQueue * emq = EntityMessageQueue::getInstance();
 
-  if (m_offsetX < -1.0f)
+  if (m_offsetX < -FIXED_ONE)
   {
-    m_offsetX+= 2.0f;
+    m_offsetX += 2 * FIXED_ONE;
     m_tileX--;
     emq->postMoveMessage(m_ID, m_tileX + 1, m_tileY, m_tileX, m_tileY);
   }
   else
   {
-    if (m_offsetX > 1.0f)
+    if (m_offsetX > FIXED_ONE)
     {
-      m_offsetX-= 2.0f;
+      m_offsetX -= 2 * FIXED_ONE;
       m_tileX++;
       emq->postMoveMessage(m_ID, m_tileX - 1, m_tileY, m_tileX, m_tileY);
     }
   }
 
-  if (m_offsetY < -1.0f)
+  if (m_offsetY < -FIXED_ONE)
   {
-    m_offsetY += 2.0f;
+    m_offsetY += 2 * FIXED_ONE;
     m_tileY--;
     emq->postMoveMessage(m_ID, m_tileX, m_tileY + 1, m_tileX, m_tileY);
   }
   else
   {
-    if (m_offsetY > 1.0f)
+    if (m_offsetY > FIXED_ONE)
     {
-      m_offsetY -= 2.0f;
+      m_offsetY -= 2 * FIXED_ONE;
       m_tileY++;
       emq->postMoveMessage(m_ID, m_tileX, m_tileY - 1, m_tileX, m_tileY);
     }
@@ -355,8 +355,8 @@ bool GameEntity::render(SDL_Surface* dest)
 {
   EntityRenderer * er = getEntityRenderer();
 
-  int destX = (m_tileX * Map::TILE_WIDTH) + (int)(m_offsetX * (Map::TILE_WIDTH/2));
-  int destY = (m_tileY * Map::TILE_WIDTH) + (int)(m_offsetY * (Map::TILE_WIDTH/2));
+  int destX = pixelX();
+  int destY = pixelY();
 
   // Render in the entity's alliance-team colour (teammates share a colour), not
   // its per-player slot colour. getTeamNumber() -> the same colour-table index.

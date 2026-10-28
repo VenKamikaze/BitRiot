@@ -3,7 +3,8 @@
 #include "EntityFactory.h"
 
 shared_ptr<GameEntity> EntityFactory::getEntity(EntityType t, int playerNumber, int atX, int atY,
-                                      unsigned int flags, float offsetX, float offsetY)
+                                      unsigned int flags, fixed_t offsetX, fixed_t offsetY,
+                                      int targetX, int targetY)
 {
   // first get new ID
   int id = m_idCount;
@@ -49,7 +50,7 @@ shared_ptr<GameEntity> EntityFactory::getEntity(EntityType t, int playerNumber, 
       entity = std::make_shared<RocketSpinEntity>(id, playerNumber, atX, atY);
       break;
     case ROCKET_FIRED:
-      entity = std::make_shared<RocketFiredEntity>(id, playerNumber, atX, atY, flags, offsetX, offsetY);
+      entity = std::make_shared<RocketFiredEntity>(id, playerNumber, atX, atY, flags, targetX, targetY);
       break;
     case EXPLOSION:
       entity = std::make_shared<ExplosionEntity>(id, atX, atY);

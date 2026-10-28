@@ -272,8 +272,6 @@ class GameSettings
     int mapWidth = Map::MAP_WIDTH;   // not changeable outside of runtime flags for now
     int mapHeight = Map::MAP_HEIGHT; // not changeable outside of runtime flags for now
 
-    float mapRatio = 1.3077;
-    
 
 };
 

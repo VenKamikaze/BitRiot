@@ -13,8 +13,8 @@ RocketSpinEntity::RocketSpinEntity(int uniqueID, int playerNumber, int atX, int 
 
   m_tileX = atX;
   m_tileY = atY;
-  m_offsetX = 0.0F;
-  m_offsetY = 0.0F;
+  m_offsetX = 0;
+  m_offsetY = 0;
   m_health = 1;
   m_velocity = 0;
   m_currentAnimState = EntityRenderer::IDLE;
@@ -149,7 +149,7 @@ void RocketSpinEntity::fireAt(const DIRECTION d, const int destX, const int dest
   EntityMessageQueue * emq = EntityMessageQueue::getInstance();
 
   emq->postDestroyMessage(m_ID);
-  emq->postCreateMessage(ROCKET_FIRED, m_playerNumber, m_tileX, m_tileY, flags, (float)destX, (float)destY);
+  emq->postCreateMessage(ROCKET_FIRED, m_playerNumber, m_tileX, m_tileY, flags, 0, 0, destX, destY);
 }
 
 bool RocketSpinEntity::enemyInTile(const int tileX, const int tileY) const

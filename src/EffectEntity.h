@@ -9,7 +9,7 @@
 class EffectEntity : public GameEntity
 {
   public:
-    EffectEntity(int uniqueID, EntityType effectType, int atX, int atY, float offsetX = 0.0f, float offsetY = 0.0f);
+    EffectEntity(int uniqueID, EntityType effectType, int atX, int atY, fixed_t offsetX = 0, fixed_t offsetY = 0);
     ~EffectEntity() {}
 
     // overridden virtual methods

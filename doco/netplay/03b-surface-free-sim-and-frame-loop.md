@@ -35,7 +35,7 @@ Two structural changes that later briefs build on:
    - `bitriot_sim`: sim sources only.
    - `bitriot_core`: game, UI and render, linking `bitriot_sim`.
    - `bitriot_tests` links what it needs. Move the sim-only tests to depend on `bitriot_sim` where that is easy.
-   - Keep C++14 for the game targets.
+   - Keep the pinned C++17 (`CMAKE_CXX_STANDARD` in the top-level `CMakeLists.txt`, extensions off) for every target and compiler.
 3. **Frame loop.**
    - Replace `consoleMain()`'s busy-wait cap with a `frame()` function. It:
      1. pumps events

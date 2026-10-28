@@ -11,7 +11,7 @@ class SimpleMovingEntity : public GameEntity
 {
   public:
     SimpleMovingEntity(int uniqueID, int playerNumber, int atX, int atY,
-                       float offsetX = 0.0f, float offsetY = 0.0f);
+                       fixed_t offsetX = 0, fixed_t offsetY = 0);
     virtual ~SimpleMovingEntity();
 
     // overridden virtual methods

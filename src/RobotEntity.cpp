@@ -20,7 +20,7 @@ RobotEntity::RobotEntity(int uniqueID, int playerNumber, int atX, int atY, unsig
 
   m_health = DataReader::getInstance()->getIntFromFile("ROBOT_INITIAL_HEALTH", "data/entity.txt");
   m_velocityModifier = DataReader::getInstance()->getIntFromFile("ROBOT_VELOCITY_MODIFIER", "data/entity.txt");
-  m_velocity = ((float)m_health + 2)/m_velocityModifier;
+  m_velocity = fixedFromRatio(m_health + 2, m_velocityModifier);
 
   // set action counter thing
   m_minActionCount = DataReader::getInstance()->getIntFromFile("ROBOT_MIN_ACTION_COUNT", "data/entity.txt");

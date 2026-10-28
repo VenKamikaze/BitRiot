@@ -1,6 +1,14 @@
 cmake_minimum_required(VERSION 3.15)
 project(BitRiot)
 
+# One language standard for the game, the tests and every compiler (GCC, Clang,
+# Emscripten), so they cannot disagree by each using its own default (gnu++17 on
+# current GCC). GoogleTest >= 1.17 needs C++17 anyway. Extensions off: plain
+# -std=c++17.
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 #set(CMAKE_BUILD_TYPE Release)
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Debug)
@@ -139,17 +147,13 @@ target_include_directories(bitriot_core PUBLIC
   ${PROJECT_SOURCE_DIR}/src
 )
 
-# PRIVATE, not PUBLIC: the game code is C++14, but GoogleTest >= 1.17 requires
-# C++17. The test target raises its own standard; mixing the two is fine as
-# long as both are built by the same compiler/libstdc++.
-target_compile_features(bitriot_core PRIVATE cxx_std_14)
-
 # INTERFACE half propagates to the test target: it includes the same headers,
 # so it needs the same cstdint workaround. The warning/optimisation flags stay
 # PRIVATE to the library.
 target_compile_options(bitriot_core PRIVATE
   -Wall
   -Wno-comment
+  -Wfloat-conversion
   $<$<CONFIG:Debug>:-ggdb -O0>
   $<$<CONFIG:Release>:-O2>
 )
@@ -163,7 +167,6 @@ target_compile_options(bitriot_core PRIVATE -include cstdint)
 
 add_executable(BitRiot ./src/main.cpp)
 target_link_libraries(BitRiot PRIVATE bitriot_core)
-target_compile_features(BitRiot PRIVATE cxx_std_14)
 
 # PUBLIC on the library so both BitRiot and the test executable inherit these.
 if(MINGW)

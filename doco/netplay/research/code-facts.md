@@ -107,29 +107,36 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 
 ## 4. Floats
 
-> **Decision (Q2, Oct 2026):** the sim converts to fixed-point in brief 02b, so this section describes the code *before* 02b. See 02b's Outcome for what landed.
+> **Done by brief 02b (Oct 2026):** the simulation uses no floating point. This section describes what landed; the old float analysis is kept at the end for the record. See 02b's Outcome for the velocity table, the behaviour changes and the remaining non-sim floats.
 
-**Where floats appear**
+**Representation** (`src/Fixed.h`)
 
-- `m_offsetX/Y` and `m_velocity` (GameEntity.h:144, :146).
-- Movement (`GameEntity::moveInDirection`, GameEntity.cpp:31-335) uses only add, subtract and compare.
-- Velocity is an int converted to float, then a plus or divide (PlayerCharacterEntity.cpp:22, :66; SimpleMovingEntity.cpp:27, :85; Robot :22; Drone :15; WallEater :13; RocketFired :22).
-- Compares in `nearTileCenter` (PlayerCharacterEntity.cpp:1026-1040; SimpleBrain.cpp:191-205), and RocketFired `abs()` (RocketFiredEntity.cpp:78, :84).
-- The A* open list uses float keys.
-- The rocket's target tile is passed through the float offset parameters (RocketSpinEntity.cpp:152 → RocketFiredEntity.cpp:50-51).
+- `fixed_t` is an `int32_t` in Q16.16 (`FIXED_ONE` = 65536). It is named `fixed_t`, not `fixed`, because `using namespace std;` is in force in several headers and `std::fixed` (the iostream manipulator) makes `fixed` ambiguous.
+- An entity's offset from the middle of its tile still runs from -1 to +1 (a tile is 2.0 wide), and velocities are in the same units per tick.
+- Helpers, with their rounding rules in the header comment: `fixedFromInt`, `fixedFromRatio` (int32 arguments; nearest, exact ties away from zero, symmetric for negatives, a non-positive denominator gives 0, saturates), `fixedFromRatioCeil` (rounds toward +infinity; the rocket's velocity), `fixedAbs`, `fixedToPixels` (truncates toward zero, like the old `(int)` cast; `>>` would floor).
 
-**The only multiply is in rendering** (GameEntity.cpp:350-351). IEEE-754 binary32 add, subtract, divide and compare therefore give bit-identical results on x86-64 SSE, aarch64 and wasm, provided there is:
+**Where fixed values live**
 
-- no `-ffast-math`
-- no x87 code (a 32-bit MinGW build needs `-msse2 -mfpmath=sse`)
-- `-ffp-contract=off` as a defensive measure. GCC defaults to `fast` under gnu++14, though there is nothing to fuse today.
+- `GameEntity::m_offsetX/Y` and `m_velocity` are `fixed_t`; so are the `getOffsetX/Y`/`getVelocity` accessors, the setters, `SimpleBrain`'s references, and the offset parameters of `EntityMessage`, `EntityMessageQueue::postCreateMessage`, `EntityFactory::getEntity`, `EffectEntity` and `SimpleMovingEntity`.
+- Velocities are `fixedFromRatio(health + k, modifier)`: player `k=10`, robot/drone/wall eater/egg thief `k=2`, rocket `10 / ROCKET_VELOCITY` rounded **up** (`fixedFromRatioCeil`, 26215 not 26214, which keeps the float code's rocket timing exactly). They are recomputed from health every tick for players and monsters.
+- `GameEntity::moveInDirection` keeps its branch structure; it only adds, subtracts and compares.
+- The rocket's target tile travels as two plain ints (`targetX`, `targetY`) through `postCreateMessage` / `EntityMessage` / `EntityFactory` into `RocketFiredEntity`; it no longer rides in the float offset parameters.
+- `RocketFiredEntity`'s arrival checks called the **float** `std::abs` (checked by a `static_assert` on the old code), so nothing was being truncated; they are now `fixedAbs`.
+- The A* open list is `map<pair<int,int>, Node*>` keyed by `(cost + heuristic, tie-break)`. The tie-break is the next free number counting up from 0, which is how the float key took the next free `+0.001f`; it is **not** insertion order (see below).
 
-**Current flags** (CMakeLists.txt): `-Wall -Wno-comment`; Debug (the default build type) `-ggdb -O0`; Release `-O2`; `-include cstdint`.
+**Things the old float code did that matter**
 
-**Fixed-point conversion scope, if it is ever needed**
+- `abs(m_offsetX) <= m_velocity` for rockets, and `nearTileCenter` for players and `SimpleBrain`, compare an offset with exactly one step. For many velocities (a robot's 4/19, a rocket's 0.4) the offset lands on exactly +-velocity on some ticks, and the float answer was decided by rounding noise. The fixed answer is deterministic but can differ from the float one. Rockets are pinned to the float timing by rounding their velocity up; monsters' turns and bots' step-finish ticks can differ by a tick (02b Outcome).
+- The A* float keys: totals that collided were nudged by `+0.001f` until free. A slot freed when a node left the list was reused by the next node with that total, so the order is *not* plain insertion order. A key of `(total, insertion sequence)` gives different routes (the 02b test shows it); `(total, next free number)` gives identical ones.
 
-- About 12 files, mostly mechanical: GameEntity, SimpleBrain, SimpleMovingEntity, PlayerCharacterEntity, Robot, Drone, WallEater, RocketFired, EffectEntity, EntityMessage (.h:16, :52-79), EntityMessageQueue (.h:21), EntityFactory, and the A* key.
-- Velocities such as 110/400 are not exactly representable in fixed-point, so a conversion slightly changes how play feels.
+**Where floats remain in `src/`** (none in sim code): rumble strength (`MickSDLUtil`, `GameRunningSDLInput`, and one literal at the call in `PlayerCharacterEntity::onCollision` until brief 04b removes rumble from the sim), HUD drawing (`InfoPanel.cpp`), window scaling (`MickSDLRenderer.cpp`), and RmlUi's API (`src/RmlUI`). `FixedPointSourceGuardTest` scans `src/` and keeps it that way (a text scan: it cannot see an `auto` carrying a double or an implicit int to float conversion, e.g. `MenuSDLRenderer.cpp`'s `ProcessMouseWheel(event.wheel.y, ...)`; brief 03b should add an object-level check); the allowlist is in `tests/FixedPointGuardTest.cpp`.
+
+**Current flags** (CMakeLists.txt): `-Wall -Wno-comment`; Debug (the default build type) `-ggdb -O0`; Release `-O2`; `-include cstdint`. With no floating point in the sim, `-ffp-contract=off` and the `-ffast-math` rejection are not needed for determinism and were not added. The project is pinned to C++17 (`CMAKE_CXX_STANDARD`, extensions off) for every target, and the library builds with `-Wfloat-conversion`.
+
+**Before 02b (history)**
+
+- The sim's float maths was only add, subtract, divide and compare, so IEEE-754 binary32 would have given bit-identical results on x86-64 SSE, aarch64 and wasm provided there was no `-ffast-math`, no x87 code, and `-ffp-contract=off` as a defensive measure. The only multiply was in rendering. The user chose fixed-point up front instead (README D6).
+- Files that changed in the conversion: GameEntity, SimpleBrain, SimpleMovingEntity, PlayerCharacterEntity, Robot, Drone, WallEater, RocketFired, RocketSpin, EffectEntity, EntityMessage, EntityMessageQueue, EntityFactory, EntityManager (the create call), InfoPanel (the pixel conversion), plus the zero-offset initialisers in the static entities.
 
 ## 5. Iteration order: deterministic
 

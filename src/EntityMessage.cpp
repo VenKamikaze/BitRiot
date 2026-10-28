@@ -4,7 +4,7 @@
 EntityMessage::EntityMessage(int type, int sender, int typeParam,
                              int teamParam, int toX, int toY,
                              int fromX, int fromY, unsigned int EMflags,
-                             float offX, float offY)
+                             fixed_t offX, fixed_t offY, int targetX, int targetY)
   : m_type(type),
     m_senderID(sender),
     m_typeToCreate(typeParam),
@@ -15,5 +15,7 @@ EntityMessage::EntityMessage(int type, int sender, int typeParam,
     m_fromY(fromY),
     m_entityMessageFlags(EMflags),
     m_offsetX(offX),
-    m_offsetY(offY)
+    m_offsetY(offY),
+    m_targetX(targetX),
+    m_targetY(targetY)
 {}
