@@ -2,6 +2,31 @@
 
 #include "PlayerCharacterEntity.h"
 
+#include <algorithm>
+#include <functional>
+#include <memory>
+#include <queue>
+
+// Below this health a bot stops laying anything (eggs, blocks, mines, rockets):
+// it cannot afford the cost.
+static const int MIN_HEALTH_TO_LAY = 15;
+
+// A bot standing in its own bomb's blast must come out of it with at least this
+// much health left (the blast alone can take the full EXPLOSION_INITIAL_HEALTH).
+static const int MIN_HEALTH_AFTER_OWN_BLAST = 3;
+
+// How long (in AI frames) a bot stays off a pickup it gave up on before it is
+// willing to try again.
+static const int PICKUP_RETRY_FRAMES = 600;
+
+// AIGoal::m_targetAmount for GOAL_GET_POWERUP: how the pickup is to be reached
+static const int ROUTE_WALK = 0;
+static const int ROUTE_THROUGH_BLOCKS = 1;
+
+// How many times in a row a bot may set out for the same pickup without getting
+// any closer before it concludes the pickup is not really reachable.
+static const int MAX_PICKUP_ATTEMPTS = 3;
+
 PlayerCharacterEntity::PlayerCharacterEntity(int uniqueID, int playerNumber, int atX, int atY, unsigned int flags)
 {
   // constructor
@@ -68,6 +93,7 @@ void PlayerCharacterEntity::update()
   if (m_controlledByAI == true)
   {
     // this is a bot character, here's the AI! :D
+    m_aiFrame++;
 
     // set check surroundings timer to one of two primes
     m_checkTimer--;
@@ -237,83 +263,11 @@ void PlayerCharacterEntity::die()
 
 void PlayerCharacterEntity::determineGoals()
 {
-  AIGameView * view = AIGameView::getInstance();
-
-  // check surrounding area
-  static const int RANGE = 4;
-  bool goalFound = false;
-  for (int x = m_tileX - RANGE; x <= m_tileX + RANGE; ++x)
+  // a reachable powerup / energy drop beats everything else
+  if (seekPickup())
   {
-    if (x < 0 || x >= GameSettings::getInstance()->getMapWidth())
-    {
-      continue;
-    }
-    for (int y = m_tileY - RANGE; y <= m_tileY + RANGE; ++y)
-    {
-      if (y < 0 || y >= GameSettings::getInstance()->getMapHeight())
-      {
-        continue;
-      }
-
-      if (x == m_tileX && y == m_tileY)
-      {
-        continue;
-      }
-
-      // should be optimised with an outward-spiralling search pattern,
-      // and first powerup found will be approx. nearest
-      // (as much as the current *solution* is "nearest")
-
-      vector<EntityInfo> info = view->getEntityInfoAtLocation(x, y);
-      vector<EntityInfo>::iterator it;
-
-      for (it = info.begin(); it != info.end(); ++it)
-      {
-        // is there a powerup?
-        if (it->groupType == POWERUP_GROUP || it->type == ENERGY_DROP)
-        {
-          // add to goals if this is closest powerup
-          list<AIGoal *>::iterator goalIt;
-          for (goalIt = m_goalList.begin(); goalIt != m_goalList.end(); ++goalIt)
-          {
-            AIGoal * oldGoal = *goalIt;
-            if (oldGoal->m_goalType == AIGoal::GOAL_GET_POWERUP)
-            {
-              int oldDistance, newDistance;
-              oldDistance = abs( oldGoal->m_tileX - getTileX() )
-                            + abs( oldGoal->m_tileY - getTileY() );
-              newDistance = abs( x - getTileX() ) + abs( y - getTileY() );
-
-              if (newDistance < oldDistance)
-              {
-                // replace old goal with closer one
-                m_goalList.remove(oldGoal);
-                delete oldGoal;
-
-                m_goalList.push_front(new AIGoal(AIGoal::GOAL_GET_POWERUP, 0, x, y, it->type, it->id));
-
-                goalFound = true;
-                break;
-              }
-              // else ignore this powerup for now
-
-            } // end if goal type == GET_POWERUP
-
-          } // end for loop on goalList
-
-          if (!goalFound)
-          {
-            m_goalList.push_front(new AIGoal(AIGoal::GOAL_GET_POWERUP, 0, x, y, it->type, it->id));
-          }
-          return;
-        }
-
-
-
-      } // end iteration of entity info
-
-    } // end for y
-  } // end for x
+    return;
+  }
 
   // other goals
   if (m_health < 45)
@@ -364,6 +318,317 @@ void PlayerCharacterEntity::determineGoals()
 
 
   }
+}
+
+bool PlayerCharacterEntity::seekPickup()
+{
+  AIGameView * view = AIGameView::getInstance();
+  GameSettings * settings = GameSettings::getInstance();
+  const int mapWidth = settings->getMapWidth();
+
+  // forgive pickups we gave up on long enough ago
+  for (map<int, int>::iterator given = m_abandonedPickups.begin();
+       given != m_abandonedPickups.end();)
+  {
+    if (m_aiFrame - given->second >= PICKUP_RETRY_FRAMES)
+    {
+      m_pickupAttempts.erase(given->first);
+      m_abandonedPickups.erase(given++);
+    }
+    else
+    {
+      ++given;
+    }
+  }
+
+  // A bot too weak to lay anything cannot make its own energy, so a pickup is
+  // its only way back: look across the whole map for one that restores energy,
+  // not just in the neighbourhood.
+  static const int RANGE = 4;
+  const bool desperate = m_health < MIN_HEALTH_TO_LAY;
+  const int range = desperate
+                    ? std::max(mapWidth, settings->getMapHeight())
+                    : RANGE;
+
+  struct Candidate
+  {
+    int x, y;
+    EntityInfo info;
+  };
+  vector<Candidate> candidates;
+
+  for (int x = m_tileX - range; x <= m_tileX + range; ++x)
+  {
+    if (x < 0 || x >= mapWidth)
+    {
+      continue;
+    }
+    for (int y = m_tileY - range; y <= m_tileY + range; ++y)
+    {
+      if (y < 0 || y >= settings->getMapHeight())
+      {
+        continue;
+      }
+
+      if (x == m_tileX && y == m_tileY)
+      {
+        continue;
+      }
+
+      const vector<EntityInfo> & info = view->getEntityInfoAtLocation(x, y);
+      vector<EntityInfo>::const_iterator it;
+
+      for (it = info.begin(); it != info.end(); ++it)
+      {
+        bool wanted;
+        if (desperate)
+        {
+          wanted = (it->type == ENERGY_DROP || it->type == ENPLUS_POWERUP);
+        }
+        else
+        {
+          wanted = (it->groupType == POWERUP_GROUP || it->type == ENERGY_DROP);
+        }
+
+        if (wanted && m_abandonedPickups.find(it->id) == m_abandonedPickups.end()
+            && !pickupIsHazardous(x, y))
+        {
+          Candidate c = { x, y, *it };
+          candidates.push_back(c);
+        }
+      }
+    }
+  }
+
+  if (candidates.empty())
+  {
+    return false;
+  }
+
+  // First choice is a pickup we can simply walk to. Only if there is none do we
+  // consider ones behind blocks, which means bombing our way through.
+  for (int pass = 0; pass < 2; ++pass)
+  {
+    const bool throughBlocks = (pass == 1);
+    if (throughBlocks && !canBombBlocks())
+    {
+      break;
+    }
+
+    // one flood fill classifies every candidate
+    vector<RouteInfo> routes;
+    floodRoutes(throughBlocks, routes);
+
+    // The reachable ones, nearest first by the cost of the route itself (as the
+    // path search weighs it: a block counts as 6 tiles). Ties keep scan order,
+    // so the choice is deterministic.
+    vector<pair<int, int> > reachable; // (route cost, index into candidates)
+    for (size_t i = 0; i < candidates.size(); ++i)
+    {
+      const RouteInfo & route = routes[candidates[i].y * mapWidth + candidates[i].x];
+      if (route.reachable)
+      {
+        reachable.push_back(pair<int, int>(route.steps + 5 * route.blocks, (int) i));
+      }
+    }
+    std::stable_sort(reachable.begin(), reachable.end(),
+                     [](const pair<int, int> & a, const pair<int, int> & b)
+                     { return a.first < b.first; });
+
+    vector<pair<int, int> >::iterator r;
+    for (r = reachable.begin(); r != reachable.end(); ++r)
+    {
+      const Candidate & c = candidates[r->second];
+      const int id = c.info.id;
+      const RouteInfo & route = routes[c.y * mapWidth + c.x];
+
+      // A route through blocks starts with a bomb; if that bomb would be
+      // refused when the time came, don't set out on it only to fail.
+      if (route.blocks > 0 && !bombSiteAcceptable(route.bombFromX, route.bombFromY))
+      {
+        continue;
+      }
+
+      // Have we set out for this one before and got nowhere? Being picked again
+      // with no fewer blocks to bomb and no fewer tiles to walk than last time
+      // means the instructions for reaching it keep failing (or being
+      // interrupted), so stop trying rather than loop forever.
+      PickupAttempt & attempt = m_pickupAttempts[id];
+      if (route.blocks < attempt.bestBlocks
+          || (route.blocks == attempt.bestBlocks && route.steps < attempt.bestSteps))
+      {
+        attempt.bestBlocks = route.blocks;
+        attempt.bestSteps = route.steps;
+        attempt.failures = 0;
+      }
+      else if (++attempt.failures >= MAX_PICKUP_ATTEMPTS)
+      {
+        m_abandonedPickups[id] = m_aiFrame;
+        continue;
+      }
+
+      m_goalList.push_front(new AIGoal(AIGoal::GOAL_GET_POWERUP,
+                                       throughBlocks ? ROUTE_THROUGH_BLOCKS : ROUTE_WALK,
+                                       c.x, c.y, c.info.type, id));
+      return true;
+    }
+  }
+
+  return false;
+}
+
+void PlayerCharacterEntity::floodRoutes(bool allowBlockBombing, vector<RouteInfo> & routes)
+{
+  // Dijkstra from our tile with the same costs the A* search uses (1 per tile,
+  // 5 extra for a block). Ties resolve by (cost, y, x), so it is deterministic.
+  const int width = GameSettings::getInstance()->getMapWidth();
+  const int height = GameSettings::getInstance()->getMapHeight();
+  Map * map = Map::getInstance();
+
+  routes.assign(width * height, RouteInfo());
+  vector<int> cost(width * height, -1);
+
+  typedef pair<int, pair<int, int> > Entry; // (cost, (y, x))
+  priority_queue<Entry, vector<Entry>, greater<Entry> > frontier;
+
+  const int start = m_tileY * width + m_tileX;
+  routes[start].reachable = true;
+  cost[start] = 0;
+  frontier.push(Entry(0, pair<int, int>(m_tileY, m_tileX)));
+
+  static const int dx[4] = { 1, -1, 0, 0 };
+  static const int dy[4] = { 0, 0, 1, -1 };
+
+  while (!frontier.empty())
+  {
+    const Entry top = frontier.top();
+    frontier.pop();
+    const int x = top.second.second;
+    const int y = top.second.first;
+    const int here = y * width + x;
+    if (top.first > cost[here])
+    {
+      continue; // stale queue entry
+    }
+
+    for (int i = 0; i < 4; ++i)
+    {
+      const int nx = x + dx[i];
+      const int ny = y + dy[i];
+      if (nx < 0 || nx >= width || ny < 0 || ny >= height)
+      {
+        continue;
+      }
+
+      const Map::StaticTile tile = map->staticTileAt(nx, ny);
+      if (tile == Map::WALL || (tile != Map::EMPTY && !allowBlockBombing))
+      {
+        continue;
+      }
+
+      const bool block = (tile == Map::BLOCK);
+      const int next = ny * width + nx;
+      const int nextCost = top.first + 1 + (block ? 5 : 0);
+      if (cost[next] == -1 || nextCost < cost[next])
+      {
+        cost[next] = nextCost;
+        routes[next].reachable = true;
+        routes[next].steps = routes[here].steps + 1;
+        routes[next].blocks = routes[here].blocks + (block ? 1 : 0);
+        // where the first block on the way gets bombed from: the tile before it
+        if (routes[here].bombFromX >= 0)
+        {
+          routes[next].bombFromX = routes[here].bombFromX;
+          routes[next].bombFromY = routes[here].bombFromY;
+        }
+        else if (block)
+        {
+          routes[next].bombFromX = x;
+          routes[next].bombFromY = y;
+        }
+        else
+        {
+          routes[next].bombFromX = routes[next].bombFromY = -1;
+        }
+        frontier.push(Entry(nextCost, pair<int, int>(ny, nx)));
+      }
+    }
+  }
+}
+
+bool PlayerCharacterEntity::pickupIsHazardous(int tileX, int tileY)
+{
+  // don't walk onto a pickup that is about to be blown up, is being blown up,
+  // or sits on an enemy mine
+  const vector<EntityInfo> & info = AIGameView::getInstance()->getEntityInfoAtLocation(tileX, tileY);
+  vector<EntityInfo>::const_iterator it;
+  for (it = info.begin(); it != info.end(); ++it)
+  {
+    if (it->type == BOMB || it->type == EXPLOSION
+        || (it->type == MINE && !isTeammatePlayer(it->playerNumber)))
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool PlayerCharacterEntity::canBombBlocks()
+{
+  if (m_health >= MIN_HEALTH_TO_LAY)
+  {
+    return true;
+  }
+
+  // Too weak to lay things in general, but a bomb is the only way out of a
+  // walled-in spot. Fine as long as we come out of its cost and blast alive.
+  DataReader * data = DataReader::getInstance();
+  return m_health - data->getIntFromFile("BOMB_COST", "data/player.txt")
+                  - data->getIntFromFile("EXPLOSION_INITIAL_HEALTH", "data/entity.txt")
+         >= MIN_HEALTH_AFTER_OWN_BLAST;
+}
+
+bool PlayerCharacterEntity::explosivesAdjacent(int tileX, int tileY)
+{
+  // A bomb's blast (GameEntity::explode) covers its own tile and the four
+  // orthogonal neighbours, so only something on those four tiles is set off by
+  // it - and what it sets off blasts the bomb's tile again, and whoever stands
+  // on it, a second time. Eggs (anyone's), mines and other bombs do that. Energy
+  // drops and powerups next to the bomb are no danger to us but are destroyed,
+  // and teammates' eggs are lost; safeLocationToBomb() already refuses those.
+  static const int dx[4] = { 1, -1, 0, 0 };
+  static const int dy[4] = { 0, 0, 1, -1 };
+  AIGameView * view = AIGameView::getInstance();
+
+  for (int i = 0; i < 4; ++i)
+  {
+    const int x = tileX + dx[i];
+    const int y = tileY + dy[i];
+    if (x < 0 || x >= GameSettings::getInstance()->getMapWidth()
+        || y < 0 || y >= GameSettings::getInstance()->getMapHeight())
+    {
+      continue;
+    }
+
+    const vector<EntityInfo> & info = view->getEntityInfoAtLocation(x, y);
+    vector<EntityInfo>::const_iterator it;
+    for (it = info.begin(); it != info.end(); ++it)
+    {
+      if (it->groupType == EGG_GROUP || it->type == MINE || it->type == BOMB)
+      {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+bool PlayerCharacterEntity::bombSiteAcceptable(int tileX, int tileY)
+{
+  // would a bomb laid here to clear a block be allowed? Same rules as the
+  // CREATE_ENTITY instruction applies when it comes to laying it.
+  return safeLocationToBomb(tileX, tileY)
+         && (m_health >= MIN_HEALTH_TO_LAY || !explosivesAdjacent(tileX, tileY));
 }
 
 void PlayerCharacterEntity::determineInstructionsFromGoal()
@@ -543,8 +808,9 @@ void PlayerCharacterEntity::determineInstructionsFromGoal()
             currentGoal->m_tileX, currentGoal->m_tileY);
         m_insList.push_front(target);
 
-        // go to powerup with demolition enabled
-        coord next = getNextTileFromPathfinding(currentGoal->m_tileX, currentGoal->m_tileY, true);
+        // go to powerup, with demolition only if the route needs it
+        coord next = getNextTileFromPathfinding(currentGoal->m_tileX, currentGoal->m_tileY,
+                                                currentGoal->m_targetAmount == ROUTE_THROUGH_BLOCKS);
 
         // seeing as we've already calculated it...
         AIInstruction * firstGoTo = new AIInstruction(AIInstruction::GO_TO,
@@ -573,7 +839,9 @@ void PlayerCharacterEntity::processNextInstruction()
   {
     case AIInstruction::CREATE_ENTITY:
       {
-        if (m_health < 15)
+        if (m_health < MIN_HEALTH_TO_LAY
+            && !(ins->m_targetType == BOMB && canBombBlocks()
+                 && !explosivesAdjacent(m_tileX, m_tileY)))
         {
           break;
         }
@@ -1039,19 +1307,62 @@ bool PlayerCharacterEntity::nearTileCenter()
   }
 }
 
+// Path search nodes alive right now, across every search (see livePathNodes()).
+static long s_livePathNodes = 0;
+
 struct Node
 {
+  Node() : heuristic(0), cost(0), parent(NULL) { ++s_livePathNodes; }
+  ~Node() { --s_livePathNodes; }
+
   coord location;
   int heuristic;
   int cost;
 
   Node * parent;
+
+private:
+  Node(const Node &);
+  Node & operator=(const Node &);
 };
+
+long PlayerCharacterEntity::livePathNodes()
+{
+  return s_livePathNodes;
+}
+
+static long s_pathSearches = 0;
+
+long PlayerCharacterEntity::pathSearchesRun()
+{
+  return s_pathSearches;
+}
 
 coord PlayerCharacterEntity::getNextTileFromPathfinding(int targetTileX, int targetTileY,
     bool allowBlockBombing)
 {
   // pretty standard A* pathfinding
+  ++s_pathSearches;
+
+  // Every node is owned here, so all of them are freed however we leave. The
+  // closed and open maps only point into it. (Nodes used to be deleted by hand
+  // and several paths missed: replaced duplicates, the goal node, anything
+  // still in flight when the goal was found.)
+  vector<std::unique_ptr<Node> > nodes;
+  struct NodeMaker
+  {
+    vector<std::unique_ptr<Node> > & nodes;
+    Node * make(int x, int y, int heuristic, int cost, Node * parent)
+    {
+      nodes.push_back(std::unique_ptr<Node>(new Node));
+      Node * n = nodes.back().get();
+      n->location = coord(x, y);
+      n->heuristic = heuristic;
+      n->cost = cost;
+      n->parent = parent;
+      return n;
+    }
+  } maker = { nodes };
 
   map<coord, Node *> closed; // previously explored nodes
   map<float, Node *> open; // nodes to be explored, with approx heuristic + cost mapping
@@ -1059,12 +1370,8 @@ coord PlayerCharacterEntity::getNextTileFromPathfinding(int targetTileX, int tar
   coord result(m_tileX, m_tileY);
 
   // set initial node
-  Node * initial = new Node;
-  initial->location.first = m_tileX;
-  initial->location.second = m_tileY;
-  initial->heuristic = abs(m_tileX - targetTileX) + abs(m_tileY - targetTileY);
-  initial->cost = 0;
-  initial->parent = NULL;
+  Node * initial = maker.make(m_tileX, m_tileY,
+                              abs(m_tileX - targetTileX) + abs(m_tileY - targetTileY), 0, NULL);
 
   // add to open
   open.insert(pair<float, Node *>((float)initial->heuristic, initial));
@@ -1107,6 +1414,17 @@ coord PlayerCharacterEntity::getNextTileFromPathfinding(int targetTileX, int tar
           lastPreBlockX = walker->location.first;
           lastPreBlockY = walker->location.second;
         }
+      }
+
+      // The loop above stops at the first step without looking at it, so a
+      // block right beside us was never noticed. It has to be bombed from the
+      // tile we are standing on.
+      if (walker->parent == initial
+          && Map::getInstance()->staticTileAt(walker->location.first, walker->location.second)
+          == Map::BLOCK)
+      {
+        lastPreBlockX = m_tileX;
+        lastPreBlockY = m_tileY;
       }
 
       if (lastPreBlockX != -1)
@@ -1167,31 +1485,24 @@ coord PlayerCharacterEntity::getNextTileFromPathfinding(int targetTileX, int tar
           continue;
         }
 
-        // ok to move here, set node data
-        Node * child = new Node;
-        child->cost = current->cost + 1;
+        // ok to move here, work out the node data
+        int cost = current->cost + 1;
         if (Map::getInstance()->staticTileAt(x, y) == Map::BLOCK)
         {
-          child->cost += 5;  // extra cost for going through blocks
+          cost += 5;  // extra cost for going through blocks
         }
-        child->location.first = x;
-        child->location.second = y;
-        child->heuristic = abs(x - targetTileX) + abs(y - targetTileY);
-        child->parent = current;
+        const int heuristic = abs(x - targetTileX) + abs(y - targetTileY);
+        const coord location(x, y);
 
         // is this location already on closed list?
-        if (closed.find(child->location) != closed.end())
+        map<coord, Node *>::iterator closedIt = closed.find(location);
+        if (closedIt != closed.end())
         {
-          Node * onClosed = closed.find(child->location)->second;
-
           // is this child a better path?
-          if ((child->cost + child->heuristic) < (onClosed->cost + onClosed->heuristic))
+          if ((cost + heuristic) < (closedIt->second->cost + closedIt->second->heuristic))
           {
             // update with this better node
-            closed.erase(onClosed->location);
-            delete onClosed;
-            onClosed = NULL;
-            closed.insert(pair<coord, Node *>(child->location, child));
+            closedIt->second = maker.make(x, y, heuristic, cost, current);
           }
 
           // done with this child node
@@ -1199,67 +1510,40 @@ coord PlayerCharacterEntity::getNextTileFromPathfinding(int targetTileX, int tar
         }
 
         // is this location already on open list?
+        float total = (float)(cost + heuristic);
+        bool onOpenList = false;
         map<float, Node *>::iterator openIt;
-        bool childReplacedOnList = false;
-        float total = (float)(child->cost + child->heuristic);
         for (openIt = open.begin(); openIt != open.end(); ++openIt)
         {
           Node * onOpen = openIt->second;
 
-          if (onOpen->location == child->location)
+          if (onOpen->location == location)
           {
-            // this is the same location
+            onOpenList = true;
             // better path?
-            if ((child->cost + child->heuristic) < (onOpen->cost + onOpen->heuristic))
+            if ((cost + heuristic) < (onOpen->cost + onOpen->heuristic))
             {
-              // update with this better node
+              // replace it with this better node
               open.erase(openIt);
-              delete onOpen;
-              onOpen = NULL;
-              // try to add to open map
-              while (!childReplacedOnList)
-              {
-                if (open.find(total) == open.end())
-                {
-                  // ok to insert
-                  open.insert(pair<float, Node *>(total, child));
-                  childReplacedOnList = true;
-                }
-                else
-                {
-                  total += 0.001f;  // slightly inc total for different mapping
-                }
-              } // end while
-
-              if (childReplacedOnList)
-              {
-                break;
-              }
+              onOpenList = false;
             }
-
+            break;
           }
         } // end for to find same location
-        if (childReplacedOnList)
+
+        if (onOpenList)
         {
+          // already queued by a path at least as good, nothing to add
           continue;
         }
 
-        // at this stage, child is not on open or closed, add to open
-        bool addedToOpen = false;
-        while (!addedToOpen)
+        // add to open map, slightly increasing the total if needed so that
+        // different nodes get different keys
+        Node * child = maker.make(x, y, heuristic, cost, current);
+        while (!open.insert(pair<float, Node *>(total, child)).second)
         {
-          if (open.find(total) == open.end())
-          {
-            // ok to insert
-            open.insert(pair<float, Node *>(total, child));
-            addedToOpen = true;
-          }
-          else
-          {
-            total += 0.001f;  // slightly inc total for different mapping
-          }
-        } // end while
-
+          total += 0.001f;
+        }
 
       } // end for 0..3
 
@@ -1269,22 +1553,6 @@ coord PlayerCharacterEntity::getNextTileFromPathfinding(int targetTileX, int tar
 
     } // end if not current goal node
   } // end while open list !empty
-
-  // delete outstanding mem allocations
-  while (!open.empty())
-  {
-    Node * n = open.begin()->second;
-    open.erase(open.begin());
-    delete n;
-    n = NULL;
-  }
-  while (!closed.empty())
-  {
-    Node * n = closed.begin()->second;
-    closed.erase(closed.begin());
-    delete n;
-    n = NULL;
-  }
 
   return result;
 }

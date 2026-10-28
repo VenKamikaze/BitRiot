@@ -193,6 +193,12 @@ class HeadlessGameTest : public ::testing::Test
     // anything that cares about what happens to a dead player's entity.
     void destroyPlayer(int playerNumber);
 
+    // Sets a player's health directly. Health is protected state on
+    // GameEntity with no public setter, and AI behaviour is full of health
+    // thresholds, so tests of "what does a badly hurt bot do?" need this.
+    // Does not kill the player if given 0 - use destroyPlayer() for that.
+    void setPlayerHealth(int playerNumber, int health);
+
     // Posts a create message and processes the queue, returning immediately
     // with the entity live on the map. playerNumber 0 is the CPU/hostile
     // owner; 1..N are the player slots.

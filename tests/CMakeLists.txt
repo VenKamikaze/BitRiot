@@ -12,6 +12,7 @@ set(TEST_SOURCES
   GameSettingsTest.cpp
   SpawningPoolTest.cpp
   EntitySimTest.cpp
+  AISeekEnergyTest.cpp
 )
 
 add_executable(bitriot_tests ${TEST_SOURCES})
