@@ -43,7 +43,7 @@ Each brief (`NN-*.md`) is one unit of work, sized for a single implement → rev
 
 **Sim/render split.** 03b owns the frame-loop refactor: the shared `frame()`, the fixed-tick accumulator, and render without stepping. 04a, 07 and 09 build on it. Don't restructure `main.cpp` or `GameEngine::runEngine` elsewhere.
 
-**In-flight work to merge first.** `fix/ai-seek-energy` changes the bot AI in `src/PlayerCharacterEntity.cpp`, where many `rand()` calls live. Brief 02 must start from a `claude` branch that already contains it.
+**Merged prerequisite.** `fix/ai-seek-energy` (merged in 7d6cf6a) changed the bot AI in `src/PlayerCharacterEntity.cpp`, where many `rand()` calls live. Brief 02 must re-find those call sites rather than trust the line numbers in code-facts §2. It also added the energy-seeking flood fill and a leak-free A*; see `tests/AISeekEnergyTest.cpp`.
 
 ## Settled decisions
 
