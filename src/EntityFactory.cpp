@@ -87,6 +87,11 @@ shared_ptr<GameEntity> EntityFactory::getEntity(EntityType t, int playerNumber, 
 
 EntityFactory::EntityFactory()
 {
+  resetIds();
+}
+
+void EntityFactory::resetIds()
+{
   m_idCount = 1;
 }
 

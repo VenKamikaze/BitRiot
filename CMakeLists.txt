@@ -88,7 +88,6 @@ set(SOURCES ./src/AIGameView.cpp
 ./src/GameEntity.cpp
 ./src/GameSettings.cpp
 ./src/GameSound.cpp
-./src/GameScoreBoardTimer.cpp
 ./src/GameTimer.cpp
 ./src/GameOverTimer.cpp
 ./src/IQPowerupEntity.cpp

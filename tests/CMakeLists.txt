@@ -13,6 +13,7 @@ set(TEST_SOURCES
   SpawningPoolTest.cpp
   EntitySimTest.cpp
   AISeekEnergyTest.cpp
+  RoundHygieneTest.cpp
 )
 
 add_executable(bitriot_tests ${TEST_SOURCES})

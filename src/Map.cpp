@@ -52,6 +52,7 @@ void Map::init(SDL_Surface* sdl_primary)
     }
   }
 
+  m_generation++;
   m_staticMap=new StaticTile[MAP_WIDTH*MAP_HEIGHT];
 
 
@@ -119,7 +120,7 @@ Map::~Map()
 {
   if (m_staticMap)
   {
-    delete m_staticMap;
+    delete[] m_staticMap;
   }
 
   for (int i = 0; i < NUM_STATIC_TILES; ++i)

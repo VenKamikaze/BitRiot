@@ -31,6 +31,12 @@ class Map
     const static int NUM_STATIC_TILES = 3;
     enum StaticTile { WALL, EMPTY, BLOCK };
 
+    // Bumped by every init(). A thing that writes to the map later (BlockEntity's
+    // destructor) remembers the generation it saw, and skips the write if the map
+    // has since been rebuilt - the new map has different dimensions (so a different
+    // stride) and starts with no blocks anyway.
+    unsigned int generation() const { return m_generation; }
+
     void setBlockAt(int x, int y, bool block);
     void clearBlocks();
 
@@ -47,6 +53,7 @@ class Map
     Map();
     // static map data
     StaticTile *m_staticMap; // 2D array of wall tiles
+    unsigned int m_generation = 0; // see generation()
 
 
 

@@ -1,6 +1,7 @@
 
 #include "EntityManager.h"
 #include "GameEntity.h"
+#include "GameOverTimer.h"
 #include "MickLogger.h"
 #include "PlayerCharacterEntity.h"
 #include <algorithm>
@@ -18,6 +19,16 @@ EntityManager::EntityManager()
   // mid-round leaves arbitrary messages behind too. Construction is the one
   // point every new round passes through, before anything posts into it.
   EntityMessageQueue::getInstance()->clear();
+
+  // The game-over countdown latches once the end condition first holds. Without
+  // this, the second and later rounds of a session would skip the countdown.
+  GameOverTimer::getInstance()->reset();
+
+  // Likewise the id counter: every round numbers its entities from 1, so the
+  // first entity of round N has the same id as the first entity of round 1.
+  // (Anything keyed by id across rounds - InputHandler's maps - is cleared in
+  // setPointers() when the new round's players are attached.)
+  EntityFactory::getInstance()->resetIds();
 
   // set dynamicMap vector sizes to map width and height
   m_pDynamicMap = new DynamicMap(GameSettings::getInstance()->getMapWidth(), GameSettings::getInstance()->getMapHeight());
@@ -425,7 +436,14 @@ void EntityManager::runCollisions()
         {
           // for each entity in map location
           int currentID = (*m_pDynamicMap->mapLocationIterator);
-          shared_ptr<GameEntity> currentEntity = m_pDynamicMap->entityList.find(currentID)->second;
+          // An id on the tile list with no live entity is stale; skip it rather
+          // than dereference end().
+          map<int, shared_ptr<GameEntity>>::iterator currentFound = m_pDynamicMap->entityList.find(currentID);
+          if (currentFound == m_pDynamicMap->entityList.end())
+          {
+            continue;
+          }
+          shared_ptr<GameEntity> currentEntity = currentFound->second;
 
           for (mapLocationIterator2 = m_pDynamicMap->entityMap[x][y].begin();
                mapLocationIterator2 != m_pDynamicMap->entityMap[x][y].end();
@@ -436,7 +454,12 @@ void EntityManager::runCollisions()
             {
               // entities are different
               // run collision on other entity
-              shared_ptr<GameEntity> otherEntity = m_pDynamicMap->entityList.find(otherID)->second;
+              map<int, shared_ptr<GameEntity>>::iterator otherFound = m_pDynamicMap->entityList.find(otherID);
+              if (otherFound == m_pDynamicMap->entityList.end())
+              {
+                continue;
+              }
+              shared_ptr<GameEntity> otherEntity = otherFound->second;
               otherEntity->onCollision(currentEntity->getType(),
                                        currentEntity->getGroupType(),
                                        currentEntity->getPlayerNumber());

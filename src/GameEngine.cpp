@@ -4,7 +4,6 @@
 #include "GameRunningSDLInput.h"
 #include "MickSDLRenderer.h"
 #include "PlayerCharacterEntity.h"
-#include "SDL_timer.h"
 #include <cstddef>
 #include <string>
 
@@ -83,6 +82,10 @@ void GameEngine::resetGame()
 
   std::MickLogger::getInstance()->debug(this, std::string("numHumanPlayers=").append(std::to_string(numHumanPlayers)).append(",numPlayers=").append(std::to_string(numPlayers)));
 
+  // New round: restart the tick count. (The game-over countdown is un-latched by
+  // the new EntityManager's constructor below.)
+  m_gameTicks = 0;
+
   if (m_pEntityManager)
   {
     delete m_pEntityManager;
@@ -112,6 +115,11 @@ void GameEngine::resetGame()
   seedBlocksOnMap(blockPercentage);
 }
 
+int GameEngine::gameLengthSeconds() const
+{
+  return (int) ((m_gameTicks * GameSettings::NORMAL_TICKS_SPEED) / 1000);
+}
+
 bool GameEngine::runEngine()
 {
   switch (GameSettings::getInstance()->getGameState())
@@ -135,27 +143,21 @@ bool GameEngine::runEngine()
       applyMapDimensionsIfChanged();
       resetGame();
       GameSettings::getInstance()->setGameState(GameSettings::GAME_RUNNING);
-      m_gameStartedAtTicks = SDL_GetTicks();
       break;
     }
     case GameSettings::GAME_RUNNING:
     {
-      if(m_pEntityManager->oneOrZeroPlayersRemain(m_pSpawningPool->canSpawnMore()))
+      // One sim tick. Both the game-over countdown and the scoreboard's game
+      // length count ticks, never wall-clock time.
+      m_gameTicks++;
+
+      // Timed delay during which we continue to update and runFrame for a few seconds.
+      // This is useful when all human players are dead but AI is still alive, incase
+      //   a human player wants to take over the AI.
+      if(GameOverTimer::getInstance()->advance(m_pEntityManager->oneOrZeroPlayersRemain(m_pSpawningPool->canSpawnMore())))
       {
-        GameTimer* timer = GameOverTimer::getInstance();
-        if(! timer->isTimerTriggered())
-        {
-          // If competitor players are dead, set game over state
-          timer->setTimerTriggered();
-        }
-        else if(timer->getTimerCompleted())
-        {
-          // Timed delay during which we continue to update and runFrame for a few seconds.
-          // This is useful when all human players are dead but AI is still alive, incase
-          //   a human player wants to take over the AI.
-          GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
-          menuSystem->loadScoreBoard(m_pEntityManager->getWinningPlayer(m_pSpawningPool->canSpawnMore()), m_pEntityManager->getRoundPlayerRoster(), (SDL_GetTicks() - m_gameStartedAtTicks) / 1000);
-        }
+        GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
+        menuSystem->loadScoreBoard(m_pEntityManager->getWinningPlayer(m_pSpawningPool->canSpawnMore()), m_pEntityManager->getRoundPlayerRoster(), gameLengthSeconds());
       }
       try
       {
@@ -166,7 +168,7 @@ bool GameEngine::runEngine()
         if(e.gotQuit())
 	      {
           GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
-          menuSystem->loadScoreBoard(m_pEntityManager->getWinningPlayer(m_pSpawningPool->canSpawnMore()), m_pEntityManager->getRoundPlayerRoster(), (SDL_GetTicks() - m_gameStartedAtTicks) / 1000);
+          menuSystem->loadScoreBoard(m_pEntityManager->getWinningPlayer(m_pSpawningPool->canSpawnMore()), m_pEntityManager->getRoundPlayerRoster(), gameLengthSeconds());
 	      }
       }
 

@@ -1,24 +1,14 @@
 /*
- * GameOverTimer.cpp
+ * GameTimer.cpp
  *
  *  Created on: May 25, 2017
  *      Author: msaun
  */
 
-#include "GameOverTimer.h"
+#include "GameTimer.h"
 
 using namespace std;
 
-GameTimer::GameTimer(std::string name, int* seconds)
+GameTimer::GameTimer(std::string name, int timeoutTicks) : name(name), timeoutTicks(timeoutTicks)
 {
-  if(seconds != NULL)
-  {
-    this->seconds = *seconds;
-  }
-  else
-  {
-    this->seconds = getDefaultTimeout();
-  }
-  this->name = name;
 }
-

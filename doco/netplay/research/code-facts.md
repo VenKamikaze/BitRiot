@@ -26,18 +26,18 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 - **`consoleMain()` runs one frame** (main.cpp:115-130). It calls `engine->runEngine()`, then busy-waits in `SDL_Delay(1)` until 33 ms have passed (`GameSettings::NORMAL_TICKS_SPEED=33`, GameSettings.h:220).
   - A slow frame slows the game; there is no catch-up.
   - `FAST_TICKS_SPEED` (GameSettings.h:221) is unused.
-- **`GameEngine::runEngine()`** (GameEngine.cpp:115-194) switches on the global `GameSettings::gameState`:
+- **`GameEngine::runEngine()`** (GameEngine.cpp:123-196) switches on the global `GameSettings::gameState`:
   - `MENU_RUNNING`: `menuSystem->showMenu()`. This pumps SDL events itself and calls RmlUi Update/Render (MenuSDLRenderer.cpp:108-256).
-  - `GAME_INIT`: `applyMapDimensionsIfChanged()` + `resetGame()`, and stamps `m_gameStartedAtTicks=SDL_GetTicks()` (GameEngine.cpp:132-140). No sim tick runs.
+  - `GAME_INIT`: `applyMapDimensionsIfChanged()` + `resetGame()`, (GameEngine.cpp:140-147). No sim tick runs. *(It used to stamp `m_gameStartedAtTicks=SDL_GetTicks()`; brief 01 replaced that with the per-round tick counter `m_gameTicks`, zeroed in `resetGame()`.)*
   - `GAME_RUNNING`, in this order:
-    1. Win check and GameOverTimer (143-159).
-    2. `m_pInputHandler->processKeyboardInput()` (162). This is where SDL events are pumped.
-    3. `m_pSpawningPool->update()` (175).
-    4. `m_pEntityManager->runFrame()` (177), which is `runAI` → `processMessageQueue` → `runCollisions`.
-    5. Render to the CPU surface (179-181), then `pushCpuBufferToHardwareBuffer()` (183).
-- **Sim and render are one call.** On the tick a round ends, the state flips to `MENU_RUNNING` and the scoreboard loads mid-tick (156-157). Input, pool, runFrame and render still run for the rest of that tick.
+    1. Win check and GameOverTimer, as one `GameOverTimer::advance(...)` call (150-162).
+    2. `m_pInputHandler->processKeyboardInput()` (164). This is where SDL events are pumped.
+    3. `m_pSpawningPool->update()` (177).
+    4. `m_pEntityManager->runFrame()` (179), which is `runAI` → `processMessageQueue` → `runCollisions`.
+    5. Render to the CPU surface (181-183), then `pushCpuBufferToHardwareBuffer()` (185).
+- **Sim and render are one call.** On the tick a round ends, the state flips to `MENU_RUNNING` and the scoreboard loads mid-tick (159-160). Input, pool, runFrame and render still run for the rest of that tick.
 - **Exceptions are control flow.**
-  - ESC throws `InputException(GOT_QUIT)` (InputHandler.cpp:650), caught at GameEngine.cpp:164 and main.cpp:218.
+  - ESC throws `InputException(GOT_QUIT)` (InputHandler.cpp:650), caught at GameEngine.cpp:166 and main.cpp:218.
   - There are 16 `throw` sites in src. WASM builds therefore need `-fexceptions` or `-fwasm-exceptions`.
 - **What a WASM main-loop inversion touches:**
   - main.cpp:171-278: the loop locals, the per-frame try/catch, and teardown (258-277), which moves to a quit path.
@@ -56,7 +56,7 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 | | :129, :160 | type roll |
 | | :197-198 | tile x/y |
 | | :233, :240 | robot flags |
-| GameEngine.cpp | :267 | block seeding per tile |
+| GameEngine.cpp | :269 | block seeding per tile |
 | PlayerCharacterEntity.cpp (bot AI) | :30, :76 | `m_checkTimer` 37/67 (:30 also runs for humans) |
 | | :37 | initial wait |
 | | :43 | initial EGG2 goal |
@@ -74,8 +74,7 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 
 **Wall clock**
 
-- GameTimer.h:25 and :35 (the GameOverTimer).
-- GameEngine.cpp:138, :157 and :169: scoreboard game length. Cosmetic, but it differs per peer.
+- ~~GameTimer.h:25 and :35 (the GameOverTimer).~~ ~~GameEngine.cpp:138, :157 and :169: scoreboard game length.~~ Both fixed by brief 01: they count sim ticks (game length = ticks x `NORMAL_TICKS_SPEED`).
 - RmlUi `GetElapsedTime` (SystemInterfaceSDL2.cpp:409): UI only.
 
 **Containers.** There are no unordered containers.
@@ -99,17 +98,17 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 
 **`EntityFactory::m_idCount`**
 
-- Set to 1 only in the constructor (EntityFactory.cpp:88-91), incremented at :9-10, never reset per round.
+- Set to 1 only in the constructor (EntityFactory.cpp:88-91), incremented at :9-10, never reset per round. *(Brief 01: `EntityFactory::resetIds()`, called from `EntityManager`'s constructor, now resets it every round.)*
 - IDs are only compared for equality, and `std::map` order follows creation order. So a different base changes checksums, not behaviour.
 - InputHandler keys its per-player maps by entity id (InputHandler.cpp:66, :498).
 
-**GameOverTimer: wall-clock, with three bugs**
+**GameOverTimer: wall-clock, with three bugs** *(1, 2 and the wall-clock part fixed by brief 01: the timer now counts ticks, is reset by `EntityManager`'s constructor, and the countdown is `GameOverTimer::GAME_OVER_COUNTDOWN_TICKS = 60`, i.e. 2 s. Item 3 stands.)*
 
 1. It latches: `timerTriggered` is never reset, so from round 2 onwards the round ends on the tick the end condition first holds.
 2. The base constructor calls the virtual `getDefaultTimeout()` (GameTimer.cpp:20). The countdown is therefore 5 s (`STANDARD_COUNTDOWN`), not the intended `GAME_OVER_COUNTDOWN=2`.
 3. During the countdown the sim keeps running, and AI takeover is still allowed.
 
-`GameScoreBoardTimer` is defined but never used.
+`GameScoreBoardTimer` was defined but never used; brief 01 removed it.
 
 **All other sim timing is integer tick counters.** Bomb and mine fuses, egg hatch, power-up decay, effect and explosion health, rocket lifespan, robot actions, the spawner delay, AI WAIT/`checkTimer`, and SimpleBrain `m_minMoveTimer`.
 
@@ -210,9 +209,9 @@ The old AI goal and instruction lists persist across the switch.
 
 **Derived values**
 
-- Pool points = `numPlayers*100` (GameEngine.cpp:108).
+- Pool points = `numPlayers*100` (GameEngine.cpp:111).
 - Co-op vs PvP (`numConfiguredTeams`).
-- Fixed spawn tiles per slot (GameEngine.cpp:295-324).
+- Fixed spawn tiles per slot (GameEngine.cpp:283-374, `initPlayerCharacters`).
 
 **Local or cosmetic only:** gender/portrait, `attachedControllerId`, `attachedKeyboardId`.
 
@@ -284,9 +283,10 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
 ## 11. Other surprises
 
 - **Map-resize bug.**
-  - `applyMapDimensionsIfChanged()` rebuilds `Map` before `resetGame()` deletes the old EntityManager (GameEngine.cpp:135, :73, :86-90).
-  - The old `BlockEntity` destructors then call `setBlockAt(x,y,false)` using the new map's stride. That can overwrite walls with EMPTY, or write out of bounds if the map shrank.
-- **ESC/quit** is local: it throws `InputException` and flips this machine to the scoreboard (GameEngine.cpp:164-171).
+  - `applyMapDimensionsIfChanged()` rebuilds `Map` before `resetGame()` deletes the old EntityManager (GameEngine.cpp:143, :72, :91).
+  - The old `BlockEntity` destructors then call `setBlockAt(x,y,false)` with the *old* map's tile coordinates against the *new* map's array and stride. That can overwrite the new map's walls with EMPTY (an old block at (8,3) hits the east wall of a 9x7 map), or write past the end of the array if the map shrank. *(Correction to the earlier wording, which blamed "the wrong stride": the stride is the new one; the coordinates are the old ones.)*
+  - *Fixed by brief 01:* `Map` has a generation counter bumped by every `init()`. `BlockEntity` remembers the generation it was placed in and its destructor skips the write if the map has since been rebuilt.
+- **ESC/quit** is local: it throws `InputException` and flips this machine to the scoreboard (GameEngine.cpp:166-172).
 - **`GameSettings::setNumberOfPlayers`** keeps existing slots. `InputHandler::setPointers` writes keyboard assignments back into `GameSettings` (InputHandler.cpp:106).
 - **Debug logging** is compiled in by default (the default build type is Debug), and `MickLogger` writes debug output to `cout` every frame.
 - **`Map::~Map`** uses `delete` rather than `delete[]` (Map.cpp:122).
@@ -307,7 +307,7 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
 
 **`% 0` is undefined behaviour.** `rand() % (m_maxDelay - m_minDelay)` in SpawningPool divides by zero if the two delays are equal.
 
-**The round-end tick.** On the tick the GameOverTimer completes, the state flips to `MENU_RUNNING`, but input, pool and `runFrame` still run for that tick (GameEngine.cpp ~156-177). An ESC quit behaves the same way.
+**The round-end tick.** On the tick the GameOverTimer completes, the state flips to `MENU_RUNNING`, but input, pool and `runFrame` still run for that tick (GameEngine.cpp ~157-179). An ESC quit behaves the same way.
 
 **Action input rules today** (InputHandler.cpp ~494-619):
 

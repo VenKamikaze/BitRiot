@@ -1,5 +1,5 @@
 /*
- * GameSettings.h
+ * GameOverTimer.h
  *
  *  Created on: May 25, 2017
  *      Author: msaun
@@ -8,30 +8,27 @@
 #ifndef GAMEOVERTIMER_H_
 #define GAMEOVERTIMER_H_
 
-#include "RuntimeException.h"
-#include "Map.h"
 #include "GameTimer.h"
 
 namespace std
 {
 
+/**
+ * How long after the round-end condition first holds the round really ends.
+ * Counted in simulation ticks (see GameTimer).
+ */
 class GameOverTimer: public std::GameTimer
 {
   public:
-    GameOverTimer(std::string name, int* seconds);
+    // The one place the countdown length is defined: 2 seconds, at the sim's
+    // 33 ms per tick (GameSettings::NORMAL_TICKS_SPEED).
+    static const int GAME_OVER_COUNTDOWN_TICKS = 60;
+
+    GameOverTimer(std::string name);
     static GameTimer* getInstance();
-    static GameTimer* getInstance(std::string name, int* seconds);
-    static const int GAME_OVER_COUNTDOWN = 2; // x seconds till we end the game completely;
-
-
-  protected:
-    int getDefaultTimeout()
-    {
-      return GAME_OVER_COUNTDOWN;
-    }
 
   private:
-    virtual ~GameOverTimer();
+    ~GameOverTimer() {} // singleton: never deleted
 };
 
 } /* namespace std */

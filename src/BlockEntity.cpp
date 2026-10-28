@@ -15,6 +15,7 @@ BlockEntity::BlockEntity(int uniqueID, int playerNumber, int atX, int atY)
 
   m_tileX = atX;
   m_tileY = atY;
+  m_mapGeneration = Map::getInstance()->generation();
   Map::getInstance()->setBlockAt(atX, atY, true);
 
   m_offsetX = 0.0F;
@@ -31,7 +32,13 @@ BlockEntity::BlockEntity(int uniqueID, int playerNumber, int atX, int atY)
 BlockEntity::~BlockEntity()
 {
   // destructor
-  Map::getInstance()->setBlockAt(m_tileX, m_tileY, false);
+  // When the map is resized between rounds, Map is rebuilt (new stride, no blocks)
+  // before the old round's entities are destroyed. Writing then would corrupt the
+  // new map, or fall outside it. The rebuilt map has no blocks, so skip.
+  if (m_mapGeneration == Map::getInstance()->generation())
+  {
+    Map::getInstance()->setBlockAt(m_tileX, m_tileY, false);
+  }
 }
 
 void BlockEntity::onCollision(EntityType typeCollidedWith, EntityGroupType groupTypeCollidedWith, int collidedWithPlayerNumber)

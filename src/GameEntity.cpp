@@ -20,6 +20,14 @@ GameEntity::GameEntity()
   m_solidFlag = false;
   m_walkThroughBlocks = false;
 
+  m_type = BLOCK;
+  m_groupType = BLOCK_GROUP;
+
+  m_ID = 0;
+  m_playerNumber = 0;
+  m_health = 0;
+  m_velocity = 0;
+
   m_tileX = m_tileY = 0;
   m_offsetX = m_offsetY = 0;
 
