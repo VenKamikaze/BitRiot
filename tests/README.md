@@ -104,6 +104,10 @@ calls the production `GameSettings::beginRoundSeed()` first, before the
   in one test (a "play again" test) are different rounds.
 - **Pin a round:** `setRoundSeed(n)` before `startRound()` pins the next round to
   exactly `n` (one round only). Use it to replay a round or compare two runs.
+- **Reproduce a failing round:** when a test fails, the harness prints every
+  round seed it used (`[bitriot] round seeds in this test: ...`, the first is
+  `SetUp()`'s, then one per `startRound()`). Put `setRoundSeed(<seed>)` before the
+  matching `startRound()` to replay exactly that round, whatever the base seed.
 - **Base seed:** `BITRIOT_TEST_SEED` (default `1`) changes every test's rounds.
 
 To shake out luck-dependent tests:

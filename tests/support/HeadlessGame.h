@@ -238,6 +238,7 @@ class HeadlessGameTest : public ::testing::Test
     int m_mapWidth = DEFAULT_MAP_WIDTH;
     int m_mapHeight = DEFAULT_MAP_HEIGHT;
     uint64_t m_roundsStarted = 0;
+    std::vector<uint64_t> m_roundSeedsUsed; // reported on failure
     std::streambuf* m_savedCout = nullptr;
 };
 

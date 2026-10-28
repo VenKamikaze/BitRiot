@@ -48,7 +48,7 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 
 **Seeding.** *Done by brief 02.* The sim draws from `SimRandom::sim()` (`src/SimRandom.h`, PCG32), reseeded from `GameSettings::beginRoundSeed()` as the first statement of `GameEngine::resetGame()`. Presentation randomness uses `SimRandom::cosmetic()`. There is no `srand`/`rand` left in `src/`, and `SimRandomSourceGuardTest` keeps it that way. (Before: `srand(SDL_GetTicks())` once at window init in MickSDLRenderer.cpp, and the tests called `srand(seed)` once per process.)
 
-**RNG call sites** (re-found by grep for brief 02; 27 `rand()` sites, 25 sim and 2 cosmetic, all formerly on the single libc stream).
+**RNG call sites** (re-found by grep for brief 02; 28 `rand()` sites, 26 sim and 2 cosmetic, all formerly on the single libc stream; the cosmetic ones, EffectEntity and ScoreBoardBinder, consumed the sim stream too).
 
 | File | Controls | Stream |
 |---|---|---|

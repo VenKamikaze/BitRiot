@@ -157,7 +157,7 @@ void HeadlessGameTest::beginRoundRng()
     settings->setRoundSeed(mixSeed(g_baseSeed, name, m_roundsStarted));
   }
   m_roundsStarted++;
-  settings->beginRoundSeed();
+  m_roundSeedsUsed.push_back(settings->beginRoundSeed());
 }
 
 void HeadlessGameTest::setRoundSeed(uint64_t seed)
@@ -179,12 +179,25 @@ void HeadlessGameTest::SetUp()
   resetSingletons();
 
   m_roundsStarted = 0;
+  m_roundSeedsUsed.clear();
   std::GameSettings::getInstance()->clearRoundSeedPin();
   beginRoundRng();
 }
 
 void HeadlessGameTest::TearDown()
 {
+  // A failing round can be replayed on its own: pin the seed with
+  // setRoundSeed(<seed>) before the matching startRound().
+  if (HasFailure() && !m_roundSeedsUsed.empty())
+  {
+    std::cerr << "[bitriot] round seeds in this test (SetUp, then each startRound):";
+    for (uint64_t seed : m_roundSeedsUsed)
+    {
+      std::cerr << " " << seed;
+    }
+    std::cerr << "\n[bitriot] replay one with setRoundSeed(<seed>) before startRound()" << std::endl;
+  }
+
   m_spawningPool.reset();
   m_entityManager.reset();
 

@@ -389,7 +389,10 @@ TEST(SimRandomSourceGuardTest, NoLibcRandomNumbersInSrc)
   ASSERT_TRUE(fs::exists(srcDir)) << srcDir;
 
   const std::regex libcRandom(R"((^|[^A-Za-z0-9_])(std::)?(rand|srand|rand_r|random|srandom|drand48|random_shuffle)\s*\()");
-  const std::regex otherEngines(R"(random_device|mt19937|default_random_engine|minstd_rand)");
+  // <random> itself, which covers every engine and distribution (ranlux, knuth_b,
+  // uniform_int_distribution, ...), plus the common names in case a header gets
+  // them transitively.
+  const std::regex otherEngines(R"(#\s*include\s*<random>|random_device|mt19937|default_random_engine|minstd_rand)");
 
   int scanned = 0;
   std::vector<std::string> offenders;
@@ -413,7 +416,7 @@ TEST(SimRandomSourceGuardTest, NoLibcRandomNumbersInSrc)
     // The only place allowed to touch an OS entropy source or a std engine.
     if (entry.path().filename() != "SimRandom.cpp" && std::regex_search(code, otherEngines))
     {
-      offenders.push_back(entry.path().string() + " (std random engine; use SimRandom)");
+      offenders.push_back(entry.path().string() + " (<random> or a std random engine; use SimRandom)");
     }
   }
   EXPECT_GT(scanned, 50);
