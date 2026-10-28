@@ -414,7 +414,7 @@ TEST_F(SoundSeamTest, WithNoSoundBackendInstalledSoundGoesToASilentDefault)
   // simulation must still have something to talk to.
   MickBaseSound* now = MickBaseSound::getInstance();
   ASSERT_NE(now, nullptr) << "with no backend the simulation would dereference null";
-  EXPECT_NE(reinterpret_cast<uintptr_t>(now), gone) << "a destroyed backend is still registered";
+  ASSERT_NE(reinterpret_cast<uintptr_t>(now), gone) << "a destroyed backend is still registered";
   EXPECT_NO_THROW(now->playSound("assets/audio/nothing.wav"));
   EXPECT_NO_THROW(std::GameSound::playSound(std::GameSound::BOOM));
 
