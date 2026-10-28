@@ -155,13 +155,14 @@ bool GameEngine::runEngine()
     case GameSettings::GAME_RUNNING:
     {
       // One sim tick. Both the game-over countdown and the scoreboard's game
-      // length count ticks, never wall-clock time.
+      // length count ticks, never wall-clock time: the countdown is handed the
+      // same tick count the scoreboard uses, so there is one clock.
       m_gameTicks++;
 
       // Timed delay during which we continue to update and runFrame for a few seconds.
       // This is useful when all human players are dead but AI is still alive, incase
       //   a human player wants to take over the AI.
-      if(GameOverTimer::getInstance()->advance(m_pEntityManager->oneOrZeroPlayersRemain(m_pSpawningPool->canSpawnMore())))
+      if(GameOverTimer::getInstance()->advance(m_gameTicks, m_pEntityManager->oneOrZeroPlayersRemain(m_pSpawningPool->canSpawnMore())))
       {
         GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
         menuSystem->loadScoreBoard(m_pEntityManager->getWinningPlayer(m_pSpawningPool->canSpawnMore()), m_pEntityManager->getRoundPlayerRoster(), gameLengthSeconds());
