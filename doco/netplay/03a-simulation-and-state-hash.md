@@ -173,12 +173,13 @@ New API, so the tests cannot be compiled against the old code. Instead each piec
 **Sweep** (200 seeds, `BITRIOT_TEST_SEED=1..200`, from `build/`)
 
 - Before (`claude`, 186 tests): 1 failing seed, **6**, `AISeekEnergyTest.HealthyBotWithAnEggUnderItselfStillGetsOutToAPickupInTime`, the known bot livelock in `TODO`.
-- After (240 tests): **0 failing seeds**. Seed 6 passes now, and that is the changed random sequence, not a fix: the harness round now draws one number per eligible tile for block seeding, so every seed means different rounds. Evidence that the livelock is still there: the same test swept alone over seeds 1..8000 on the new harness fails exactly once, seed **4652**, with the same message (`bot never got out, stuck at (1,1)`); `BITRIOT_TEST_SEED=4652 ./build/tests/bitriot_tests --gtest_filter='AISeekEnergyTest.HealthyBotWithAnEggUnder*'` reproduces it. `TODO` is updated with the new seed. Nothing else failed on any seed, so the real setup path introduced no new failure.
+- After (240 tests, final code): **0 failing seeds**; all 200 seeds pass every test. Seed 6 passes now, and that is the changed random sequence, not a fix: the harness round now draws one number per eligible tile for block seeding, so every seed means different rounds. Evidence that the livelock is still there: the same test swept alone over seeds 1..8000 on the new harness fails exactly once, seed **4652**, with the same message (`bot never got out, stuck at (1,1)`); `BITRIOT_TEST_SEED=4652 ./build/tests/bitriot_tests --gtest_filter='AISeekEnergyTest.HealthyBotWithAnEggUnder*'` reproduces it. `TODO` is updated with the new seed. Nothing else failed on any seed, so the real setup path introduced no new failure.
 
-**GCC and Clang** (Debug, `-O0`, GCC 13.3 and Clang 18.1, separate build dirs, test binary run from the source root)
+**GCC and Clang** (GCC 13.3 and Clang 18.1, each as a Debug `-O0` build and a Release `-O2` build, in separate build dirs; the test binary run from the source root)
 
-- The whole suite passes on both (240 tests).
-- **The per-tick hashes of the four pinned rounds are identical:** 13,211 hashes (`BITRIOT_HASH_DUMP=all`), `cmp` says the two dumps are byte for byte the same (sha256 `15f100ab...c861`), and both compilers satisfy the golden digests. This is an early taste of 05b: it covers one optimisation level only; the aggressive-flag build, aarch64 and wasm are still 05b's.
+- The whole suite passes on all four (240 tests).
+- **The per-tick hashes of the four pinned rounds are identical across all four builds:** 13,211 hashes (`BITRIOT_HASH_DUMP=all`); `cmp` says the dumps are byte for byte the same (sha256 `15f100ab...c861` for the Debug pair; the two Release dumps compare equal to it), and every build satisfies the golden digests. This is an early taste of 05b: GCC against Clang and `-O0` against `-O2`, on x86-64 only. The aggressive-flag build, aarch64 and wasm are still 05b's.
+- An AddressSanitizer + UBSan build of the whole suite (the recipe in tests/README.md with `,undefined` added) is clean: 240 pass, no reports.
 
 **Manual check of the real engine** (`GameEngine` cannot run headlessly)
 
