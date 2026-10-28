@@ -320,6 +320,6 @@ DIRECTION SimpleBrain::getDirectionFromHeading(Heading h, int moveState)
 
 void SimpleBrain::hashState(StateHasher& h) const
 {
-  h.i32(m_lastMovingState);
-  h.i32(m_minMoveTimer);
+  h.i32(m_lastMovingState, "brain.lastMovingState");
+  h.i32(m_minMoveTimer, "brain.minMoveTimer");
 }

@@ -123,8 +123,8 @@ void EggEntity::hatch()
 
 void EggEntity::hashExtraState(StateHasher& h) const
 {
-  h.i32(m_hatchling);
-  h.i32(m_hatchCounter);
-  h.i32((int32_t) m_hatchFlags); // becomes the hatchling's flags
+  h.i32(m_hatchling, "egg.hatchling");
+  h.i32(m_hatchCounter, "egg.hatchCounter");
+  h.i32((int32_t) m_hatchFlags, "egg.hatchFlags"); // becomes the hatchling's flags
   // m_animCounter only paces the animation
 }

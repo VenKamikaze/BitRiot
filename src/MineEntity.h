@@ -23,7 +23,7 @@ class MineEntity : public GameEntity
 
 
   protected:
-    void hashExtraState(StateHasher& h) const override;
+    virtual void hashExtraState(StateHasher& h) const;
 
   private:
     int m_fuse, m_animDelay;

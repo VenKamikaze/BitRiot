@@ -24,6 +24,13 @@ SDL_Surface* g_surface = nullptr;
 NullSound* g_sound = nullptr;
 } // namespace
 
+uint64_t beginRoundSeed(std::GameSettings* settings)
+{
+  const uint64_t seed = settings->pickRoundSeed();
+  SimRandom::sim().seed(seed);
+  return seed;
+}
+
 // ---------------------------------------------------------------------------
 // NullSound
 // ---------------------------------------------------------------------------

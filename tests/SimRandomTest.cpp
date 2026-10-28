@@ -5,13 +5,13 @@
 //
 //   * PRNG: known answers (including the PCG reference implementation's own
 //     output), nextInt edge cases, determinism.
-//   * Round seed plumbing: GameSettings::beginRoundSeed().
+//   * Round seed plumbing: GameSettings::pickRoundSeed() and the reseed.
 //   * Whole rounds: the same seed plays the same round, different seeds play
 //     different rounds, and cosmetic draws change nothing.
 //   * A source guard: no libc rand()/srand() in src/.
 //
-// Digests are taken per tick in the order GameEngine::runEngine() uses:
-// win check, pool.update(), runFrame().
+// Rounds are played with Simulation::step() (win check, pool.update(), runFrame(),
+// as GameEngine does) and digested by the per-tick state hash.
 
 #include <gtest/gtest.h>
 
@@ -147,7 +147,7 @@ TEST_F(RoundSeedTest, BeginRoundSeedUsesAPinnedSeedAndSeedsTheSimStream)
   settings->setRoundSeed(0x1234567890ULL);
   ASSERT_TRUE(settings->isRoundSeedPinned());
 
-  EXPECT_EQ(settings->beginRoundSeed(), 0x1234567890ULL);
+  EXPECT_EQ(bitriot_test::beginRoundSeed(settings), 0x1234567890ULL);
   EXPECT_EQ(settings->getRoundSeed(), 0x1234567890ULL);
 
   SimRandom expected(0x1234567890ULL);
@@ -158,12 +158,12 @@ TEST_F(RoundSeedTest, APinLastsForOneRoundOnly)
 {
   std::GameSettings* settings = std::GameSettings::getInstance();
   settings->setRoundSeed(77);
-  EXPECT_EQ(settings->beginRoundSeed(), 77u);
+  EXPECT_EQ(bitriot_test::beginRoundSeed(settings), 77u);
   EXPECT_FALSE(settings->isRoundSeedPinned());
 
   // "Play again" gets a fresh seed (2^-64 chance of a collision).
-  const uint64_t second = settings->beginRoundSeed();
-  const uint64_t third = settings->beginRoundSeed();
+  const uint64_t second = bitriot_test::beginRoundSeed(settings);
+  const uint64_t third = bitriot_test::beginRoundSeed(settings);
   EXPECT_NE(second, 77u);
   EXPECT_NE(second, third);
   EXPECT_EQ(settings->getRoundSeed(), third);
@@ -208,12 +208,12 @@ class SimRoundTest : public HeadlessGameTest
       bool ended = false;
       int frames = 0;
       int winner = 0;
-      uint64_t entityDigest = 0; // entity count of every frame
+      uint64_t hashDigest = 0; // the state hash of every tick
       uint64_t simStreamAfter = 0;
       bool operator==(const Result& o) const
       {
         return ended == o.ended && frames == o.frames && winner == o.winner &&
-               entityDigest == o.entityDigest && simStreamAfter == o.simStreamAfter;
+               hashDigest == o.hashDigest && simStreamAfter == o.simStreamAfter;
       }
     };
 
@@ -239,24 +239,20 @@ class SimRoundTest : public HeadlessGameTest
 
       Result r;
       Digest d;
-      for (; r.frames < maxFrames; r.frames++)
+      for (; r.frames < maxFrames && !sim().roundOver(); r.frames++)
       {
         if (cosmeticNoise)
         {
           SimRandom::cosmetic().nextU32();
         }
-        if (em().oneOrZeroPlayersRemain(pool().canSpawnMore()))
-        {
-          r.ended = true;
-          break;
-        }
-        pool().update();
-        em().runFrame();
-        d.add((uint32_t) countAllEntities());
+        sim().step();
+        const uint64_t hash = sim().stateHash();
+        d.add((uint32_t) hash);
+        d.add((uint32_t) (hash >> 32));
       }
-      std::shared_ptr<PlayerCharacterEntity> w = em().getWinningPlayer(pool().canSpawnMore());
-      r.winner = w ? w->getPlayerNumber() : 0;
-      r.entityDigest = d.value();
+      r.ended = sim().roundOver();
+      r.winner = sim().winner() ? sim().winner()->getPlayerNumber() : 0;
+      r.hashDigest = d.value();
       r.simStreamAfter = SimRandom::sim().nextU32();
       return r;
     }
@@ -270,7 +266,7 @@ TEST_F(SimRoundTest, SameSeedPlaysTheSameFullRoundTwice)
   ASSERT_GT(first.frames, 10);
   EXPECT_EQ(first.frames, second.frames);
   EXPECT_EQ(first.winner, second.winner);
-  EXPECT_EQ(first.entityDigest, second.entityDigest);
+  EXPECT_EQ(first.hashDigest, second.hashDigest);
   EXPECT_EQ(first.simStreamAfter, second.simStreamAfter);
 }
 
@@ -280,7 +276,7 @@ TEST_F(SimRoundTest, SameSeedPlaysTheSameFourPlayerRoundOnTheDefaultMap)
   const Result first = playRound(99, 4, 1500);
   const Result second = playRound(99, 4, 1500);
   EXPECT_EQ(first.frames, second.frames);
-  EXPECT_EQ(first.entityDigest, second.entityDigest);
+  EXPECT_EQ(first.hashDigest, second.hashDigest);
   EXPECT_EQ(first.simStreamAfter, second.simStreamAfter);
 }
 
@@ -292,7 +288,7 @@ TEST_F(SimRoundTest, DifferentSeedsPlayDifferentRounds)
   for (int s = 1; s <= seeds; s++)
   {
     const Result r = playRound((uint64_t) s, 4, 600);
-    digests.insert(r.entityDigest);
+    digests.insert(r.hashDigest);
     streamPositions.insert(r.simStreamAfter);
   }
   EXPECT_EQ((int) digests.size(), seeds);
@@ -306,12 +302,12 @@ TEST_F(SimRoundTest, CosmeticDrawsDoNotChangeTheSimulation)
   ASSERT_TRUE(quiet.ended);
   EXPECT_EQ(quiet.frames, noisy.frames);
   EXPECT_EQ(quiet.winner, noisy.winner);
-  EXPECT_EQ(quiet.entityDigest, noisy.entityDigest);
+  EXPECT_EQ(quiet.hashDigest, noisy.hashDigest);
   EXPECT_EQ(quiet.simStreamAfter, noisy.simStreamAfter);
 
   const Result quietBusy = playRound(556, 4, 1000);
   const Result noisyBusy = playRound(556, 4, 1000, true);
-  EXPECT_EQ(quietBusy.entityDigest, noisyBusy.entityDigest);
+  EXPECT_EQ(quietBusy.hashDigest, noisyBusy.hashDigest);
   EXPECT_EQ(quietBusy.simStreamAfter, noisyBusy.simStreamAfter);
 }
 

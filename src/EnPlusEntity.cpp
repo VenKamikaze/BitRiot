@@ -66,5 +66,5 @@ void EnPlusEntity::update()
 
 void EnPlusEntity::hashExtraState(StateHasher& h) const
 {
-  h.i32(m_decayCounter);
+  h.i32(m_decayCounter, "enplus.decayCounter");
 }

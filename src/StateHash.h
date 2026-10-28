@@ -41,46 +41,49 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 class StateHasher
 {
   public:
-    StateHasher() : m_hash(OFFSET_BASIS) {}
+    StateHasher() : m_hash(OFFSET_BASIS), m_trace(nullptr) {}
 
-    void u8(uint8_t v)
+    // Every write names its field ("entity.health", "bomb.fuse"). The name does
+    // not enter the hash; it only feeds the optional trace below.
+    void u8(uint8_t v, const char* name)
     {
-      m_hash ^= v;
-      m_hash *= PRIME;
+      note(name, "u8");
+      raw(v);
     }
 
-    void flag(bool v)
+    void flag(bool v, const char* name)
     {
-      u8(v ? 1 : 0);
+      note(name, "u8");
+      raw(v ? 1 : 0);
     }
 
     // Every int-like value (int, fixed_t, enum, unsigned) goes in as 32 bits.
-    void i32(int32_t v)
+    void i32(int32_t v, const char* name)
     {
-      const uint32_t u = (uint32_t) v;
-      u8((uint8_t) (u & 0xff));
-      u8((uint8_t) ((u >> 8) & 0xff));
-      u8((uint8_t) ((u >> 16) & 0xff));
-      u8((uint8_t) ((u >> 24) & 0xff));
+      note(name, "i32");
+      raw32(v);
     }
 
-    void u64(uint64_t v)
+    void u64(uint64_t v, const char* name)
     {
+      note(name, "u64");
       for (int shift = 0; shift < 64; shift += 8)
       {
-        u8((uint8_t) ((v >> shift) & 0xff));
+        raw((uint8_t) ((v >> shift) & 0xff));
       }
     }
 
     // A list length. Always call before the items.
-    void count(size_t n)
+    void count(size_t n, const char* name)
     {
-      i32((int32_t) n);
+      note(name, "count");
+      raw32((int32_t) n);
     }
 
     // The sorted (ascending) ids of the live entities, in walk order. Must be set
@@ -101,9 +104,10 @@ class StateHasher
       return (int32_t) (it - m_ids.begin());
     }
 
-    void ref(int id)
+    void ref(int id, const char* name)
     {
-      i32(refOf(id));
+      note(name, "ref");
+      raw32(refOf(id));
     }
 
     uint64_t value() const
@@ -111,12 +115,48 @@ class StateHasher
       return m_hash;
     }
 
+    // SCHEMA TRACE. With a trace attached, every write also appends
+    // "name:kind" (kind is u8, i32, u64, count or ref) to it, in the order the
+    // fields are hashed. The trace holds field names and widths, never values, so
+    // a test can pin the hash's layout without depending on how the simulation
+    // happens to play: dropping, adding, renaming or re-typing a field changes the
+    // trace, a legitimate AI, rules or data change does not. See
+    // SimulationTest.TheHashSchemaIsPinned.
+    void setTrace(std::vector<std::string>* trace)
+    {
+      m_trace = trace;
+    }
+
     static constexpr uint64_t OFFSET_BASIS = 0xcbf29ce484222325ULL;
     static constexpr uint64_t PRIME = 0x100000001b3ULL;
 
   private:
+    void raw(uint8_t v)
+    {
+      m_hash ^= v;
+      m_hash *= PRIME;
+    }
+
+    void raw32(int32_t v)
+    {
+      const uint32_t u = (uint32_t) v;
+      raw((uint8_t) (u & 0xff));
+      raw((uint8_t) ((u >> 8) & 0xff));
+      raw((uint8_t) ((u >> 16) & 0xff));
+      raw((uint8_t) ((u >> 24) & 0xff));
+    }
+
+    void note(const char* name, const char* kind)
+    {
+      if (m_trace != nullptr)
+      {
+        m_trace->push_back(std::string(name) + ":" + kind);
+      }
+    }
+
     uint64_t m_hash;
     std::vector<int> m_ids;
+    std::vector<std::string>* m_trace;
 };
 
 #endif /* _STATEHASH_H */

@@ -22,7 +22,7 @@ class RobotEntity : public SimpleMovingEntity
     virtual void update();
 
   protected:
-    void hashExtraState(StateHasher& h) const override;
+    virtual void hashExtraState(StateHasher& h) const;
 
   private:
     int m_minActionCount, m_maxActionCount;

@@ -131,8 +131,8 @@ TEST_F(RoundHygieneTest, GameOverTimerIgnoresWallClockTime)
 TEST_F(RoundHygieneTest, GameOverTimerWaitsTheFullCountdownInEveryRound)
 {
   // Today's bug: timerTriggered was never cleared, so from round 2 on the round
-  // ended on the first tick the condition held. Drive the real round setup
-  // (EntityManager construction is what resets the timer) three times over.
+  // ended on the first tick the condition held. Drive the real round setup and the
+  // real tick (Simulation::start() and step()) three times over.
   configurePlayers(2);
   std::GameTimer* timer = std::GameOverTimer::getInstance();
   const int n = std::GameOverTimer::GAME_OVER_COUNTDOWN_TICKS;
@@ -140,23 +140,28 @@ TEST_F(RoundHygieneTest, GameOverTimerWaitsTheFullCountdownInEveryRound)
   for (int round = 1; round <= 3; round++)
   {
     startRound();
-    uint64_t clock = 0; // the tick count restarts every round
     EXPECT_FALSE(timer->isTimerTriggered()) << "round " << round << " starts latched";
 
     // Mid-round, the condition holds for the first time.
-    runFrames(10);
+    for (int i = 0; i < 10; i++)
+    {
+      sim().step();
+    }
+    ASSERT_FALSE(sim().roundOver());
     killPlayer(1);
     ASSERT_TRUE(em().oneOrZeroPlayersRemain(pool().canSpawnMore()));
 
+    // `tick` counts steps from the first one that sees the condition; the round
+    // ends on the n-th after it.
     int ticks = -1;
     for (int tick = 0; tick < n * 3; tick++)
     {
-      if (timer->advance(++clock, em().oneOrZeroPlayersRemain(pool().canSpawnMore())))
+      sim().step();
+      if (sim().roundOver())
       {
         ticks = tick;
         break;
       }
-      em().runFrame();
     }
     EXPECT_EQ(ticks, n) << "round " << round;
   }

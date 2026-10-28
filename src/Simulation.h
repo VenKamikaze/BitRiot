@@ -127,6 +127,35 @@
  * ref(id) is an entity's position in the step-8 walk, or -1 for an id with no live
  * entity: absolute ids are never hashed (StateHash.h).
  *
+ * ENUMS AND FLAGS ARE HASHED AS THEIR C++ VALUES, so the numbering is part of the
+ * hash. Renumbering, reordering or inserting into any of these changes what a
+ * peer sends, and must bump STATE_HASH_VERSION (Simulation.cpp has static_asserts
+ * that stop the build when one moves, as a reminder):
+ *   EntityType            BLOCK 0, EGG1..EGG5 1-5, ENPLUS_POWERUP 6, IQPLUS_POWERUP 7,
+ *                         BOMB 8, MINE 9, ROCKET_SPIN 10, ROCKET_FIRED 11,
+ *                         ENERGY_DROP 12, EXPLOSION 13, PLAYER_CHARACTER 14,
+ *                         EGG_THIEF 15, WALL_EATER 16, DRONE 17, ROBOT1 18,
+ *                         MUNCH_EFFECT 19, DAMAGE_EFFECT 20
+ *   EntityGroupType       BLOCK_GROUP 0, EGG_GROUP 1, POWERUP_GROUP 2, WEAPON_GROUP 3,
+ *                         EXPLOSION_GROUP 4, CHARACTER_GROUP 5, PLAYER_SPAWN_GROUP 6,
+ *                         MONSTER_GROUP 7, ROBOT_GROUP 8, EFFECT_GROUP 9
+ *   Map::StaticTile       WALL 0, EMPTY 1, BLOCK 2
+ *   DIRECTION             UP 0, DOWN 1, LEFT 2, RIGHT 3 (a rocket's direction)
+ *   EntityRenderer::ANIM_STATE (the anim state)   IDLE 0, MOVE_UP 1, MOVE_DOWN 2,
+ *                         MOVE_LEFT 3, MOVE_RIGHT 4 (SimpleBrain::ANIM_STATE agrees)
+ *   EntityMessage::MessageType   DESTROY_ENTITY 0, CREATE_ENTITY 1, MOVE_ENTITY 2
+ *   AIGoal::GOAL_TYPES    INCREASE_ENERGY 0, SECURE_AREA 1, CREATE_ENTITIES 2,
+ *                         ATTACK_TEAM 3, ATTACK_ENTITY 4, GET_POWERUP 5
+ *   AIInstruction::INSTRUCTION_TYPES   GO_TO 0, MOVE_FROM_LOCATION 1,
+ *                         CREATE_ENTITY 2, WAIT 3
+ *   GameEntity creation flags (message flags, egg hatch flags)   the bit values of
+ *                         UP_FLAG (1<<1) .. AI_CONTROLLED_BOT_FLAG (1<<10)
+ * Adding, removing or changing the meaning of a HASHED FIELD is the same kind of
+ * change: bump the version. Every write names its field, and
+ * stateHashFields() lists those names in hash order;
+ * SimulationTest.TheHashSchemaIsPinned compares the list with a copy in the test
+ * that does not depend on how the simulation plays.
+ *
  * NOT HASHED, on purpose:
  *   - m_currentAnimFrame, and the animation pacing counters m_animCounter /
  *     m_animDelay / a mine's m_animDelay: render-only. (A DAMAGE_EFFECT's
@@ -151,6 +180,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "EntityManager.h"
@@ -180,6 +210,11 @@ class Simulation
 
     // The state hash (specification above). Valid any time after start().
     uint64_t stateHash() const;
+
+    // The names of the fields stateHash() writes, as "name:kind" in hash order,
+    // one entry per write (so a repeated item repeats). Values never appear, so
+    // it describes the hash's layout, not the round. For the schema test.
+    std::vector<std::string> stateHashFields() const;
 
     // -- read-only state -------------------------------------------------------
 
@@ -220,6 +255,7 @@ class Simulation
 
   private:
     void tearDown();
+    void hashInto(StateHasher& h) const;
     void checkSingletonsAreFresh() const;
     void spawnPlayers();
     void seedBlocks();

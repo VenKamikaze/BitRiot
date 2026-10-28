@@ -69,6 +69,13 @@ struct RoundOutcome
   std::string describe() const;
 };
 
+// What starting a round does with its seed, in one step: GameSettings::
+// pickRoundSeed() (the pinned seed, else a fresh one; the pin is spent) and then
+// a reseed of SimRandom::sim() with it. The game itself never does this in one
+// call: it puts the picked seed in the MatchConfig and Simulation::start()
+// reseeds. Test-only, for the seed plumbing tests.
+uint64_t beginRoundSeed(std::GameSettings* settings);
+
 // Silent MickBaseSound backend. Registering itself in the constructor mirrors
 // what MickSDLSound does, so GameSound::playSound() becomes a no-op instead of
 // dereferencing a null instance.

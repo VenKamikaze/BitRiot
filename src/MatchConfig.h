@@ -10,6 +10,10 @@
  * NOT in here, because they never affect the simulation: player genders and
  * portraits, which keyboard set or controller drives a slot, window and audio
  * options. Those stay in GameSettings and are local to each machine.
+ * Simulation::start() does not read them. It can still destroy them: applying a
+ * config with fewer players than the local roster truncates the roster
+ * (GameSettings::setNumberOfPlayers), taking slots 3 and 4's gender, controller
+ * and keyboard set with it. See the snapshot note below.
  *
  * HOW THE SIM READS IT. The simulation reads GameSettings all over the place
  * (teams on every collision, the map size, the spawner toggle), and converting
@@ -21,12 +25,18 @@
  *     may be changed through GameSettings while a match runs (the NPC spawner
  *     toggle is the one the menu can reach; it is frozen per match by the config
  *     and covered by the state hash).
- *   - A netplay client has local menu choices (player count, teams, ...) that a
- *     match overwrites. To get them back afterwards, take a snapshot BEFORE
- *     start(): `MatchConfig saved = MatchConfig::fromSettings(gs);` and later
- *     `saved.applyTo(gs);`. The snapshot covers exactly the fields a match
- *     changes, apart from the seed (which it leaves alone) and the per-slot data
- *     the config does not carry (genders, devices), which start() never touches.
+ *   - A netplay client has local menu choices (player count, teams, genders,
+ *     devices, ...) that a match overwrites or truncates. To get them back
+ *     afterwards, snapshot the whole local settings BEFORE start() and restore
+ *     them after the match:
+ *         GameSettings::Snapshot saved = gs.snapshot();
+ *         ...                     // MatchConfig from the host; Simulation::start()
+ *         gs.restore(saved);
+ *     The snapshot keeps the entire roster (every field of every Player, however
+ *     many there are), the player count, block percentage, spawner toggle and map
+ *     size. Restoring through MatchConfig::applyTo() alone is NOT enough: it
+ *     brings the roster back to the right length with default players. The Map and
+ *     the window are not part of the snapshot; resize them back separately.
  */
 
 #ifndef _MATCHCONFIG_H
@@ -66,7 +76,18 @@ struct MatchConfig
   // and does not touch the seed pin.
   void applyTo(std::GameSettings& settings) const;
 
-  // "" when the config is playable, otherwise what is wrong with it.
+  // "" when the config can be handed to Simulation::start(), otherwise what is
+  // wrong with it. This is the loosest check the sim needs (2-6 players, no
+  // negative team, a map of at least 4x4), so tests can run on small maps.
+  // start() applies it.
+  std::string runnableProblem() const;
+
+  // "" when the config is one the game itself could have produced, otherwise
+  // what is wrong with it. Everything runnableProblem() checks, plus what the
+  // menus enforce: every team below the player count, map width and height odd and
+  // inside GameSettings' limits (and tall enough for the player count), block
+  // percentage inside the menu's range. Netplay must call THIS on a config that
+  // arrives from another machine, before start().
   std::string problem() const;
 
   bool operator==(const MatchConfig& o) const

@@ -220,11 +220,25 @@ class GameSettings
     // touch SimRandom: Simulation::start() seeds the stream from the config.
     // Out-of-line in the .cpp.
     uint64_t pickRoundSeed();
-    // pickRoundSeed() and then reseed SimRandom::sim() with it, for code that
-    // wants both in one step. The game itself now goes through MatchConfig and
-    // Simulation::start() (which does the seeding), so only the harness's SetUp()
-    // and the seed tests call this.
-    uint64_t beginRoundSeed();
+
+    // The player-facing choices a match overwrites, saved whole: the roster with
+    // every field of every Player (team, human/AI, gender, portrait, controller,
+    // keyboard set), the player count (the roster can be longer or shorter than a
+    // match's), block percentage, NPC spawner toggle and map size. Not the game
+    // state, and not the seed. Netplay snapshots before a networked match and
+    // restores after it, because Simulation::start() applies the host's
+    // MatchConfig into these (and a smaller player count truncates the roster).
+    struct Snapshot
+    {
+      int numPlayers = 0;
+      int blockPercentage = 0;
+      bool npcSpawnerEnabled = true;
+      int mapWidth = 0;
+      int mapHeight = 0;
+      std::vector<Player> players;
+    };
+    Snapshot snapshot() const;
+    void restore(const Snapshot& saved); // also re-derives the genders/playerAIs mirrors
 
     inline GAME_STATE getGameState()
     {

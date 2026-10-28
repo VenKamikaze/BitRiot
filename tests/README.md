@@ -166,22 +166,41 @@ EXPECT_NE(sim().stateHash(), before);
 - **Same config, same hash on every tick** is the determinism check
   (`SimulationTest.TheSameConfigGivesTheSameHashOnEveryTick`); play a config
   twice with `playHashes()`-style loops and compare vectors.
-- **Golden digests.** `SimulationTest.PinnedRoundsKeepTheirHashes` plays four
-  pinned rounds to their natural end and compares a digest of every tick's hash.
-  It pins the hash specification *and* the simulation together, so it fails when
-  either changes on purpose (add a hashed field, change a bot's behaviour, change
-  how many numbers a round draws) and has to be regenerated:
+- **Two kinds of "the hash is still the same", for two kinds of change.**
+  - **The schema** (`StateHashTest.TheHashSchemaIsPinned`) pins *which fields* the
+    hash writes and in what order. Every `StateHasher` write names its field, the
+    simulation can list them (`stateHashFields()`), and the test builds a world by
+    hand (one of every entity type, a bot with a plan and pickup memory, queued
+    messages) and compares the list with a copy in the test. It does not run the
+    simulation, so AI, rules and data changes never move it, and dropping, adding,
+    renaming or re-typing a hashed field always does. This is the test that stands
+    behind each field.
+  - **The golden digests** (`PinnedRoundsKeepTheirHashes`) play four pinned rounds
+    to their natural end and compare a digest of every tick's hash. They pin the
+    hash *and the way the simulation plays*.
+- **When the digests move.** Any change that alters how a seeded round plays moves
+  them, whether or not the hash changed: a bot's behaviour, a rule, a number in
+  `data/*.txt`, how many random numbers a round draws, a new hashed field (and
+  brief 04a's input state). A moved digest is then expected, not a bug, but the
+  commit must **say so** ("moves the golden digests: bots now ...") so a reviewer
+  can tell it from a determinism fault, and a digest that moves in a commit that
+  should not change play is a real regression. The schema list and the
+  `STATE_HASH_VERSION` bump are separate and only for changes to the hash itself.
+  To regenerate:
 
   ```bash
   BITRIOT_HASH_DUMP=1   ./tests/bitriot_tests --gtest_filter='SimulationTest.PinnedRounds*'
+  BITRIOT_HASH_SCHEMA_DUMP=1 ./tests/bitriot_tests --gtest_filter='StateHashTest.TheHashSchemaIsPinned'
   BITRIOT_HASH_DUMP=all ./tests/bitriot_tests --gtest_filter='SimulationTest.PinnedRounds*'  # every tick's hash
   ```
 
-  The first prints one `digest=0x...ULL` per round to put in `GOLDEN_ROUNDS`; the
-  second prints `HASH <round> <tick> <hash>` lines, which is how two builds (GCC
-  and Clang, or the real engine and the harness) are compared tick by tick. The
-  same digests must pass on every compiler. Check the change is deliberate before
-  regenerating: a digest that moves for no reason is a determinism bug.
+  The first prints one `digest=0x...ULL` per round (a dump run still compares, so
+  it fails until you paste them into `GOLDEN_ROUNDS`); the second prints the schema
+  lines for `HASH_SCHEMA`; the third prints `HASH <round> <tick> <hash>` lines,
+  which is how two builds (GCC and Clang, or the real engine and the harness) are
+  compared tick by tick. The same digests must pass on every compiler. Check a
+  change is deliberate before regenerating: a digest that moves for no reason is a
+  determinism bug.
 - Hashing is read-only and needs no tick, so a test can hash a world it has just
   edited. To change a protected field, use the pointer-to-member trick in
   `SimulationTest.cpp` (`struct Access`).

@@ -88,7 +88,7 @@ bool EntityMessageQueue::deleteMessageAtFront()
 
 void EntityMessageQueue::hashState(StateHasher& h) const
 {
-  h.count(m_msgQueue.size());
+  h.count(m_msgQueue.size(), "queue.count");
   for (std::deque<EntityMessage *>::const_iterator it = m_msgQueue.begin(); it != m_msgQueue.end(); ++it)
   {
     (*it)->hashState(h);

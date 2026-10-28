@@ -100,11 +100,27 @@ uint64_t GameSettings::pickRoundSeed()
   return roundSeed;
 }
 
-uint64_t GameSettings::beginRoundSeed()
+GameSettings::Snapshot GameSettings::snapshot() const
 {
-  pickRoundSeed();
-  SimRandom::sim().seed(roundSeed);
-  return roundSeed;
+  Snapshot saved;
+  saved.numPlayers = numPlayers;
+  saved.blockPercentage = blockPercentage;
+  saved.npcSpawnerEnabled = npcSpawnerEnabled;
+  saved.mapWidth = mapWidth;
+  saved.mapHeight = mapHeight;
+  saved.players = m_players;
+  return saved;
+}
+
+void GameSettings::restore(const Snapshot& saved)
+{
+  numPlayers = saved.numPlayers;
+  blockPercentage = saved.blockPercentage;
+  npcSpawnerEnabled = saved.npcSpawnerEnabled;
+  mapWidth = saved.mapWidth;
+  mapHeight = saved.mapHeight;
+  m_players = saved.players;
+  syncMirrors();
 }
 
 void GameSettings::setPlayerGender(int playerIndex, bool isMale)

@@ -24,7 +24,7 @@ class EggEntity : public GameEntity
 
 
   protected:
-    void hashExtraState(StateHasher& h) const override;
+    virtual void hashExtraState(StateHasher& h) const;
 
   private:
     EntityType m_hatchling;

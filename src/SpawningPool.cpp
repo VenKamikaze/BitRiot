@@ -268,10 +268,10 @@ unsigned int SpawningPool::getRobotFlags()
 }
 void SpawningPool::hashState(StateHasher& h) const
 {
-  h.i32(m_pointsLeft);
-  h.i32(m_IQsLeft);
-  h.i32(m_ENsLeft);
-  h.i32(m_minDelay);
-  h.i32(m_maxDelay);
-  h.i32(m_delayCounter);
+  h.i32(m_pointsLeft, "pool.pointsLeft");
+  h.i32(m_IQsLeft, "pool.iqsLeft");
+  h.i32(m_ENsLeft, "pool.ensLeft");
+  h.i32(m_minDelay, "pool.minDelay");
+  h.i32(m_maxDelay, "pool.maxDelay");
+  h.i32(m_delayCounter, "pool.delayCounter");
 }

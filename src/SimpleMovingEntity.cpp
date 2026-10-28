@@ -98,7 +98,7 @@ void SimpleMovingEntity::update()
 
 void SimpleMovingEntity::hashExtraState(StateHasher& h) const
 {
-  h.i32(m_decayCounter);
+  h.i32(m_decayCounter, "mover.decayCounter");
   m_pBrain->hashState(h);
   // m_animCounter only paces the animation
 }

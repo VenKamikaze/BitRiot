@@ -22,17 +22,17 @@ EntityMessage::EntityMessage(int type, int sender, int typeParam,
 
 void EntityMessage::hashState(StateHasher& h) const
 {
-  h.i32(m_type);
-  h.ref(m_senderID);
-  h.i32(m_typeToCreate);
-  h.i32(m_teamToCreate);
-  h.i32(m_toX);
-  h.i32(m_toY);
-  h.i32(m_fromX);
-  h.i32(m_fromY);
-  h.i32((int32_t) m_entityMessageFlags);
-  h.i32(m_offsetX);
-  h.i32(m_offsetY);
-  h.i32(m_targetX);
-  h.i32(m_targetY);
+  h.i32(m_type, "message.type");
+  h.ref(m_senderID, "message.sender");
+  h.i32(m_typeToCreate, "message.typeToCreate");
+  h.i32(m_teamToCreate, "message.teamToCreate");
+  h.i32(m_toX, "message.toX");
+  h.i32(m_toY, "message.toY");
+  h.i32(m_fromX, "message.fromX");
+  h.i32(m_fromY, "message.fromY");
+  h.i32((int32_t) m_entityMessageFlags, "message.flags");
+  h.i32(m_offsetX, "message.offsetX");
+  h.i32(m_offsetY, "message.offsetY");
+  h.i32(m_targetX, "message.targetX");
+  h.i32(m_targetY, "message.targetY");
 }

@@ -47,7 +47,7 @@ class GameEngine
     vector<shared_ptr<PlayerCharacterEntity>> m_pPlayers;
 
     // Scoreboard game length: the simulation's tick count x NORMAL_TICKS_SPEED.
-    int gameLengthSeconds();
+    int gameLengthSeconds() const;
     void resetGame();
     // Pre-game: if the menu changed the map size, push GameSettings dims into the
     // Map statics and resize the window/back-buffer/texture + rebuild the static

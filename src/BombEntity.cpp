@@ -54,5 +54,5 @@ void BombEntity::update()
 
 void BombEntity::hashExtraState(StateHasher& h) const
 {
-  h.i32(m_fuse);
+  h.i32(m_fuse, "bomb.fuse");
 }

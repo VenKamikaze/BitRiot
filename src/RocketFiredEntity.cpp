@@ -114,7 +114,7 @@ void RocketFiredEntity::update()
 
 void RocketFiredEntity::hashExtraState(StateHasher& h) const
 {
-  h.i32(m_dir);
-  h.i32(m_toX);
-  h.i32(m_toY);
+  h.i32(m_dir, "rocket.direction");
+  h.i32(m_toX, "rocket.targetX");
+  h.i32(m_toY, "rocket.targetY");
 }

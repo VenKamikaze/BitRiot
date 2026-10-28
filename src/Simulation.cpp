@@ -11,6 +11,44 @@
 #include "Map.h"
 #include "SimRandom.h"
 
+// The hash writes these enums as their C++ values (see the specification in
+// Simulation.h). If one of these fails to compile, the numbering moved: bump
+// Simulation::STATE_HASH_VERSION and update the list in Simulation.h.
+static_assert(BLOCK == 0 && EGG1 == 1 && EGG5 == 5 && ENPLUS_POWERUP == 6 && IQPLUS_POWERUP == 7
+              && BOMB == 8 && MINE == 9 && ROCKET_SPIN == 10 && ROCKET_FIRED == 11
+              && ENERGY_DROP == 12 && EXPLOSION == 13 && PLAYER_CHARACTER == 14
+              && EGG_THIEF == 15 && WALL_EATER == 16 && DRONE == 17 && ROBOT1 == 18
+              && MUNCH_EFFECT == 19 && DAMAGE_EFFECT == 20 && NUM_ENTITY_TYPES == 21,
+              "EntityType numbering is part of the state hash");
+static_assert(BLOCK_GROUP == 0 && EGG_GROUP == 1 && POWERUP_GROUP == 2 && WEAPON_GROUP == 3
+              && EXPLOSION_GROUP == 4 && CHARACTER_GROUP == 5 && PLAYER_SPAWN_GROUP == 6
+              && MONSTER_GROUP == 7 && ROBOT_GROUP == 8 && EFFECT_GROUP == 9,
+              "EntityGroupType numbering is part of the state hash");
+static_assert(Map::WALL == 0 && Map::EMPTY == 1 && Map::BLOCK == 2,
+              "Map::StaticTile numbering is part of the state hash");
+static_assert(UP == 0 && DOWN == 1 && LEFT == 2 && RIGHT == 3,
+              "DIRECTION numbering is part of the state hash");
+static_assert(EntityRenderer::IDLE == 0 && EntityRenderer::MOVE_UP == 1 && EntityRenderer::MOVE_DOWN == 2
+              && EntityRenderer::MOVE_LEFT == 3 && EntityRenderer::MOVE_RIGHT == 4
+              && SimpleBrain::IDLE == 0 && SimpleBrain::MOVE_RIGHT == 4,
+              "the anim state numbering is part of the state hash");
+static_assert(EntityMessage::DESTROY_ENTITY == 0 && EntityMessage::CREATE_ENTITY == 1
+              && EntityMessage::MOVE_ENTITY == 2,
+              "EntityMessage::MessageType numbering is part of the state hash");
+static_assert(AIGoal::GOAL_INCREASE_ENERGY == 0 && AIGoal::GOAL_SECURE_AREA == 1
+              && AIGoal::GOAL_CREATE_ENTITIES == 2 && AIGoal::GOAL_ATTACK_TEAM == 3
+              && AIGoal::GOAL_ATTACK_ENTITY == 4 && AIGoal::GOAL_GET_POWERUP == 5,
+              "AIGoal::GOAL_TYPES numbering is part of the state hash");
+static_assert(AIInstruction::GO_TO == 0 && AIInstruction::MOVE_FROM_LOCATION == 1
+              && AIInstruction::CREATE_ENTITY == 2 && AIInstruction::WAIT == 3,
+              "AIInstruction::INSTRUCTION_TYPES numbering is part of the state hash");
+static_assert(GameEntity::UP_FLAG == (1u << 1) && GameEntity::DOWN_FLAG == (1u << 2)
+              && GameEntity::LEFT_FLAG == (1u << 3) && GameEntity::RIGHT_FLAG == (1u << 4)
+              && GameEntity::WALK_THROUGH_BLOCKS == (1u << 5) && GameEntity::LAY_BLOCKS == (1u << 6)
+              && GameEntity::LAY_MINES == (1u << 7) && GameEntity::FIRE_ROCKETS == (1u << 8)
+              && GameEntity::LAY_BOMBS == (1u << 9) && GameEntity::AI_CONTROLLED_BOT_FLAG == (1u << 10),
+              "the GameEntity creation flag bits are part of the state hash");
+
 namespace
 {
 int s_instancesAlive = 0;
@@ -82,10 +120,19 @@ void Simulation::tearDown()
 
 void Simulation::start(const MatchConfig& config)
 {
-  const std::string problem = config.problem();
+  // 0. Everything that can be refused is refused before anything is touched, so a
+  // bad config leaves the running round and GameSettings exactly as they were.
+  const std::string problem = config.runnableProblem();
   if (!problem.empty())
   {
     throw std::invalid_argument("Simulation::start: " + problem);
+  }
+  if (Map::MAP_WIDTH != config.mapWidth || Map::MAP_HEIGHT != config.mapHeight)
+  {
+    throw std::runtime_error("Simulation::start: the Map is " + std::to_string(Map::MAP_WIDTH) + "x"
+                             + std::to_string(Map::MAP_HEIGHT) + " but the config wants "
+                             + std::to_string(config.mapWidth) + "x" + std::to_string(config.mapHeight)
+                             + "; resize the Map before starting");
   }
 
   // 1. The previous round goes first. (A map resize may already have happened:
@@ -99,13 +146,6 @@ void Simulation::start(const MatchConfig& config)
   std::GameSettings* settings = std::GameSettings::getInstance();
   config.applyTo(*settings);
   m_config = config;
-  if (Map::MAP_WIDTH != config.mapWidth || Map::MAP_HEIGHT != config.mapHeight)
-  {
-    throw std::runtime_error("Simulation::start: the Map is " + std::to_string(Map::MAP_WIDTH) + "x"
-                             + std::to_string(Map::MAP_HEIGHT) + " but the config wants "
-                             + std::to_string(config.mapWidth) + "x" + std::to_string(config.mapHeight)
-                             + "; resize the Map before starting");
-  }
 
   // 3. Seed. This must stay ahead of everything below that constructs something
   // which draws (the SpawningPool, the players, block seeding). The settings keep
@@ -306,6 +346,22 @@ std::shared_ptr<PlayerCharacterEntity> Simulation::currentWinner()
 
 uint64_t Simulation::stateHash() const
 {
+  StateHasher h;
+  hashInto(h);
+  return h.value();
+}
+
+std::vector<std::string> Simulation::stateHashFields() const
+{
+  StateHasher h;
+  std::vector<std::string> trace;
+  h.setTrace(&trace);
+  hashInto(h);
+  return trace;
+}
+
+void Simulation::hashInto(StateHasher& h) const
+{
   if (!started())
   {
     throw std::logic_error("Simulation::stateHash: call start() first");
@@ -315,8 +371,6 @@ uint64_t Simulation::stateHash() const
   DynamicMap* dynamicMap = m_entityManager->getDynamicMap();
   const int width = settings->getMapWidth();
   const int height = settings->getMapHeight();
-
-  StateHasher h;
 
   // Ids of the live entities in walk order, for every ref() below.
   std::vector<int> ids;
@@ -329,28 +383,28 @@ uint64_t Simulation::stateHash() const
   h.setEntityIds(ids);
 
   // 0, 1
-  h.i32(STATE_HASH_VERSION);
-  h.u64(m_tick);
-  h.flag(m_roundOver);
+  h.i32(STATE_HASH_VERSION, "version");
+  h.u64(m_tick, "tick");
+  h.flag(m_roundOver, "roundOver");
 
   // 2: the settings the sim reads
-  h.i32(width);
-  h.i32(height);
-  h.i32(settings->getNumberOfPlayers());
+  h.i32(width, "settings.mapWidth");
+  h.i32(height, "settings.mapHeight");
+  h.i32(settings->getNumberOfPlayers(), "settings.numPlayers");
   for (int slot = 1; slot <= settings->getNumberOfPlayers(); slot++)
   {
-    h.i32(settings->teamNumberForPlayer(slot));
+    h.i32(settings->teamNumberForPlayer(slot), "settings.team");
   }
-  h.flag(settings->isNpcSpawnerEnabled());
+  h.flag(settings->isNpcSpawnerEnabled(), "settings.npcSpawnerEnabled");
 
   // 3: the sim RNG
-  h.u64(SimRandom::sim().stateValue());
-  h.u64(SimRandom::sim().incValue());
+  h.u64(SimRandom::sim().stateValue(), "rng.state");
+  h.u64(SimRandom::sim().incValue(), "rng.inc");
 
   // 4: the game-over timer
   std::GameTimer* timer = std::GameOverTimer::getInstance();
-  h.flag(timer->isTimerTriggered());
-  h.u64(timer->getTriggeredAtTick());
+  h.flag(timer->isTimerTriggered(), "timer.triggered");
+  h.u64(timer->getTriggeredAtTick(), "timer.triggeredAtTick");
 
   // 5: the spawning pool
   m_spawningPool->hashState(h);
@@ -364,12 +418,12 @@ uint64_t Simulation::stateHash() const
   {
     for (int x = 0; x < width; x++)
     {
-      h.u8((uint8_t) map->staticTileAt(x, y));
+      h.u8((uint8_t) map->staticTileAt(x, y), "map.tile");
     }
   }
 
   // 8: the entities
-  h.count(dynamicMap->entityList.size());
+  h.count(dynamicMap->entityList.size(), "entities.count");
   for (std::map<int, std::shared_ptr<GameEntity>>::const_iterator it = dynamicMap->entityList.begin();
        it != dynamicMap->entityList.end(); ++it)
   {
@@ -382,10 +436,10 @@ uint64_t Simulation::stateHash() const
     for (int x = 0; x < width; x++)
     {
       const std::vector<int>& tile = dynamicMap->entityMap[x][y];
-      h.count(tile.size());
+      h.count(tile.size(), "entityMap.count");
       for (size_t i = 0; i < tile.size(); i++)
       {
-        h.ref(tile[i]);
+        h.ref(tile[i], "entityMap.entity");
       }
     }
   }
@@ -397,17 +451,15 @@ uint64_t Simulation::stateHash() const
     for (int x = 0; x < width; x++)
     {
       const std::vector<EntityInfo>& tile = view->getEntityInfoAtLocation(x, y);
-      h.count(tile.size());
+      h.count(tile.size(), "aiView.count");
       for (size_t i = 0; i < tile.size(); i++)
       {
-        h.ref(tile[i].id);
-        h.i32(tile[i].playerNumber);
-        h.i32(tile[i].type);
-        h.i32(tile[i].groupType);
-        h.flag(tile[i].staticFlag);
+        h.ref(tile[i].id, "aiView.entity");
+        h.i32(tile[i].playerNumber, "aiView.owner");
+        h.i32(tile[i].type, "aiView.type");
+        h.i32(tile[i].groupType, "aiView.groupType");
+        h.flag(tile[i].staticFlag, "aiView.static");
       }
     }
   }
-
-  return h.value();
 }

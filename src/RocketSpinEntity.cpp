@@ -172,5 +172,5 @@ bool RocketSpinEntity::enemyInTile(const int tileX, const int tileY) const
 
 void RocketSpinEntity::hashExtraState(StateHasher& h) const
 {
-  h.i32(m_lifespan);
+  h.i32(m_lifespan, "rocketspin.lifespan");
 }

@@ -98,7 +98,7 @@ void GameEngine::resetGame()
   m_pPanel->setPlayerPointers(m_pPlayers);
 }
 
-int GameEngine::gameLengthSeconds()
+int GameEngine::gameLengthSeconds() const
 {
   return (int) ((m_sim.tick() * GameSettings::NORMAL_TICKS_SPEED) / 1000);
 }

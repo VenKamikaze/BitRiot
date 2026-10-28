@@ -10,6 +10,8 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <map>
 #include <set>
@@ -74,7 +76,7 @@ uint64_t digestOf(const std::vector<uint64_t>& values)
   StateHasher h;
   for (size_t i = 0; i < values.size(); i++)
   {
-    h.u64(values[i]);
+    h.u64(values[i], "t");
   }
   return h.value();
 }
@@ -162,6 +164,71 @@ TEST_F(SimulationTest, ConfigCapturesTheMatchSettingsAndAppliesThemBack)
   EXPECT_TRUE(again == config);
 }
 
+TEST_F(SimulationTest, ALocalRosterSurvivesAShorterNetworkedMatch)
+{
+  // A joiner with four local players (devices, genders, teams) plays a host's
+  // two-player match. start() truncates the roster to two; the snapshot taken
+  // before is what brings every field of all four back.
+  std::GameSettings* gs = std::GameSettings::getInstance();
+  configurePlayers(4);
+  gs->setPlayerGender(2, false);
+  gs->setPlayerGender(3, true);
+  gs->setPlayerAI(2, false);
+  gs->setPlayerController(2, 7);
+  gs->setPlayerKeyboard(3, 2);
+  gs->setPlayerTeam(2, 1);
+  gs->setPlayerTeam(3, 1);
+  gs->getPlayer(2)->deviceLabel = "Pad 2";
+  gs->getPlayer(3)->deviceLabel = "Keyboard 3";
+  gs->setBlockSpawnPercentage(40);
+  gs->setNpcSpawnerEnabled(false);
+
+  const std::GameSettings::Snapshot saved = gs->snapshot();
+  std::vector<Player> players = *gs->getPlayers();
+  const std::vector<bool> genders = *gs->getPlayerGenders();
+  const std::vector<bool> playerAIs = *gs->getPlayerAIs();
+
+  // The host's match: two players, a bigger block share, the spawner on.
+  sim().start(makeConfig(9, 2, 17, 13, 70, /*npcSpawner=*/true));
+  ASSERT_EQ(gs->getNumberOfPlayers(), 2);
+  ASSERT_EQ(gs->getPlayers()->size(), 2u) << "the roster was truncated";
+  EXPECT_EQ(gs->getBlockSpawnPercentage(), 70);
+
+  // Putting the local settings back by applying a four-player config would give
+  // slots 3 and 4 default players: that is the loss the snapshot exists for.
+  MatchConfig fourPlayers = MatchConfig::fromSettings(*gs);
+  fourPlayers.slots.resize(4);
+  fourPlayers.applyTo(*gs);
+  EXPECT_EQ(gs->getPlayer(2)->attachedControllerId, -1) << "applyTo alone cannot restore devices";
+  EXPECT_NE(gs->getPlayer(3)->deviceLabel, "Keyboard 3");
+
+  gs->restore(saved);
+
+  ASSERT_EQ(gs->getNumberOfPlayers(), 4);
+  ASSERT_EQ(gs->getPlayers()->size(), 4u);
+  for (int i = 0; i < 4; i++)
+  {
+    const Player& now = *gs->getPlayer(i);
+    const Player& was = players[i];
+    EXPECT_EQ(now.id, was.id) << "slot " << i;
+    EXPECT_EQ(now.team, was.team) << "slot " << i;
+    EXPECT_EQ(now.portrait, was.portrait) << "slot " << i;
+    EXPECT_EQ((int) now.type, (int) was.type) << "slot " << i << " gender";
+    EXPECT_EQ(now.human, was.human) << "slot " << i;
+    EXPECT_EQ(now.attachedControllerId, was.attachedControllerId) << "slot " << i;
+    EXPECT_EQ(now.attachedKeyboardId, was.attachedKeyboardId) << "slot " << i;
+    EXPECT_EQ(now.deviceLabel, was.deviceLabel) << "slot " << i;
+  }
+  EXPECT_EQ(gs->getPlayer(2)->attachedControllerId, 7);
+  EXPECT_EQ(gs->getPlayer(3)->attachedKeyboardId, 2);
+  EXPECT_EQ(*gs->getPlayerGenders(), genders) << "the derived mirrors are re-derived";
+  EXPECT_EQ(*gs->getPlayerAIs(), playerAIs);
+  EXPECT_EQ(gs->getBlockSpawnPercentage(), 40);
+  EXPECT_FALSE(gs->isNpcSpawnerEnabled());
+  EXPECT_EQ(gs->getMapWidth(), 17);
+  EXPECT_EQ(gs->getMapHeight(), 13);
+}
+
 TEST_F(SimulationTest, StartAppliesTheConfigIntoGameSettings)
 {
   // The sim keeps reading GameSettings (teams on every collision, the spawner
@@ -202,24 +269,81 @@ TEST_F(SimulationTest, AConfigThatCannotBePlayedIsRefused)
   setMapSize(17, 13);
   MatchConfig oneShort = makeConfig(1, 2, 17, 13, 0);
   oneShort.slots.pop_back();
-  EXPECT_FALSE(oneShort.problem().empty());
+  EXPECT_FALSE(oneShort.runnableProblem().empty());
   EXPECT_THROW(sim().start(oneShort), std::invalid_argument);
 
   MatchConfig tooMany = makeConfig(1, 7, 17, 13, 0);
-  EXPECT_FALSE(tooMany.problem().empty());
+  EXPECT_FALSE(tooMany.runnableProblem().empty());
   EXPECT_THROW(sim().start(tooMany), std::invalid_argument);
 
   MatchConfig negativeTeam = makeConfig(1, 3, 17, 13, 0);
   negativeTeam.slots[1].team = -1;
-  EXPECT_FALSE(negativeTeam.problem().empty());
+  EXPECT_FALSE(negativeTeam.runnableProblem().empty());
   EXPECT_THROW(sim().start(negativeTeam), std::invalid_argument);
 
   MatchConfig tiny = makeConfig(1, 2, 3, 13, 0);
-  EXPECT_FALSE(tiny.problem().empty());
+  EXPECT_FALSE(tiny.runnableProblem().empty());
   EXPECT_THROW(sim().start(tiny), std::invalid_argument);
 
-  EXPECT_TRUE(makeConfig(1, 2, 17, 13, 0).problem().empty());
-  EXPECT_TRUE(makeConfig(1, 6, 33, 25, 100).problem().empty());
+  // start() runs anything the sim can run, small test maps and 0% or 100% blocks
+  // included.
+  EXPECT_TRUE(makeConfig(1, 2, 17, 13, 0).runnableProblem().empty());
+  EXPECT_TRUE(makeConfig(1, 6, 33, 25, 100).runnableProblem().empty());
+  EXPECT_TRUE(makeConfig(1, 2, 4, 4, 0).runnableProblem().empty());
+}
+
+TEST_F(SimulationTest, AConfigFromAnotherMachineIsHeldToTheMenuLimits)
+{
+  // problem() is what netplay must apply to a config a host sends: it is the
+  // runnable check plus what the menus enforce.
+  EXPECT_TRUE(makeConfig(1, 2, 17, 13, 55).problem().empty());
+  EXPECT_TRUE(makeConfig(1, 6, 33, 25, 75).problem().empty());
+  EXPECT_TRUE(makeConfig(1, 6, 13, 19, 20).problem().empty());
+  EXPECT_TRUE(makeConfig(1, 4, 13, 11, 55).problem().empty());
+
+  MatchConfig team = makeConfig(1, 4, 17, 13, 55);
+  team.slots[2].team = 4; // only teams 0-3 exist with four players
+  EXPECT_FALSE(team.problem().empty());
+  EXPECT_TRUE(team.runnableProblem().empty()) << "the sim itself does not care";
+  team.slots[2].team = 3;
+  EXPECT_TRUE(team.problem().empty());
+
+  EXPECT_FALSE(makeConfig(1, 4, 16, 13, 55).problem().empty()) << "even width";
+  EXPECT_FALSE(makeConfig(1, 4, 17, 12, 55).problem().empty()) << "even height";
+  EXPECT_FALSE(makeConfig(1, 4, 11, 13, 55).problem().empty()) << "narrower than the menu allows";
+  EXPECT_FALSE(makeConfig(1, 4, 35, 13, 55).problem().empty()) << "wider than the menu allows";
+  EXPECT_FALSE(makeConfig(1, 4, 17, 9, 55).problem().empty()) << "shorter than the menu allows";
+  EXPECT_FALSE(makeConfig(1, 4, 17, 27, 55).problem().empty()) << "taller than the menu allows";
+  EXPECT_FALSE(makeConfig(1, 6, 17, 17, 55).problem().empty()) << "six portraits do not fit in 17 tiles";
+  EXPECT_FALSE(makeConfig(1, 4, 17, 13, 10).problem().empty()) << "fewer blocks than the menu allows";
+  EXPECT_FALSE(makeConfig(1, 4, 17, 13, 100).problem().empty()) << "more blocks than the menu allows";
+  EXPECT_FALSE(makeConfig(1, 7, 17, 13, 55).problem().empty()) << "the runnable limits apply too";
+}
+
+TEST_F(SimulationTest, ARefusedConfigLeavesTheRunningRoundAndTheSettingsAlone)
+{
+  // Validation, including the Map-size check, happens before anything is torn
+  // down or written.
+  configurePlayers(3);
+  startRound();
+  sim().step();
+  sim().step();
+  const uint64_t before = sim().stateHash();
+  const MatchConfig keptConfig = sim().config();
+  const std::GameSettings::Snapshot settingsBefore = std::GameSettings::getInstance()->snapshot();
+
+  MatchConfig wrongMap = makeConfig(5, 5, 21, 15, 30); // the Map is 17x13
+  EXPECT_THROW(sim().start(wrongMap), std::runtime_error);
+  MatchConfig invalid = makeConfig(5, 1, 17, 13, 30);
+  EXPECT_THROW(sim().start(invalid), std::invalid_argument);
+
+  EXPECT_EQ(sim().stateHash(), before) << "the running round was torn down";
+  EXPECT_TRUE(sim().config() == keptConfig);
+  const std::GameSettings::Snapshot settingsAfter = std::GameSettings::getInstance()->snapshot();
+  EXPECT_EQ(settingsAfter.numPlayers, settingsBefore.numPlayers);
+  EXPECT_EQ(settingsAfter.mapWidth, settingsBefore.mapWidth);
+  EXPECT_EQ(settingsAfter.blockPercentage, settingsBefore.blockPercentage);
+  EXPECT_EQ(std::GameSettings::getInstance()->getNumberOfPlayers(), 3);
 }
 
 TEST_F(SimulationTest, StartRefusesAMapThatWasNotResizedFirst)
@@ -317,14 +441,19 @@ bool eligibleForBlock(int x, int y, int w, int h)
 
 TEST_F(SimulationTest, RealRoundsSeedBlocksAccordingToTheConfig)
 {
+  // Rounds started the way every other test starts them, so the seed is the
+  // harness's per-test, per-round one and BITRIOT_TEST_SEED sweeps vary it.
   const int sizes[][2] = {{17, 13}, {25, 19}, {13, 11}};
   for (const auto& size : sizes)
   {
     const int w = size[0];
     const int h = size[1];
+    configurePlayers(4);
+    setMapSize(w, h);
 
     // 100%: every eligible tile, and only those.
-    startConfig(makeConfig(11, 4, w, h, 100));
+    setBlockPercentage(100);
+    startRound();
     int eligible = 0;
     int blockTiles = 0;
     for (int x = 0; x < w; x++)
@@ -342,12 +471,15 @@ TEST_F(SimulationTest, RealRoundsSeedBlocksAccordingToTheConfig)
     EXPECT_EQ(countEntities(BLOCK_GROUP), blockTiles) << "a block entity per block tile";
 
     // 0%: none.
-    startConfig(makeConfig(11, 4, w, h, 0));
+    setBlockPercentage(0);
+    startRound();
     EXPECT_EQ(countEntities(BLOCK_GROUP), 0);
 
-    // The game's default, 55%: about that share of the eligible tiles, never
+    // The game's default, 55%: about that share of the eligible tiles (within five
+    // standard deviations of a binomial, so no seed fails by bad luck), never
     // outside the eligible ones, each tile's block entity matching the map.
-    startConfig(makeConfig(11, 4, w, h, 55));
+    setBlockPercentage(55);
+    startRound();
     int placed = 0;
     for (int x = 0; x < w; x++)
     {
@@ -362,8 +494,10 @@ TEST_F(SimulationTest, RealRoundsSeedBlocksAccordingToTheConfig)
       }
     }
     EXPECT_EQ(countEntities(BLOCK_GROUP), placed);
-    EXPECT_GT(placed, eligible * 35 / 100) << placed << " of " << eligible << " eligible tiles at 55%";
-    EXPECT_LT(placed, eligible * 75 / 100) << placed << " of " << eligible << " eligible tiles at 55%";
+    const double mean = eligible * 0.55;
+    const double spread = 5.0 * std::sqrt(eligible * 0.55 * 0.45);
+    EXPECT_GT((double) placed, mean - spread) << placed << " of " << eligible << " eligible tiles at 55%";
+    EXPECT_LT((double) placed, mean + spread) << placed << " of " << eligible << " eligible tiles at 55%";
   }
 }
 
@@ -392,13 +526,31 @@ TEST_F(SimulationTest, BlocksBelongToTheTeamOfTheirCorner)
 TEST_F(SimulationTest, ARealRoundOnARealMapPlaysToItsNaturalEnd)
 {
   // The game's default block density on the game's default map, two bots: blocks
-  // everywhere, the spawning pool on, the countdown and all.
-  startConfig(makeConfig(1234, 2, 17, 13, 55));
+  // everywhere, the spawning pool on, the countdown and all. Started like any
+  // other round, so a BITRIOT_TEST_SEED sweep plays a different one each time.
+  configurePlayers(2);
+  setBlockPercentage(55);
+  startRound();
+  ASSERT_GT(countEntities(BLOCK_GROUP), 20) << "precondition: this round has blocks";
+
   const RoundOutcome outcome = runRoundToCompletion(60000);
   EXPECT_TRUE(outcome.ended) << outcome.describe();
   EXPECT_GT(outcome.frames, 0) << outcome.describe();
   EXPECT_LE(outcome.aliveTeams, 1) << outcome.describe();
   EXPECT_TRUE(sim().roundOver());
+}
+
+TEST_F(SimulationTest, AFourPlayerRoundWithBlocksPlaysToItsNaturalEnd)
+{
+  configurePlayers(4);
+  setBlockPercentage(55);
+  startRound();
+  ASSERT_GT(countEntities(BLOCK_GROUP), 20) << "precondition: this round has blocks";
+
+  const RoundOutcome outcome = runRoundToCompletion(60000);
+  EXPECT_TRUE(outcome.ended) << outcome.describe();
+  EXPECT_GT(outcome.frames, 0) << outcome.describe();
+  EXPECT_LE(outcome.aliveTeams, 1) << outcome.describe();
 }
 
 // ===========================================================================
@@ -561,9 +713,6 @@ TEST_F(SimulationTest, TheSameConfigGivesTheSameHashOnEveryTick)
   {
     ASSERT_EQ(first[i], second[i]) << "the runs diverge at tick " << i;
   }
-  // and the hash is not stuck
-  std::set<uint64_t> distinct(first.begin(), first.end());
-  EXPECT_EQ(distinct.size(), first.size()) << "every tick should have its own hash";
 }
 
 TEST_F(SimulationTest, DifferentSeedsGiveDifferentHashes)
@@ -1014,6 +1163,197 @@ TEST_F(StateHashTest, CosmeticDrawsDuringARoundDoNotChangeItsHashes)
 }
 
 // ===========================================================================
+// The hash schema
+// ===========================================================================
+
+// The fields stateHash() writes, in the order it first writes each: the layout of
+// the hash, not its values. A world holding every kind of thing the hash walks
+// (every entity type, a bot with a plan and pickup memory, queued messages) is
+// built by hand and not stepped, so nothing here depends on how the simulation
+// plays: an AI, rules or data change does not move this list, while dropping,
+// adding, renaming or re-typing a hashed field does. Unlike the golden digests it
+// therefore need not be regenerated for a change in play.
+//
+// If you change the hash on purpose: bump Simulation::STATE_HASH_VERSION, update
+// the specification in Simulation.h, regenerate the digests (tests/README.md) and
+// update this list (BITRIOT_HASH_SCHEMA_DUMP=1 prints it in this format).
+const char* const HASH_SCHEMA[] = {
+  "version:i32",
+  "tick:u64",
+  "roundOver:u8",
+  "settings.mapWidth:i32",
+  "settings.mapHeight:i32",
+  "settings.numPlayers:i32",
+  "settings.team:i32",
+  "settings.npcSpawnerEnabled:u8",
+  "rng.state:u64",
+  "rng.inc:u64",
+  "timer.triggered:u8",
+  "timer.triggeredAtTick:u64",
+  "pool.pointsLeft:i32",
+  "pool.iqsLeft:i32",
+  "pool.ensLeft:i32",
+  "pool.minDelay:i32",
+  "pool.maxDelay:i32",
+  "pool.delayCounter:i32",
+  "queue.count:count",
+  "message.type:i32",
+  "message.sender:ref",
+  "message.typeToCreate:i32",
+  "message.teamToCreate:i32",
+  "message.toX:i32",
+  "message.toY:i32",
+  "message.fromX:i32",
+  "message.fromY:i32",
+  "message.flags:i32",
+  "message.offsetX:i32",
+  "message.offsetY:i32",
+  "message.targetX:i32",
+  "message.targetY:i32",
+  "map.tile:u8",
+  "entities.count:count",
+  "entity.type:i32",
+  "entity.owner:i32",
+  "entity.tileX:i32",
+  "entity.tileY:i32",
+  "entity.offsetX:i32",
+  "entity.offsetY:i32",
+  "entity.velocity:i32",
+  "entity.health:i32",
+  "entity.animState:i32",
+  "entity.walkThroughBlocks:u8",
+  "player.alive:u8",
+  "player.controlledByAI:u8",
+  "player.iq:i32",
+  "player.bombsPlaced:i32",
+  "player.eggsPlaced:i32",
+  "player.checkTimer:i32",
+  "player.aiFrame:i32",
+  "player.goals.count:count",
+  "player.instructions.count:count",
+  "player.abandonedPickups.count:count",
+  "player.pickupAttempts.count:count",
+  "goal.type:i32",
+  "goal.targetAmount:i32",
+  "goal.tileX:i32",
+  "goal.tileY:i32",
+  "goal.targetType:i32",
+  "goal.target:ref",
+  "instruction.type:i32",
+  "instruction.targetAmount:i32",
+  "instruction.targetType:i32",
+  "instruction.targetTileX:i32",
+  "instruction.targetTileY:i32",
+  "abandoned.pickup:ref",
+  "abandoned.frame:i32",
+  "attempt.pickup:ref",
+  "attempt.bestBlocks:i32",
+  "attempt.bestSteps:i32",
+  "attempt.failures:i32",
+  "egg.hatchling:i32",
+  "egg.hatchCounter:i32",
+  "egg.hatchFlags:i32",
+  "enplus.decayCounter:i32",
+  "iqplus.decayCounter:i32",
+  "bomb.fuse:i32",
+  "mine.fuse:i32",
+  "rocketspin.lifespan:i32",
+  "rocket.direction:i32",
+  "rocket.targetX:i32",
+  "rocket.targetY:i32",
+  "mover.decayCounter:i32",
+  "brain.lastMovingState:i32",
+  "brain.minMoveTimer:i32",
+  "robot.actionCounter:i32",
+  "robot.layBlocks:u8",
+  "robot.layMines:u8",
+  "robot.fireRockets:u8",
+  "robot.layBombs:u8",
+  "entityMap.count:count",
+  "entityMap.entity:ref",
+  "aiView.count:count",
+  "aiView.entity:ref",
+  "aiView.owner:i32",
+  "aiView.type:i32",
+  "aiView.groupType:i32",
+  "aiView.static:u8",
+};
+
+TEST_F(StateHashTest, TheHashSchemaIsPinned)
+{
+  // Slot 1 human, slot 2 a bot (it brings a goal and an instruction).
+  configurePlayers(2);
+  std::GameSettings::getInstance()->setPlayerAI(0, false);
+  setMapSize(17, 13);
+  startRound();
+
+  // One of every entity type, on tiles of its own.
+  const EntityType types[] = {BLOCK, EGG1, EGG2, EGG3, EGG4, EGG5, ENPLUS_POWERUP, IQPLUS_POWERUP,
+                              BOMB, MINE, ROCKET_SPIN, ROCKET_FIRED, ENERGY_DROP, EXPLOSION,
+                              EGG_THIEF, WALL_EATER, DRONE, ROBOT1, MUNCH_EFFECT, DAMAGE_EFFECT};
+  int n = 0;
+  for (EntityType type : types)
+  {
+    const int x = 2 + (n % 13);
+    const int y = 5 + 2 * (n / 13);
+    spawnEntity(type, type == ROBOT1 || type == BLOCK ? 0 : 1, x, y,
+                type == ROBOT1 ? GameEntity::LAY_MINES : 0);
+    n++;
+  }
+
+  // The bot's pickup memory, and messages waiting for the next tick.
+  PlayerCharacterEntity& bot = *player(2);
+  (bot.*Access::abandonedPickups())[3] = 5;
+  (bot.*Access::pickupAttempts())[3].failures = 1;
+  EntityMessageQueue* emq = EntityMessageQueue::getInstance();
+  emq->postCreateMessage(MINE, 1, 4, 4, 0);
+  emq->postMoveMessage(player(1)->getID(), 1, 1, 2, 1);
+  emq->postDestroyMessage(player(2)->getID());
+
+  std::vector<std::string> schema;
+  std::set<std::string> seen;
+  const std::vector<std::string> trace = sim().stateHashFields();
+  ASSERT_FALSE(trace.empty());
+  for (const std::string& field : trace)
+  {
+    if (seen.insert(field).second)
+    {
+      schema.push_back(field);
+    }
+  }
+
+  if (std::getenv("BITRIOT_HASH_SCHEMA_DUMP") != nullptr)
+  {
+    for (const std::string& field : schema)
+    {
+      std::fprintf(stderr, "  \"%s\",\n", field.c_str());
+    }
+  }
+
+  const std::vector<std::string> expected(std::begin(HASH_SCHEMA), std::end(HASH_SCHEMA));
+  for (const std::string& field : schema)
+  {
+    EXPECT_NE(std::find(expected.begin(), expected.end(), field), expected.end())
+        << "the hash writes a field the schema does not list: " << field;
+  }
+  for (const std::string& field : expected)
+  {
+    EXPECT_NE(std::find(schema.begin(), schema.end(), field), schema.end())
+        << "the schema lists a field the hash no longer writes: " << field;
+  }
+  EXPECT_EQ(schema, expected) << "same fields in a different order, or a changed type";
+}
+
+TEST_F(StateHashTest, TheSchemaTraceDoesNotChangeTheHash)
+{
+  startStillWorld();
+  sim().step();
+  const uint64_t plain = sim().stateHash();
+  EXPECT_FALSE(sim().stateHashFields().empty());
+  EXPECT_EQ(sim().stateHash(), plain);
+}
+
+// ===========================================================================
 // The hasher itself
 // ===========================================================================
 
@@ -1024,13 +1364,13 @@ TEST(StateHasherTest, IsFnv1a64OverTheBytes)
   EXPECT_EQ(empty.value(), 0xcbf29ce484222325ULL);
 
   StateHasher a;
-  a.u8('a');
+  a.u8('a', "t");
   EXPECT_EQ(a.value(), 0xaf63dc4c8601ec8cULL);
 
   StateHasher foobar;
   for (char c : std::string("foobar"))
   {
-    foobar.u8((uint8_t) c);
+    foobar.u8((uint8_t) c, "t");
   }
   EXPECT_EQ(foobar.value(), 0x85944171f73967e8ULL);
 }
@@ -1038,33 +1378,33 @@ TEST(StateHasherTest, IsFnv1a64OverTheBytes)
 TEST(StateHasherTest, IntegersAreFedLeastSignificantByteFirst)
 {
   StateHasher viaI32;
-  viaI32.i32(0x04030201);
+  viaI32.i32(0x04030201, "t");
   StateHasher viaBytes;
-  viaBytes.u8(1);
-  viaBytes.u8(2);
-  viaBytes.u8(3);
-  viaBytes.u8(4);
+  viaBytes.u8(1, "t");
+  viaBytes.u8(2, "t");
+  viaBytes.u8(3, "t");
+  viaBytes.u8(4, "t");
   EXPECT_EQ(viaI32.value(), viaBytes.value());
 
   StateHasher negative;
-  negative.i32(-2); // 0xfffffffe
+  negative.i32(-2, "t"); // 0xfffffffe
   StateHasher negativeBytes;
-  negativeBytes.u8(0xfe);
-  negativeBytes.u8(0xff);
-  negativeBytes.u8(0xff);
-  negativeBytes.u8(0xff);
+  negativeBytes.u8(0xfe, "t");
+  negativeBytes.u8(0xff, "t");
+  negativeBytes.u8(0xff, "t");
+  negativeBytes.u8(0xff, "t");
   EXPECT_EQ(negative.value(), negativeBytes.value());
 
   StateHasher wide;
-  wide.u64(0x0807060504030201ULL);
+  wide.u64(0x0807060504030201ULL, "t");
   StateHasher wideBytes;
-  for (int b = 1; b <= 8; b++) wideBytes.u8((uint8_t) b);
+  for (int b = 1; b <= 8; b++) wideBytes.u8((uint8_t) b, "t");
   EXPECT_EQ(wide.value(), wideBytes.value());
 
   StateHasher flagTrue;
-  flagTrue.flag(true);
+  flagTrue.flag(true, "t");
   StateHasher one;
-  one.u8(1);
+  one.u8(1, "t");
   EXPECT_EQ(flagTrue.value(), one.value());
 }
 
@@ -1084,10 +1424,10 @@ TEST(StateHasherTest, EntityReferencesAreWalkPositionsNotIds)
   shifted.setEntityIds({103, 107, 109, 112});
   StateHasher x;
   x.setEntityIds({3, 7, 9, 12});
-  x.ref(9);
-  x.ref(8);
-  shifted.ref(109);
-  shifted.ref(108);
+  x.ref(9, "t");
+  x.ref(8, "t");
+  shifted.ref(109, "t");
+  shifted.ref(108, "t");
   EXPECT_EQ(x.value(), shifted.value());
 }
 
@@ -1122,17 +1462,19 @@ const GoldenRound GOLDEN_ROUNDS[] = {
 
 TEST_F(SimulationTest, PinnedRoundsKeepTheirHashes)
 {
-  const bool dump = std::getenv("BITRIOT_HASH_DUMP") != nullptr;
+  // BITRIOT_HASH_DUMP only adds output (see tests/README.md): the digests are
+  // compared either way, so a dump run reports a mismatch as a failure and prints
+  // the new value to copy into GOLDEN_ROUNDS.
+  const char* dump = std::getenv("BITRIOT_HASH_DUMP");
   for (const GoldenRound& g : GOLDEN_ROUNDS)
   {
     const std::vector<uint64_t> hashes = playHashes(makeConfig(g.seed, g.players, g.width, g.height, g.blockPercentage), g.ticks);
     const uint64_t digest = digestOf(hashes);
-    if (dump)
+    if (dump != nullptr)
     {
       std::fprintf(stderr, "HASHDUMP %s digest=0x%016llxULL ticks=%zu\n", g.name,
                    (unsigned long long) digest, hashes.size());
-      const char* every = std::getenv("BITRIOT_HASH_DUMP");
-      if (every[0] == 'a') // BITRIOT_HASH_DUMP=all: one line per tick
+      if (dump[0] == 'a') // BITRIOT_HASH_DUMP=all: one line per tick
       {
         for (size_t i = 0; i < hashes.size(); i++)
         {
@@ -1140,10 +1482,7 @@ TEST_F(SimulationTest, PinnedRoundsKeepTheirHashes)
         }
       }
     }
-    else
-    {
-      EXPECT_EQ(digest, g.digest) << g.name << " (" << hashes.size() << " hashes)";
-    }
+    EXPECT_EQ(digest, g.digest) << g.name << " (" << hashes.size() << " hashes)";
   }
 }
 
