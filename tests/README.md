@@ -168,19 +168,25 @@ A green test proves nothing until you've seen it go red for the right reason.
 Both of the team-play fixes were verified differentially — the tests were run
 against the pre-fix code and confirmed to fail:
 
-- Reverting `assets/menu/scoreboard.{rml,rcss}` to `e28cbf3` fails 7 of the 8
+- Reverting `assets/menu/scoreboard.{rml,rcss}` to `e28cbf3` fails 8 of the 9
   `ScoreboardLayoutTest` cases (no header row, misaligned columns, overlapping
-  cells).
+  cells; only the "document loads" case passes).
 - Restoring the old co-op branch (`return allPlayersDead();`) fails all three
   co-op round tests with `{ended=false frames=60000 playersAlive=2
   hostilesRemain=false poolSpent=true}` — the reported bug exactly.
+- Making `EntityManager::getRoundPlayerRoster()` return the live set again (the
+  "scoreboard only lists survivors" bug) fails 6 tests: 4 of the 9
+  `RoundRosterTest` cases, `FullRoundTest.RosterAfterARealRoundListsEveryPlayerWithTheirRealOutcome`
+  and `ScoreboardLayoutTest.ScoreboardFromRealRoundListsPlayersWhoDiedAsWellAsSurvivors`.
+  The remaining roster tests only check state that is true for survivors too
+  (initial roster, reset, type filtering, max players), so they pass either way.
 
 Assets are read at runtime, so the scoreboard check needs no rebuild: swap the
 files, run, swap back.
 
 ## Coverage today
 
-90 tests across eight files:
+91 tests across eight files:
 
 - `WinConditionTest.cpp` — free-for-all, team and co-op round-end rules,
   including the co-op "board cleared and pool exhausted" win and the
@@ -196,14 +202,16 @@ files, run, swap back.
   maps, `AIGameView` add/move/destroy bookkeeping, and ghost-entity regression
   guards across repeated rounds.
 - `FullRoundTest.cpp` — whole rounds played to their natural end (PvP, team,
-  2- and 4-player co-op), plus consecutive rounds in one process.
+  2- and 4-player co-op), the scoreboard roster after a real round, plus
+  consecutive rounds in one process.
 - `RoundRosterTest.cpp` — `EntityManager::getRoundPlayerRoster()`: every player
   who played stays listed (with stats and alive flag) after dying and being
   erased from the live entity list, the live-set semantics of
   `getAllPlayerCharacters()` are unchanged, and the roster resets per round.
 - `ScoreboardLayoutTest.cpp` — the scoreboard's real computed geometry: column
   headings exist, every data cell aligns with its heading, columns don't
-  overlap or wrap, rows group by team, the winning team is marked.
+  overlap or wrap, rows group by team, the winning team is marked, and a real
+  round with dead players yields one row per player, dead ones included.
 
 Not covered: rendering (rasterisation), input and device assignment, and
 specific weapon/AI behaviours. Input would need real refactoring to test;

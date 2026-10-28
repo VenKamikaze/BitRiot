@@ -127,7 +127,7 @@ TEST_F(RoundRosterTest, DeadPlayersKeepTheirStatsAndIdentity)
   }
 }
 
-TEST_F(RoundRosterTest, DuplicateDestroyMessagesDoNotAffectTheRoster)
+TEST_F(RoundRosterTest, RosterIsUnaffectedByRepeatedDestroysOfTheSamePlayer)
 {
   configurePlayers(2);
   startRound();

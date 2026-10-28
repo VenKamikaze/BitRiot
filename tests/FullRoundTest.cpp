@@ -137,6 +137,57 @@ TEST_F(FullRoundTest, FourPlayerCoopRoundReachesItsNaturalEnd)
   EXPECT_TRUE(teamWipedOut || boardCleared) << outcome.describe();
 }
 
+// -- the scoreboard roster after a real round ------------------------------
+
+TEST_F(FullRoundTest, RosterAfterARealRoundListsEveryPlayerWithTheirRealOutcome)
+{
+  // GameEngine hands getRoundPlayerRoster() to the scoreboard once
+  // oneOrZeroPlayersRemain() fires. Here the deaths are real (the AI kills
+  // players via DESTROY_ENTITY), so dead players have been erased from the live
+  // set - exactly the situation in which the scoreboard used to lose them.
+  const int numPlayers = 4;
+  configurePlayers(numPlayers);
+  setMapSize(9, 9);
+  startRound();
+
+  const RoundOutcome outcome = runRoundToCompletion(FRAME_BUDGET);
+  ASSERT_TRUE(outcome.ended) << outcome.describe();
+  ASSERT_GT(outcome.frames, 0) << outcome.describe();
+
+  // A free-for-all ends with <= 1 team standing, so at least three died, and
+  // the live set must really have lost them.
+  const int liveCharacters = (int) em().getAllPlayerCharacters()->size();
+  EXPECT_EQ(liveCharacters, outcome.playersAlive) << outcome.describe();
+  EXPECT_LE(liveCharacters, 1) << "dead players should have been erased from the live set";
+
+  const std::vector<std::shared_ptr<PlayerCharacterEntity>>& roster = em().getRoundPlayerRoster();
+  ASSERT_EQ((int) roster.size(), numPlayers) << outcome.describe();
+
+  int aliveInRoster = 0;
+  for (int n = 1; n <= numPlayers; n++)
+  {
+    std::shared_ptr<PlayerCharacterEntity> entry;
+    for (const auto& p : roster)
+    {
+      if (p->getPlayerNumber() == n)
+      {
+        entry = p;
+      }
+    }
+    ASSERT_NE(entry, nullptr) << "player " << n << " missing from roster";
+
+    // Alive in the roster exactly when still present in the live set.
+    EXPECT_EQ(entry->isAlive(), em().getPlayerPointer(n) != nullptr) << "player " << n;
+    if (entry->isAlive())
+    {
+      aliveInRoster++;
+      EXPECT_EQ(n, outcome.winningPlayerNumber) << "the survivor should be the winner";
+    }
+  }
+  EXPECT_EQ(aliveInRoster, outcome.playersAlive) << outcome.describe();
+  EXPECT_LT(aliveInRoster, numPlayers) << "somebody must have really died";
+}
+
 // -- a second round in the same process -------------------------------------
 
 TEST_F(FullRoundTest, TwoConsecutiveRoundsBothCompleteInOneProcess)

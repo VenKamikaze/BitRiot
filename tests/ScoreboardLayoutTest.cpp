@@ -456,7 +456,6 @@ TEST_F(ScoreboardLayoutTest, ScoreboardFromRealRoundListsPlayersWhoDiedAsWellAsS
     EXPECT_EQ(survivedRows, 1);
     EXPECT_EQ(diedRows, 3);
 
-    // Tear the data model down while the roster's entities are still alive.
   }
 }
 

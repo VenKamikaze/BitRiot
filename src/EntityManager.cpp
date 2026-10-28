@@ -119,20 +119,7 @@ void EntityManager::processMessageQueue()
           // still wanted. The roster is only ever read, never simulated.
           if (typeToCreate == PLAYER_CHARACTER)
           {
-            shared_ptr<PlayerCharacterEntity> character = static_pointer_cast<PlayerCharacterEntity>(entity);
-            bool alreadyInRoster = false;
-            for (const auto& existing : m_roundPlayerRoster)
-            {
-              if (existing->getID() == id)
-              {
-                alreadyInRoster = true;
-                break;
-              }
-            }
-            if (!alreadyInRoster)
-            {
-              m_roundPlayerRoster.push_back(character);
-            }
+            m_roundPlayerRoster.push_back(static_pointer_cast<PlayerCharacterEntity>(entity));
           }
 
           // check for player character creation for setting dead flag
