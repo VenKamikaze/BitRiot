@@ -358,6 +358,24 @@ void HeadlessGameTest::killPlayer(int playerNumber)
   p->setAlive(false);
 }
 
+namespace
+{
+// GameEntity::m_health is protected. Naming it through a derived class lets us
+// take a pointer-to-member that any GameEntity can be accessed with, without
+// touching production code.
+struct HealthAccess : public PlayerCharacterEntity
+{
+  static int GameEntity::* pointer() { return &HealthAccess::m_health; }
+};
+} // namespace
+
+void HeadlessGameTest::setPlayerHealth(int playerNumber, int health)
+{
+  std::shared_ptr<PlayerCharacterEntity> p = player(playerNumber);
+  ASSERT_NE(p, nullptr) << "no player character with playerNumber " << playerNumber;
+  (*p).*HealthAccess::pointer() = health;
+}
+
 void HeadlessGameTest::destroyPlayer(int playerNumber)
 {
   std::shared_ptr<PlayerCharacterEntity> p = player(playerNumber);

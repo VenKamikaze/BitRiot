@@ -73,6 +73,7 @@ Useful fixture members:
 | `player(n)` | The `PlayerCharacterEntity` for playerNumber `n` (1-based; 0 is the CPU) |
 | `killPlayer(n)` | Flip the alive flag. Win-condition tests should not depend on damage numbers |
 | `destroyPlayer(n)` | Real death path: DESTROY_ENTITY, so the player is also erased from the live entity list |
+| `setPlayerHealth(n, hp)` | Force a player's health (protected state, no public setter). For "what does a badly hurt bot do?" tests |
 | `spawnEntity(type, owner, x, y)` | Create an entity and process the queue |
 | `countEntities(group[, owner])` | Count live entities by group, optionally by owner |
 | `clearBlocks()` | Strip terrain when a test needs predictable movement |
@@ -196,7 +197,7 @@ files, run, swap back.
 
 ## Coverage today
 
-95 tests across eight files:
+107 tests across nine files:
 
 - `WinConditionTest.cpp` — free-for-all, team and co-op round-end rules,
   including the co-op "board cleared and pool exhausted" win and the
@@ -225,8 +226,15 @@ files, run, swap back.
   overlap or wrap, rows group by team, the winning team is marked, and a real
   round with dead players yields one row per player, dead ones included.
 
+- `AISeekEnergyTest.cpp` — bot energy-seeking on a 9x9 board with one bot (the
+  game needs two players, so the second is created and `destroyPlayer`ed):
+  a bot below the 15-health lay limit walks to energy drops / powerups, looks
+  across the whole board, picks the nearest, skips pickups it cannot reach or
+  that sit on an enemy mine, bombs out of a block cage when it can survive its
+  own blast, and the normal egg-laying recovery is untouched.
+
 Not covered: rendering (rasterisation), input and device assignment, and
-specific weapon/AI behaviours. Input would need real refactoring to test;
+specific weapon behaviours and most AI behaviours. Input would need real refactoring to test;
 weapon and AI behaviour is testable with this harness today and is the obvious
 next area to extend. The other RmlUi menus (`playerselect.rml`,
 `gameoptions.rml`) are now reachable through `RmlLayoutTest` the same way the

@@ -91,6 +91,9 @@ class PlayerCharacterEntity : public GameEntity
 
     // Bot-AI-only functions
     void determineGoals();
+    bool seekPickup(); // queues GOAL_GET_POWERUP for the best reachable pickup, if any
+    bool pickupIsHazardous(int tileX, int tileY);
+    bool canBombBlocks(); // true if bombing our way through a block is affordable and survivable
     void determineInstructionsFromGoal();
     void processNextInstruction();
 
@@ -98,12 +101,29 @@ class PlayerCharacterEntity : public GameEntity
     bool goToNearestEmptyTile(int fromX, int fromY); // returns false on failure
     bool goNumTilesAway(int numToMove);
     bool nearTileCenter(); // checks if entity is near center of current tile
+    // Returns the first tile of an A* route to the target, or the current tile
+    // when there is none (or we are already there). With allowBlockBombing the
+    // route may go through blocks and, unless queueBlockBombing is false, the
+    // instructions to bomb the first one are queued as a side effect.
     coord getNextTileFromPathfinding(int targetTileX, int targetTileY,
-                                     bool allowBlockBombing = false);
+                                     bool allowBlockBombing = false,
+                                     bool queueBlockBombing = true);
+    // Side-effect free: can we get to the tile, optionally by bombing blocks?
+    bool routeExists(int targetTileX, int targetTileY, bool allowBlockBombing);
     bool safeLocationToBomb(int tileX, int tileY); // returns false if a bomb here would be stupid
     // i.e. blowing up our own eggs
     void checkEnvironment(); // checks surrounding environment for anything we should react to
     int m_checkTimer; // timer variable for the above function
+
+    // Pickups we gave up on after repeatedly failing to make progress towards
+    // them, so a pickup we cannot actually reach does not trap the AI forever.
+    set<int> m_abandonedPickups;
+    struct PickupAttempt
+    {
+      int bestDistance = 1 << 30; // closest we have been when setting out for it
+      int failures = 0; // times in a row we set out without getting closer
+    };
+    map<int, PickupAttempt> m_pickupAttempts; // keyed by pickup entity id
     void clearGoalsAndInstructions(); // wipes m_insList and m_goalList
 
   private:
