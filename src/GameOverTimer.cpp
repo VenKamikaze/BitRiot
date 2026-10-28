@@ -11,7 +11,7 @@ using namespace std;
 
 static GameOverTimer *s_instance = NULL;
 
-GameOverTimer::GameOverTimer(std::string name, int* seconds) : GameTimer(name, seconds)
+GameOverTimer::GameOverTimer(std::string name) : GameTimer(name, GAME_OVER_COUNTDOWN_TICKS)
 {
 }
 
@@ -19,16 +19,7 @@ GameTimer* GameOverTimer::getInstance()
 {
   if(s_instance == NULL)
   {
-    s_instance = new GameOverTimer("GameOverTimer", NULL);
-  }
-  return s_instance;
-}
-
-GameTimer* GameOverTimer::getInstance(std::string name, int* seconds)
-{
-  if(s_instance == NULL)
-  {
-    s_instance = new GameOverTimer(name, seconds);
+    s_instance = new GameOverTimer("GameOverTimer");
   }
   return s_instance;
 }

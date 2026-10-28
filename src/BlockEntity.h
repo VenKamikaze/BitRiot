@@ -20,6 +20,8 @@ class BlockEntity : public GameEntity
 
   protected:
 
+  private:
+    unsigned int m_mapGeneration = 0; // Map::generation() when this block was placed
 };
 
 

@@ -18,7 +18,6 @@
 #include "MenuSDLRenderer.h"
 #include "GameSettings.h"
 #include "GameOverTimer.h"
-#include "GameScoreBoardTimer.h"
 #include "MickSDLRenderer.h"
 
 class GameEngine
@@ -44,7 +43,9 @@ class GameEngine
     //PlayerCharacterEntity* m_pPlayers[NUM_TEAMS];
     vector<shared_ptr<PlayerCharacterEntity>> m_pPlayers;
 
-    unsigned int m_gameStartedAtTicks = 0;
+    // Sim ticks run this round (GAME_RUNNING ticks); drives the scoreboard game length.
+    unsigned long m_gameTicks = 0;
+    int gameLengthSeconds() const;
     void resetGame();
     // Pre-game: if the menu changed the map size, push GameSettings dims into the
     // Map statics and resize the window/back-buffer/texture + rebuild the static

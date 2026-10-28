@@ -36,6 +36,12 @@ class EntityFactory
   public:
     static EntityFactory * getInstance();
 
+    // Restart entity ids from 1. Called when a new round's EntityManager is built,
+    // so every round numbers its entities identically (ids are only compared for
+    // equality, and std::map iteration follows id order, so this changes nothing
+    // about behaviour - it just makes rounds comparable).
+    void resetIds();
+
     shared_ptr<GameEntity> getEntity(EntityType t, int playerNumber, int atX, int atY,
                            unsigned int flags, float offsetX = 0, float offsetY = 0);
 
