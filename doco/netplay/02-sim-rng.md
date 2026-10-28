@@ -1,23 +1,23 @@
-# 02 — Seeded simulation RNG and float guards
+# 02 — Seeded simulation RNG
 
 - **Repo:** BitRiot
 - **Branch:** `netplay/02-sim-rng`
 - **Depends on:**
   - brief 01
-  - open question Q2 (D6 confirmed)
   - `fix/ai-seek-energy`, which changed the bot AI's `rand()` calls (merged into `claude` in 7d6cf6a)
 - **Status:** todo
 
 ## Goal
 
-Every random decision the simulation makes comes from a game-owned PRNG, seeded per round from a value that can be shared with peers. Cosmetic and UI randomness never consume that stream. The build is set up so that float results are bit-identical across x86-64, aarch64 and wasm.
+Every random decision the simulation makes comes from a game-owned PRNG, seeded per round from a value that can be shared with peers. Cosmetic and UI randomness never consume that stream.
+
+Floats are not this brief's concern: the user chose fixed-point maths (D6), which brief [02b](02b-fixed-point-sim.md) delivers next.
 
 ## Read first
 
-- [`README.md`](README.md): D6.
+- [`README.md`](README.md): decisions and workflow.
 - [`research/code-facts.md`](research/code-facts.md):
   - §2: every `rand()` site, with file:line
-  - §4: floats and compiler flags
   - §10: how the harness seeds today
   - §12: RNG consumed in constructors, `% 0`, evaluation order
 - `tests/test_main.cpp` and `tests/README.md` (determinism notes).
@@ -46,16 +46,10 @@ Every random decision the simulation makes comes from a game-owned PRNG, seeded 
    - Log the seed at info level.
    - Remove `srand(SDL_GetTicks())` from `MickSDLRenderer.cpp`.
 5. **Harness.** `BITRIOT_TEST_SEED` sets the round seed, and a test can also set it per round. Update `tests/README.md`.
-6. **CMake float guards.**
-   - Add `-ffp-contract=off` for GCC and Clang, on all targets.
-   - Fail at configure time if `-ffast-math` or `-Ofast` appears in the flags.
-   - On 32-bit x86, add `-msse2 -mfpmath=sse`.
-   - Add a comment pointing at D6.
-
 ## Out of scope
 
 - The state hash and replay (03a, 05).
-- Fixed-point maths (the D6 contingency).
+- Fixed-point maths (02b).
 - Changing gameplay probabilities.
 
 ## Tests
@@ -71,7 +65,6 @@ Every random decision the simulation makes comes from a game-owned PRNG, seeded 
 - No libc `rand`/`srand` left in `src/`.
 - The round seed is explicit, logged and settable.
 - Same seed gives an identical simulation.
-- CMake enforces the float guards.
 - `tests/README.md` is updated.
 
 ## Outcome
