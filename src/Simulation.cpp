@@ -53,6 +53,13 @@ namespace
 {
 int s_instancesAlive = 0;
 
+// EntityType names, for the schema trace only (indexed by EntityType value).
+const char* const ENTITY_TYPE_NAMES[NUM_ENTITY_TYPES] = {
+  "BLOCK", "EGG1", "EGG2", "EGG3", "EGG4", "EGG5", "ENPLUS_POWERUP", "IQPLUS_POWERUP",
+  "BOMB", "MINE", "ROCKET_SPIN", "ROCKET_FIRED", "ENERGY_DROP", "EXPLOSION",
+  "PLAYER_CHARACTER", "EGG_THIEF", "WALL_EATER", "DRONE", "ROBOT1", "MUNCH_EFFECT", "DAMAGE_EFFECT"
+};
+
 // Where player `playerNumber` (1-based) starts. Fixed corners and edges.
 void startingTileFor(int playerNumber, int mapWidth, int mapHeight, int& atX, int& atY)
 {
@@ -427,8 +434,10 @@ void Simulation::hashInto(StateHasher& h) const
   for (std::map<int, std::shared_ptr<GameEntity>>::const_iterator it = dynamicMap->entityList.begin();
        it != dynamicMap->entityList.end(); ++it)
   {
+    h.setTracePrefix(ENTITY_TYPE_NAMES[it->second->getType()]);
     it->second->hashState(h);
   }
+  h.setTracePrefix("");
 
   // 9: the per-tile entity lists
   for (int y = 0; y < height; y++)

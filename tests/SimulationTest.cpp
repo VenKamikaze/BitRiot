@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <list>
 #include <map>
 #include <set>
 #include <stdexcept>
@@ -46,6 +47,8 @@ struct Access : public PlayerCharacterEntity
   static int GameEntity::* owner() { return &Access::m_playerNumber; }
   static bool GameEntity::* walkThroughBlocks() { return &Access::m_walkThroughBlocks; }
   static int PlayerCharacterEntity::* iq() { return &Access::m_IQ; }
+  static std::list<AIGoal*> PlayerCharacterEntity::* goals() { return &Access::m_goalList; }
+  static std::list<AIInstruction*> PlayerCharacterEntity::* instructions() { return &Access::m_insList; }
   static std::map<int, int> PlayerCharacterEntity::* abandonedPickups() { return &Access::m_abandonedPickups; }
   static std::map<int, PickupAttempt> PlayerCharacterEntity::* pickupAttempts() { return &Access::m_pickupAttempts; }
   static int PlayerCharacterEntity::* animCounter() { return &Access::m_animCounter; }
@@ -68,6 +71,28 @@ MatchConfig makeConfig(uint64_t seed, int players, int width, int height, int bl
     c.slots.push_back(slot);
   }
   return c;
+}
+
+// Every field of two settings snapshots, the whole roster included.
+void expectSameSettings(const std::GameSettings::Snapshot& now, const std::GameSettings::Snapshot& was)
+{
+  EXPECT_EQ(now.numPlayers, was.numPlayers);
+  EXPECT_EQ(now.blockPercentage, was.blockPercentage);
+  EXPECT_EQ(now.npcSpawnerEnabled, was.npcSpawnerEnabled);
+  EXPECT_EQ(now.mapWidth, was.mapWidth);
+  EXPECT_EQ(now.mapHeight, was.mapHeight);
+  ASSERT_EQ(now.players.size(), was.players.size());
+  for (size_t i = 0; i < was.players.size(); i++)
+  {
+    EXPECT_EQ(now.players[i].id, was.players[i].id) << "slot " << i;
+    EXPECT_EQ(now.players[i].team, was.players[i].team) << "slot " << i;
+    EXPECT_EQ(now.players[i].portrait, was.players[i].portrait) << "slot " << i;
+    EXPECT_EQ((int) now.players[i].type, (int) was.players[i].type) << "slot " << i;
+    EXPECT_EQ(now.players[i].human, was.players[i].human) << "slot " << i;
+    EXPECT_EQ(now.players[i].attachedControllerId, was.players[i].attachedControllerId) << "slot " << i;
+    EXPECT_EQ(now.players[i].attachedKeyboardId, was.players[i].attachedKeyboardId) << "slot " << i;
+    EXPECT_EQ(now.players[i].deviceLabel, was.players[i].deviceLabel) << "slot " << i;
+  }
 }
 
 // FNV-1a over 64-bit values, to fingerprint a list of per-tick hashes.
@@ -336,7 +361,10 @@ TEST_F(SimulationTest, ARefusedConfigLeavesTheRunningRoundAndTheSettingsAlone)
   sim().step();
   const uint64_t before = sim().stateHash();
   const MatchConfig keptConfig = sim().config();
-  const std::GameSettings::Snapshot settingsBefore = std::GameSettings::getInstance()->snapshot();
+  // Make the roster distinctive, so a settings write by a refused start() shows.
+  std::GameSettings::getInstance()->setPlayerController(1, 5);
+  std::GameSettings::getInstance()->setPlayerGender(2, false);
+  const std::GameSettings::Snapshot settingsPrepared = std::GameSettings::getInstance()->snapshot();
 
   MatchConfig wrongMap = makeConfig(5, 5, 21, 15, 30); // the Map is 17x13
   EXPECT_THROW(sim().start(wrongMap), std::runtime_error);
@@ -345,10 +373,7 @@ TEST_F(SimulationTest, ARefusedConfigLeavesTheRunningRoundAndTheSettingsAlone)
 
   EXPECT_EQ(sim().stateHash(), before) << "the running round was torn down";
   EXPECT_TRUE(sim().config() == keptConfig);
-  const std::GameSettings::Snapshot settingsAfter = std::GameSettings::getInstance()->snapshot();
-  EXPECT_EQ(settingsAfter.numPlayers, settingsBefore.numPlayers);
-  EXPECT_EQ(settingsAfter.mapWidth, settingsBefore.mapWidth);
-  EXPECT_EQ(settingsAfter.blockPercentage, settingsBefore.blockPercentage);
+  expectSameSettings(std::GameSettings::getInstance()->snapshot(), settingsPrepared);
   EXPECT_EQ(std::GameSettings::getInstance()->getNumberOfPlayers(), 3);
 }
 
@@ -450,6 +475,8 @@ TEST_F(SimulationTest, RealRoundsSeedBlocksAccordingToTheConfig)
   // Rounds started the way every other test starts them, so the seed is the
   // harness's per-test, per-round one and BITRIOT_TEST_SEED sweeps vary it.
   const int sizes[][2] = {{17, 13}, {25, 19}, {13, 11}};
+  int totalEligible = 0; // at 55%, over every size
+  int totalPlaced = 0;
   for (const auto& size : sizes)
   {
     const int w = size[0];
@@ -500,11 +527,20 @@ TEST_F(SimulationTest, RealRoundsSeedBlocksAccordingToTheConfig)
       }
     }
     EXPECT_EQ(countEntities(BLOCK_GROUP), placed);
-    const double mean = eligible * 0.55;
-    const double spread = 5.0 * std::sqrt(eligible * 0.55 * 0.45);
-    EXPECT_GT((double) placed, mean - spread) << placed << " of " << eligible << " eligible tiles at 55%";
-    EXPECT_LT((double) placed, mean + spread) << placed << " of " << eligible << " eligible tiles at 55%";
+    EXPECT_GT(placed, 0) << "55% blocks on " << w << "x" << h;
+    EXPECT_LT(placed, eligible) << "55% blocks on " << w << "x" << h;
+    totalEligible += eligible;
+    totalPlaced += placed;
   }
+
+  // The density itself, pooled over the three maps so the test has enough tiles
+  // to tell 55% from 35% or 75% (a single small map cannot): within five standard
+  // deviations of a binomial around 55%, so no seed fails by bad luck.
+  const double mean = totalEligible * 0.55;
+  const double spread = 5.0 * std::sqrt(totalEligible * 0.55 * 0.45);
+  EXPECT_GT((double) totalPlaced, mean - spread) << totalPlaced << " of " << totalEligible << " eligible tiles at 55%";
+  EXPECT_LT((double) totalPlaced, mean + spread) << totalPlaced << " of " << totalEligible << " eligible tiles at 55%";
+  EXPECT_LT(spread, 0.15 * totalEligible) << "too few tiles to tell the density from 40% or 70%";
 }
 
 TEST_F(SimulationTest, BlocksBelongToTheTeamOfTheirCorner)
@@ -1174,8 +1210,10 @@ TEST_F(StateHashTest, CosmeticDrawsDuringARoundDoNotChangeItsHashes)
 
 // The fields stateHash() writes, in the order it first writes each: the layout of
 // the hash, not its values. A world holding every kind of thing the hash walks
-// (every entity type, a bot with a plan and pickup memory, queued messages) is
-// built by hand and not stepped, so nothing here depends on how the simulation
+// (every entity type, a player with a plan and pickup memory, queued messages) is
+// built by hand and not stepped, and each entity's fields are listed under its type
+// (ROBOT1/mover.decayCounter), so a type that stops calling its base class's hashing
+// shows up too, so nothing here depends on how the simulation
 // plays: an AI, rules or data change does not move this list, while dropping,
 // adding, renaming or re-typing a hashed field does. Unlike the golden digests it
 // therefore need not be regenerated for a change in play.
@@ -1218,63 +1256,284 @@ const char* const HASH_SCHEMA[] = {
   "message.targetY:i32",
   "map.tile:u8",
   "entities.count:count",
-  "entity.type:i32",
-  "entity.owner:i32",
-  "entity.tileX:i32",
-  "entity.tileY:i32",
-  "entity.offsetX:i32",
-  "entity.offsetY:i32",
-  "entity.velocity:i32",
-  "entity.health:i32",
-  "entity.animState:i32",
-  "entity.walkThroughBlocks:u8",
-  "player.alive:u8",
-  "player.controlledByAI:u8",
-  "player.iq:i32",
-  "player.bombsPlaced:i32",
-  "player.eggsPlaced:i32",
-  "player.checkTimer:i32",
-  "player.aiFrame:i32",
-  "player.goals.count:count",
-  "player.instructions.count:count",
-  "player.abandonedPickups.count:count",
-  "player.pickupAttempts.count:count",
-  "goal.type:i32",
-  "goal.targetAmount:i32",
-  "goal.tileX:i32",
-  "goal.tileY:i32",
-  "goal.targetType:i32",
-  "goal.target:ref",
-  "instruction.type:i32",
-  "instruction.targetAmount:i32",
-  "instruction.targetType:i32",
-  "instruction.targetTileX:i32",
-  "instruction.targetTileY:i32",
-  "abandoned.pickup:ref",
-  "abandoned.frame:i32",
-  "attempt.pickup:ref",
-  "attempt.bestBlocks:i32",
-  "attempt.bestSteps:i32",
-  "attempt.failures:i32",
-  "egg.hatchling:i32",
-  "egg.hatchCounter:i32",
-  "egg.hatchFlags:i32",
-  "enplus.decayCounter:i32",
-  "iqplus.decayCounter:i32",
-  "bomb.fuse:i32",
-  "mine.fuse:i32",
-  "rocketspin.lifespan:i32",
-  "rocket.direction:i32",
-  "rocket.targetX:i32",
-  "rocket.targetY:i32",
-  "mover.decayCounter:i32",
-  "brain.lastMovingState:i32",
-  "brain.minMoveTimer:i32",
-  "robot.actionCounter:i32",
-  "robot.layBlocks:u8",
-  "robot.layMines:u8",
-  "robot.fireRockets:u8",
-  "robot.layBombs:u8",
+  "PLAYER_CHARACTER/entity.type:i32",
+  "PLAYER_CHARACTER/entity.owner:i32",
+  "PLAYER_CHARACTER/entity.tileX:i32",
+  "PLAYER_CHARACTER/entity.tileY:i32",
+  "PLAYER_CHARACTER/entity.offsetX:i32",
+  "PLAYER_CHARACTER/entity.offsetY:i32",
+  "PLAYER_CHARACTER/entity.velocity:i32",
+  "PLAYER_CHARACTER/entity.health:i32",
+  "PLAYER_CHARACTER/entity.animState:i32",
+  "PLAYER_CHARACTER/entity.walkThroughBlocks:u8",
+  "PLAYER_CHARACTER/player.alive:u8",
+  "PLAYER_CHARACTER/player.controlledByAI:u8",
+  "PLAYER_CHARACTER/player.iq:i32",
+  "PLAYER_CHARACTER/player.bombsPlaced:i32",
+  "PLAYER_CHARACTER/player.eggsPlaced:i32",
+  "PLAYER_CHARACTER/player.checkTimer:i32",
+  "PLAYER_CHARACTER/player.aiFrame:i32",
+  "PLAYER_CHARACTER/player.goals.count:count",
+  "PLAYER_CHARACTER/goal.type:i32",
+  "PLAYER_CHARACTER/goal.targetAmount:i32",
+  "PLAYER_CHARACTER/goal.tileX:i32",
+  "PLAYER_CHARACTER/goal.tileY:i32",
+  "PLAYER_CHARACTER/goal.targetType:i32",
+  "PLAYER_CHARACTER/goal.target:ref",
+  "PLAYER_CHARACTER/player.instructions.count:count",
+  "PLAYER_CHARACTER/instruction.type:i32",
+  "PLAYER_CHARACTER/instruction.targetAmount:i32",
+  "PLAYER_CHARACTER/instruction.targetType:i32",
+  "PLAYER_CHARACTER/instruction.targetTileX:i32",
+  "PLAYER_CHARACTER/instruction.targetTileY:i32",
+  "PLAYER_CHARACTER/player.abandonedPickups.count:count",
+  "PLAYER_CHARACTER/abandoned.pickup:ref",
+  "PLAYER_CHARACTER/abandoned.frame:i32",
+  "PLAYER_CHARACTER/player.pickupAttempts.count:count",
+  "PLAYER_CHARACTER/attempt.pickup:ref",
+  "PLAYER_CHARACTER/attempt.bestBlocks:i32",
+  "PLAYER_CHARACTER/attempt.bestSteps:i32",
+  "PLAYER_CHARACTER/attempt.failures:i32",
+  "BLOCK/entity.type:i32",
+  "BLOCK/entity.owner:i32",
+  "BLOCK/entity.tileX:i32",
+  "BLOCK/entity.tileY:i32",
+  "BLOCK/entity.offsetX:i32",
+  "BLOCK/entity.offsetY:i32",
+  "BLOCK/entity.velocity:i32",
+  "BLOCK/entity.health:i32",
+  "BLOCK/entity.animState:i32",
+  "BLOCK/entity.walkThroughBlocks:u8",
+  "EGG1/entity.type:i32",
+  "EGG1/entity.owner:i32",
+  "EGG1/entity.tileX:i32",
+  "EGG1/entity.tileY:i32",
+  "EGG1/entity.offsetX:i32",
+  "EGG1/entity.offsetY:i32",
+  "EGG1/entity.velocity:i32",
+  "EGG1/entity.health:i32",
+  "EGG1/entity.animState:i32",
+  "EGG1/entity.walkThroughBlocks:u8",
+  "EGG1/egg.hatchling:i32",
+  "EGG1/egg.hatchCounter:i32",
+  "EGG1/egg.hatchFlags:i32",
+  "EGG2/entity.type:i32",
+  "EGG2/entity.owner:i32",
+  "EGG2/entity.tileX:i32",
+  "EGG2/entity.tileY:i32",
+  "EGG2/entity.offsetX:i32",
+  "EGG2/entity.offsetY:i32",
+  "EGG2/entity.velocity:i32",
+  "EGG2/entity.health:i32",
+  "EGG2/entity.animState:i32",
+  "EGG2/entity.walkThroughBlocks:u8",
+  "EGG2/egg.hatchling:i32",
+  "EGG2/egg.hatchCounter:i32",
+  "EGG2/egg.hatchFlags:i32",
+  "EGG3/entity.type:i32",
+  "EGG3/entity.owner:i32",
+  "EGG3/entity.tileX:i32",
+  "EGG3/entity.tileY:i32",
+  "EGG3/entity.offsetX:i32",
+  "EGG3/entity.offsetY:i32",
+  "EGG3/entity.velocity:i32",
+  "EGG3/entity.health:i32",
+  "EGG3/entity.animState:i32",
+  "EGG3/entity.walkThroughBlocks:u8",
+  "EGG3/egg.hatchling:i32",
+  "EGG3/egg.hatchCounter:i32",
+  "EGG3/egg.hatchFlags:i32",
+  "EGG4/entity.type:i32",
+  "EGG4/entity.owner:i32",
+  "EGG4/entity.tileX:i32",
+  "EGG4/entity.tileY:i32",
+  "EGG4/entity.offsetX:i32",
+  "EGG4/entity.offsetY:i32",
+  "EGG4/entity.velocity:i32",
+  "EGG4/entity.health:i32",
+  "EGG4/entity.animState:i32",
+  "EGG4/entity.walkThroughBlocks:u8",
+  "EGG4/egg.hatchling:i32",
+  "EGG4/egg.hatchCounter:i32",
+  "EGG4/egg.hatchFlags:i32",
+  "EGG5/entity.type:i32",
+  "EGG5/entity.owner:i32",
+  "EGG5/entity.tileX:i32",
+  "EGG5/entity.tileY:i32",
+  "EGG5/entity.offsetX:i32",
+  "EGG5/entity.offsetY:i32",
+  "EGG5/entity.velocity:i32",
+  "EGG5/entity.health:i32",
+  "EGG5/entity.animState:i32",
+  "EGG5/entity.walkThroughBlocks:u8",
+  "EGG5/egg.hatchling:i32",
+  "EGG5/egg.hatchCounter:i32",
+  "EGG5/egg.hatchFlags:i32",
+  "ENPLUS_POWERUP/entity.type:i32",
+  "ENPLUS_POWERUP/entity.owner:i32",
+  "ENPLUS_POWERUP/entity.tileX:i32",
+  "ENPLUS_POWERUP/entity.tileY:i32",
+  "ENPLUS_POWERUP/entity.offsetX:i32",
+  "ENPLUS_POWERUP/entity.offsetY:i32",
+  "ENPLUS_POWERUP/entity.velocity:i32",
+  "ENPLUS_POWERUP/entity.health:i32",
+  "ENPLUS_POWERUP/entity.animState:i32",
+  "ENPLUS_POWERUP/entity.walkThroughBlocks:u8",
+  "ENPLUS_POWERUP/enplus.decayCounter:i32",
+  "IQPLUS_POWERUP/entity.type:i32",
+  "IQPLUS_POWERUP/entity.owner:i32",
+  "IQPLUS_POWERUP/entity.tileX:i32",
+  "IQPLUS_POWERUP/entity.tileY:i32",
+  "IQPLUS_POWERUP/entity.offsetX:i32",
+  "IQPLUS_POWERUP/entity.offsetY:i32",
+  "IQPLUS_POWERUP/entity.velocity:i32",
+  "IQPLUS_POWERUP/entity.health:i32",
+  "IQPLUS_POWERUP/entity.animState:i32",
+  "IQPLUS_POWERUP/entity.walkThroughBlocks:u8",
+  "IQPLUS_POWERUP/iqplus.decayCounter:i32",
+  "BOMB/entity.type:i32",
+  "BOMB/entity.owner:i32",
+  "BOMB/entity.tileX:i32",
+  "BOMB/entity.tileY:i32",
+  "BOMB/entity.offsetX:i32",
+  "BOMB/entity.offsetY:i32",
+  "BOMB/entity.velocity:i32",
+  "BOMB/entity.health:i32",
+  "BOMB/entity.animState:i32",
+  "BOMB/entity.walkThroughBlocks:u8",
+  "BOMB/bomb.fuse:i32",
+  "MINE/entity.type:i32",
+  "MINE/entity.owner:i32",
+  "MINE/entity.tileX:i32",
+  "MINE/entity.tileY:i32",
+  "MINE/entity.offsetX:i32",
+  "MINE/entity.offsetY:i32",
+  "MINE/entity.velocity:i32",
+  "MINE/entity.health:i32",
+  "MINE/entity.animState:i32",
+  "MINE/entity.walkThroughBlocks:u8",
+  "MINE/mine.fuse:i32",
+  "ROCKET_SPIN/entity.type:i32",
+  "ROCKET_SPIN/entity.owner:i32",
+  "ROCKET_SPIN/entity.tileX:i32",
+  "ROCKET_SPIN/entity.tileY:i32",
+  "ROCKET_SPIN/entity.offsetX:i32",
+  "ROCKET_SPIN/entity.offsetY:i32",
+  "ROCKET_SPIN/entity.velocity:i32",
+  "ROCKET_SPIN/entity.health:i32",
+  "ROCKET_SPIN/entity.animState:i32",
+  "ROCKET_SPIN/entity.walkThroughBlocks:u8",
+  "ROCKET_SPIN/rocketspin.lifespan:i32",
+  "ROCKET_FIRED/entity.type:i32",
+  "ROCKET_FIRED/entity.owner:i32",
+  "ROCKET_FIRED/entity.tileX:i32",
+  "ROCKET_FIRED/entity.tileY:i32",
+  "ROCKET_FIRED/entity.offsetX:i32",
+  "ROCKET_FIRED/entity.offsetY:i32",
+  "ROCKET_FIRED/entity.velocity:i32",
+  "ROCKET_FIRED/entity.health:i32",
+  "ROCKET_FIRED/entity.animState:i32",
+  "ROCKET_FIRED/entity.walkThroughBlocks:u8",
+  "ROCKET_FIRED/rocket.direction:i32",
+  "ROCKET_FIRED/rocket.targetX:i32",
+  "ROCKET_FIRED/rocket.targetY:i32",
+  "ENERGY_DROP/entity.type:i32",
+  "ENERGY_DROP/entity.owner:i32",
+  "ENERGY_DROP/entity.tileX:i32",
+  "ENERGY_DROP/entity.tileY:i32",
+  "ENERGY_DROP/entity.offsetX:i32",
+  "ENERGY_DROP/entity.offsetY:i32",
+  "ENERGY_DROP/entity.velocity:i32",
+  "ENERGY_DROP/entity.health:i32",
+  "ENERGY_DROP/entity.animState:i32",
+  "ENERGY_DROP/entity.walkThroughBlocks:u8",
+  "EXPLOSION/entity.type:i32",
+  "EXPLOSION/entity.owner:i32",
+  "EXPLOSION/entity.tileX:i32",
+  "EXPLOSION/entity.tileY:i32",
+  "EXPLOSION/entity.offsetX:i32",
+  "EXPLOSION/entity.offsetY:i32",
+  "EXPLOSION/entity.velocity:i32",
+  "EXPLOSION/entity.health:i32",
+  "EXPLOSION/entity.animState:i32",
+  "EXPLOSION/entity.walkThroughBlocks:u8",
+  "EGG_THIEF/entity.type:i32",
+  "EGG_THIEF/entity.owner:i32",
+  "EGG_THIEF/entity.tileX:i32",
+  "EGG_THIEF/entity.tileY:i32",
+  "EGG_THIEF/entity.offsetX:i32",
+  "EGG_THIEF/entity.offsetY:i32",
+  "EGG_THIEF/entity.velocity:i32",
+  "EGG_THIEF/entity.health:i32",
+  "EGG_THIEF/entity.animState:i32",
+  "EGG_THIEF/entity.walkThroughBlocks:u8",
+  "EGG_THIEF/mover.decayCounter:i32",
+  "EGG_THIEF/brain.lastMovingState:i32",
+  "EGG_THIEF/brain.minMoveTimer:i32",
+  "WALL_EATER/entity.type:i32",
+  "WALL_EATER/entity.owner:i32",
+  "WALL_EATER/entity.tileX:i32",
+  "WALL_EATER/entity.tileY:i32",
+  "WALL_EATER/entity.offsetX:i32",
+  "WALL_EATER/entity.offsetY:i32",
+  "WALL_EATER/entity.velocity:i32",
+  "WALL_EATER/entity.health:i32",
+  "WALL_EATER/entity.animState:i32",
+  "WALL_EATER/entity.walkThroughBlocks:u8",
+  "WALL_EATER/mover.decayCounter:i32",
+  "WALL_EATER/brain.lastMovingState:i32",
+  "WALL_EATER/brain.minMoveTimer:i32",
+  "DRONE/entity.type:i32",
+  "DRONE/entity.owner:i32",
+  "DRONE/entity.tileX:i32",
+  "DRONE/entity.tileY:i32",
+  "DRONE/entity.offsetX:i32",
+  "DRONE/entity.offsetY:i32",
+  "DRONE/entity.velocity:i32",
+  "DRONE/entity.health:i32",
+  "DRONE/entity.animState:i32",
+  "DRONE/entity.walkThroughBlocks:u8",
+  "DRONE/mover.decayCounter:i32",
+  "DRONE/brain.lastMovingState:i32",
+  "DRONE/brain.minMoveTimer:i32",
+  "ROBOT1/entity.type:i32",
+  "ROBOT1/entity.owner:i32",
+  "ROBOT1/entity.tileX:i32",
+  "ROBOT1/entity.tileY:i32",
+  "ROBOT1/entity.offsetX:i32",
+  "ROBOT1/entity.offsetY:i32",
+  "ROBOT1/entity.velocity:i32",
+  "ROBOT1/entity.health:i32",
+  "ROBOT1/entity.animState:i32",
+  "ROBOT1/entity.walkThroughBlocks:u8",
+  "ROBOT1/mover.decayCounter:i32",
+  "ROBOT1/brain.lastMovingState:i32",
+  "ROBOT1/brain.minMoveTimer:i32",
+  "ROBOT1/robot.actionCounter:i32",
+  "ROBOT1/robot.layBlocks:u8",
+  "ROBOT1/robot.layMines:u8",
+  "ROBOT1/robot.fireRockets:u8",
+  "ROBOT1/robot.layBombs:u8",
+  "MUNCH_EFFECT/entity.type:i32",
+  "MUNCH_EFFECT/entity.owner:i32",
+  "MUNCH_EFFECT/entity.tileX:i32",
+  "MUNCH_EFFECT/entity.tileY:i32",
+  "MUNCH_EFFECT/entity.offsetX:i32",
+  "MUNCH_EFFECT/entity.offsetY:i32",
+  "MUNCH_EFFECT/entity.velocity:i32",
+  "MUNCH_EFFECT/entity.health:i32",
+  "MUNCH_EFFECT/entity.animState:i32",
+  "MUNCH_EFFECT/entity.walkThroughBlocks:u8",
+  "DAMAGE_EFFECT/entity.type:i32",
+  "DAMAGE_EFFECT/entity.owner:i32",
+  "DAMAGE_EFFECT/entity.tileX:i32",
+  "DAMAGE_EFFECT/entity.tileY:i32",
+  "DAMAGE_EFFECT/entity.offsetX:i32",
+  "DAMAGE_EFFECT/entity.offsetY:i32",
+  "DAMAGE_EFFECT/entity.velocity:i32",
+  "DAMAGE_EFFECT/entity.health:i32",
+  "DAMAGE_EFFECT/entity.animState:i32",
+  "DAMAGE_EFFECT/entity.walkThroughBlocks:u8",
   "entityMap.count:count",
   "entityMap.entity:ref",
   "aiView.count:count",
@@ -1287,9 +1546,11 @@ const char* const HASH_SCHEMA[] = {
 
 TEST_F(StateHashTest, TheHashSchemaIsPinned)
 {
-  // Slot 1 human, slot 2 a bot (it brings a goal and an instruction).
+  // Both players human, so nothing in the world comes from the bot AI's constructor
+  // (which draws numbers and builds a plan): the plan below is planted by hand.
   configurePlayers(2);
   std::GameSettings::getInstance()->setPlayerAI(0, false);
+  std::GameSettings::getInstance()->setPlayerAI(1, false);
   setMapSize(17, 13);
   startRound();
 
@@ -1307,10 +1568,13 @@ TEST_F(StateHashTest, TheHashSchemaIsPinned)
     n++;
   }
 
-  // The bot's pickup memory, and messages waiting for the next tick.
-  PlayerCharacterEntity& bot = *player(2);
-  (bot.*Access::abandonedPickups())[3] = 5;
-  (bot.*Access::pickupAttempts())[3].failures = 1;
+  // One goal, one instruction and some pickup memory, as a bot would carry, and
+  // messages waiting for the next tick.
+  PlayerCharacterEntity& planner = *player(1);
+  (planner.*Access::goals()).push_back(new AIGoal(AIGoal::GOAL_GET_POWERUP, 0, 3, 3, ENPLUS_POWERUP, 2));
+  (planner.*Access::instructions()).push_back(new AIInstruction(AIInstruction::GO_TO, 0, BLOCK, 3, 3));
+  (planner.*Access::abandonedPickups())[3] = 5;
+  (planner.*Access::pickupAttempts())[3].failures = 1;
   EntityMessageQueue* emq = EntityMessageQueue::getInstance();
   emq->postCreateMessage(MINE, 1, 4, 4, 0);
   emq->postMoveMessage(player(1)->getID(), 1, 1, 2, 1);

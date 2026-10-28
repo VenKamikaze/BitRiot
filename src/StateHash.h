@@ -47,7 +47,7 @@
 class StateHasher
 {
   public:
-    StateHasher() : m_hash(OFFSET_BASIS), m_trace(nullptr) {}
+    StateHasher() : m_hash(OFFSET_BASIS), m_trace(nullptr), m_prefix("") {}
 
     // Every write names its field ("entity.health", "bomb.fuse"). The name does
     // not enter the hash; it only feeds the optional trace below.
@@ -116,7 +116,7 @@ class StateHasher
     }
 
     // SCHEMA TRACE. With a trace attached, every write also appends
-    // "name:kind" (kind is u8, i32, u64, count or ref) to it, in the order the
+    // "[TYPE/]name:kind" (kind is u8, i32, u64, count or ref) to it, in the order the
     // fields are hashed. The trace holds field names and widths, never values, so
     // a test can pin the hash's layout without depending on how the simulation
     // happens to play: dropping, adding, renaming or re-typing a field changes the
@@ -125,6 +125,14 @@ class StateHasher
     void setTrace(std::vector<std::string>* trace)
     {
       m_trace = trace;
+    }
+
+    // Trace entries written after this are prefixed "PREFIX/" (an entity walk sets
+    // the entity's type name, so BOMB/entity.health and ROBOT1/mover.decayCounter
+    // are different entries). Empty for no prefix. Only the trace sees it.
+    void setTracePrefix(const char* prefix)
+    {
+      m_prefix = prefix;
     }
 
     static constexpr uint64_t OFFSET_BASIS = 0xcbf29ce484222325ULL;
@@ -150,13 +158,14 @@ class StateHasher
     {
       if (m_trace != nullptr)
       {
-        m_trace->push_back(std::string(name) + ":" + kind);
+        m_trace->push_back((m_prefix[0] == 0 ? std::string() : std::string(m_prefix) + "/") + name + ":" + kind);
       }
     }
 
     uint64_t m_hash;
     std::vector<int> m_ids;
     std::vector<std::string>* m_trace;
+    const char* m_prefix;
 };
 
 #endif /* _STATEHASH_H */
