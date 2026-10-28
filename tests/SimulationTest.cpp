@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <map>
 #include <set>
 #include <stdexcept>
 #include <vector>
@@ -43,6 +44,8 @@ struct Access : public PlayerCharacterEntity
   static int GameEntity::* owner() { return &Access::m_playerNumber; }
   static bool GameEntity::* walkThroughBlocks() { return &Access::m_walkThroughBlocks; }
   static int PlayerCharacterEntity::* iq() { return &Access::m_IQ; }
+  static std::map<int, int> PlayerCharacterEntity::* abandonedPickups() { return &Access::m_abandonedPickups; }
+  static std::map<int, PickupAttempt> PlayerCharacterEntity::* pickupAttempts() { return &Access::m_pickupAttempts; }
   static int PlayerCharacterEntity::* animCounter() { return &Access::m_animCounter; }
 };
 
@@ -173,7 +176,9 @@ TEST_F(SimulationTest, StartAppliesTheConfigIntoGameSettings)
   configurePlayers(2);
   gs->setNpcSpawnerEnabled(true);
   gs->setBlockSpawnPercentage(70);
-  setMapSize(13, 11); // the Map is the caller's job (it needs the primary surface)
+  setMapSize(13, 11); // the Map is the caller's job (it needs the primary surface)...
+  gs->setMapWidth(21); // ...but the sim reads the size from GameSettings, which start() sets
+  gs->setMapHeight(15);
 
   sim().start(config);
 
@@ -817,6 +822,35 @@ TEST_F(StateHashTest, APlayersFlagsAndCountersAreHashed)
   EXPECT_TRUE(changeMovesTheHash([&] { (*player(2)).*Access::iq() += 1; })) << "IQ";
 }
 
+TEST_F(StateHashTest, ABotsPickupMemoryIsHashed)
+{
+  // Which pickups a bot gave up on, and how its attempts at the others went,
+  // decide where it walks next. (The pickup ids here are made up and no entity
+  // has them, so they all read as -1 once written as walk positions: only the
+  // numbers beside them tell the states apart.)
+  startStillWorld();
+  PlayerCharacterEntity& bot = *player(1);
+  const uint64_t empty = hash();
+
+  (bot.*Access::abandonedPickups())[40] = 10;
+  const uint64_t oneAbandoned = hash();
+  EXPECT_NE(oneAbandoned, empty) << "an abandoned pickup appears";
+  (bot.*Access::abandonedPickups())[40] = 11;
+  EXPECT_NE(hash(), oneAbandoned) << "the frame it was abandoned on";
+  bot.*Access::abandonedPickups() = {};
+  EXPECT_EQ(hash(), empty);
+
+  auto& attempts = bot.*Access::pickupAttempts();
+  attempts[40].failures = 1;
+  const uint64_t oneAttempt = hash();
+  EXPECT_NE(oneAttempt, empty) << "an attempt appears";
+  attempts[40].failures = 2;
+  EXPECT_NE(hash(), oneAttempt) << "its failure count";
+  attempts[40].failures = 1;
+  attempts[40].bestSteps = 5;
+  EXPECT_NE(hash(), oneAttempt) << "its best route";
+}
+
 TEST_F(StateHashTest, TheSimRngStateIsHashed)
 {
   EXPECT_TRUE(changeMovesTheHash([&] { SimRandom::sim().nextU32(); }));
@@ -889,7 +923,7 @@ TEST_F(StateHashTest, AnEggsHatchCounterIsHashed)
 
 TEST_F(StateHashTest, FusesAndLifespansAreHashed)
 {
-  const EntityType types[] = {BOMB, MINE, ROCKET_SPIN, ENPLUS_POWERUP};
+  const EntityType types[] = {BOMB, MINE, ROCKET_SPIN, ENPLUS_POWERUP, IQPLUS_POWERUP};
   for (EntityType type : types)
   {
     startStillWorld();
