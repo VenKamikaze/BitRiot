@@ -35,13 +35,15 @@ Brief 01's per-round entity-id reset is a **hard requirement** here, because a f
   6. The joiner verifies its first live checkpoint hash. If it doesn't match, it drops out with a `DESYNC` dump rather than corrupting the match.
 - **Slot choice:** the joiner picks an AI-controlled slot in the lobby-like overlay, or the host auto-assigns one. With no AI slot free, the joiner is a **spectator**: it simulates, receives `TICKS`, and sends no inputs. Spectators are cheap, so include them.
 - **Reconnect:** a peer that drops and returns within the round, identified by a token issued in `WELCOME`, is offered its old slots back if they are still AI-controlled. The rest of the flow is the hot-join flow.
+  - A reconnecting **browser** peer gets a new vnet context and nonce, and possibly a different vaddr, while the old relay session lingers for up to ~15 s. The game's token, not the vaddr, identifies the peer, and the host must accept the new address while the stale one is still registered.
 - **Between rounds:** a joiner that arrives during the scoreboard simply joins the next round's `START`.
 - **Fast-forward budget**
   - Measure how long fast-forwarding a 9,000-tick round (5 minutes) takes, native and wasm, with 4 AI players doing A*.
   - Target: under 3 s native and under 10 s wasm.
   - If wasm is too slow, record the numbers and propose options in the Outcome: periodic host-side checkpoints of the full sim state, or AI pathfinding optimisation. Don't implement snapshots without the user's agreement; they are the big job this design avoids.
 - **Time-sliced fast-forward.** Fast-forward in chunks per `frame()`, for example 300–1000 ticks, and keep calling `vnet_poll`, sending keepalives and updating progress between chunks.
-  - A long synchronous fast-forward would block networking. In the browser that trips the relay's ~5 s and the host's ~10 s timeouts.
+  - A long synchronous fast-forward would block networking. In the browser the game's own peer timeout (the host's ~10 s) is what decides a peer has dropped. The vnet relay's session timeout (~15 s, `-session-timeout`, configurable) only reclaims resources for a silent member; it does not govern drop detection.
+  - Keep time-slicing for native UDP peers too: it is the same peer timeout there.
 - **Pacing during the join:** the live match must not stall while someone joins. Only the joiner is behind, and the host doesn't wait for a joiner until `READY_AT`.
 - **Host loss** remains out of scope (no migration), as in brief 07.
 
