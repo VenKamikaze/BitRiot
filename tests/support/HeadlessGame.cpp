@@ -12,6 +12,7 @@
 #include "GameSettings.h"
 #include "Map.h"
 #include "MatchConfig.h"
+#include "SimRandom.h"
 #include "Simulation.h"
 
 namespace bitriot_test
@@ -115,10 +116,11 @@ uint64_t mixSeed(uint64_t base, const std::string& name, uint64_t round)
 void HeadlessEnvironment::setBaseSeed(uint64_t seed) { g_baseSeed = seed; }
 uint64_t HeadlessEnvironment::baseSeed() { return g_baseSeed; }
 
-void HeadlessGameTest::beginRoundRng()
+uint64_t HeadlessGameTest::nextRoundSeed()
 {
-  // Same production path GameEngine::resetGame() uses. Unless the test pinned a
-  // seed, derive one from (base seed, test name, rounds started so far).
+  // The seed of the next round: a pin (setRoundSeed) or, failing that, one derived
+  // from (base seed, test name, rounds started so far). It goes through the
+  // production GameSettings::pickRoundSeed(), as GameEngine::resetGame() does.
   std::GameSettings* settings = std::GameSettings::getInstance();
   if (!settings->isRoundSeedPinned())
   {
@@ -127,7 +129,9 @@ void HeadlessGameTest::beginRoundRng()
     settings->setRoundSeed(mixSeed(g_baseSeed, name, m_roundsStarted));
   }
   m_roundsStarted++;
-  m_roundSeedsUsed.push_back(settings->beginRoundSeed());
+  const uint64_t seed = settings->pickRoundSeed();
+  m_roundSeedsUsed.push_back(seed);
+  return seed;
 }
 
 void HeadlessGameTest::setRoundSeed(uint64_t seed)
@@ -151,7 +155,9 @@ void HeadlessGameTest::SetUp()
   m_roundsStarted = 0;
   m_roundSeedsUsed.clear();
   std::GameSettings::getInstance()->clearRoundSeedPin();
-  beginRoundRng();
+  // Seed the sim stream too, so a test that builds entities without startRound()
+  // is deterministic as well.
+  SimRandom::sim().seed(nextRoundSeed());
 }
 
 void HeadlessGameTest::TearDown()
@@ -284,22 +290,10 @@ void HeadlessGameTest::startRound()
 {
   std::GameSettings* settings = std::GameSettings::getInstance();
 
-  // The round's seed: a pin (setRoundSeed) or, failing that, one derived from
-  // (base seed, test name, rounds started so far). Either way it goes through
-  // the production pickRoundSeed() and into the config, and Simulation::start()
-  // reseeds the sim RNG from it before anything that draws is built, as
-  // GameEngine::resetGame() does.
-  if (!settings->isRoundSeedPinned())
-  {
-    const ::testing::TestInfo* info = ::testing::UnitTest::GetInstance()->current_test_info();
-    const std::string name = info ? std::string(info->test_suite_name()) + "." + info->name() : "";
-    settings->setRoundSeed(mixSeed(g_baseSeed, name, m_roundsStarted));
-  }
-  m_roundsStarted++;
-
+  // The round's seed goes into the config, and Simulation::start() reseeds the sim
+  // RNG from it before anything that draws is built, as GameEngine::resetGame() does.
   MatchConfig config = MatchConfig::fromSettings(*settings);
-  config.seed = settings->pickRoundSeed();
-  m_roundSeedsUsed.push_back(config.seed);
+  config.seed = nextRoundSeed();
 
   // Tears the previous round down first (the real "play again" sequence, including
   // the AIGameView clear that DynamicMap's constructor performs) and builds the

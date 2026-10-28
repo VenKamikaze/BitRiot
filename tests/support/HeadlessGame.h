@@ -251,7 +251,7 @@ class HeadlessGameTest : public ::testing::Test
 
   private:
     void resetSingletons();
-    void beginRoundRng();
+    uint64_t nextRoundSeed();
 
     std::unique_ptr<Simulation> m_sim;
     int m_mapWidth = DEFAULT_MAP_WIDTH;
