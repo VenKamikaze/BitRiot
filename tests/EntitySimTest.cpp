@@ -264,6 +264,40 @@ TEST_F(EntitySimTest, ANewEntityManagerStartsWithAnEmptyMessageQueue)
   EXPECT_TRUE(fresh.getDynamicMap()->entityList.empty());
 }
 
+TEST_F(EntitySimTest, DestroyingAnEntityWithAMovePendingStillRemovesIt)
+{
+  // GameEntity::update() changes the entity's own tile immediately but only
+  // *posts* the MOVE. If a DESTROY for it was queued earlier in the same frame
+  // (an explosion that happened to update first), the DESTROY is processed while
+  // the map still has the entity one tile behind where it believes it is. That
+  // used to leave a dead player in the live entity list - a zombie that skipped
+  // the scoreboard bookkeeping and made round results depend on update order.
+  configurePlayers(2);
+  startRound();
+
+  std::shared_ptr<PlayerCharacterEntity> victim = player(1);
+  const int id = victim->getID();
+  const int fromX = victim->getTileX();
+  const int fromY = victim->getTileY();
+  const int toX = fromX + 1;
+
+  victim->setTileX(toX); // what update() does just before posting the move
+
+  EntityMessageQueue* emq = EntityMessageQueue::getInstance();
+  emq->postDestroyMessage(id);                          // queued first, by another entity
+  emq->postMoveMessage(id, fromX, fromY, toX, fromY);   // queued second, by the victim
+  em().processMessageQueue();
+
+  EXPECT_EQ(player(1), nullptr) << "the destroyed player must leave the live entity list";
+  EXPECT_FALSE(victim->isAlive());
+  EXPECT_EQ(em().numPlayersAlive(), 1);
+  EXPECT_EQ(countAllEntities(), 1);
+  EXPECT_TRUE(AIGameView::getInstance()->getEntityInfoAtLocation(fromX, fromY).empty())
+      << "AIGameView kept a ghost at the old tile";
+  EXPECT_TRUE(AIGameView::getInstance()->getEntityInfoAtLocation(toX, fromY).empty())
+      << "AIGameView kept a ghost at the new tile";
+}
+
 TEST_F(EntitySimTest, AIGameViewIsResizedWhenTheMapGrows)
 {
   configurePlayers(2);

@@ -90,6 +90,37 @@ void EntityManager::runAI()
 
 }
 
+bool EntityManager::removeFromEntityMap(int id, int & tileX, int & tileY)
+{
+  // try where the entity says it is first, then fall back to a full scan
+  vector<vector<vector<int>>> & entityMap = m_pDynamicMap->entityMap;
+  for (int pass = 0; pass < 2; pass++)
+  {
+    int firstX = (pass == 0) ? tileX : 0;
+    int lastX = (pass == 0) ? tileX : (int) entityMap.size() - 1;
+    for (int x = firstX; x <= lastX; x++)
+    {
+      int firstY = (pass == 0) ? tileY : 0;
+      int lastY = (pass == 0) ? tileY : (int) entityMap[x].size() - 1;
+      for (int y = firstY; y <= lastY; y++)
+      {
+        vector<int> & here = entityMap[x][y];
+        for (vector<int>::iterator it = here.begin(); it != here.end(); it++)
+        {
+          if (*it == id)
+          {
+            here.erase(it);
+            tileX = x;
+            tileY = y;
+            return true;
+          }
+        }
+      }
+    }
+  }
+  return false;
+}
+
 void EntityManager::processMessageQueue()
 {
   // processes all messages in EntityMessageQueue (create, move and destroy entities)
@@ -169,37 +200,34 @@ void EntityManager::processMessageQueue()
             static_pointer_cast<PlayerCharacterEntity>(m_pDynamicMap->entityIterator->second)->setAlive(false);
           }
 
-          // remove from map
-          bool foundOnMap = false;
-          for (m_pDynamicMap->mapLocationIterator = m_pDynamicMap->entityMap[atX][atY].begin();
-               m_pDynamicMap->mapLocationIterator != m_pDynamicMap->entityMap[atX][atY].end();
-               m_pDynamicMap->mapLocationIterator++)
-          {
-            if ((*m_pDynamicMap->mapLocationIterator) == id)
-            {
-              m_pDynamicMap->entityMap[atX][atY].erase(m_pDynamicMap->mapLocationIterator);
-              foundOnMap = true;
-              break; // from for loop
-            }
-          }
+          // remove from map. An entity's own tile runs ahead of the map: update()
+          // changes the tile immediately and only *posts* the MOVE, which is
+          // processed after any DESTROY already queued earlier in the same frame
+          // (e.g. an explosion that updated before this entity did). So the entity
+          // may legitimately still be registered one step behind (atX,atY).
+          int mapX = atX;
+          int mapY = atY;
+          bool foundOnMap = removeFromEntityMap(id, mapX, mapY);
+
           if (foundOnMap) // may not be found on map due to multiple destroy messages
           {
             m_pDynamicMap->entityIterator->second = 0;
             m_pDynamicMap->entityList.erase(m_pDynamicMap->entityIterator);
 
-            // also remove from AI Game View
-            AIGameView::getInstance()->removeEntity(id, atX, atY);
+            // also remove from AI Game View, where it is registered at the same
+            // place as in the dynamic map
+            AIGameView::getInstance()->removeEntity(id, mapX, mapY);
           }
           else
           {
             // entity was still live in entityList (not a duplicate destroy) but was not
-            // found at its own reported (atX,atY) in entityMap - so it is NOT removed from
+            // found anywhere in entityMap - so it is NOT removed from
             // entityList or AIGameView here. It keeps updating and stays visible to
             // AIGameView lookups (e.g. RocketSpinEntity::enemyInTile) at whatever stale
             // location it was last registered at - a candidate cause of "ghost" targets.
             std::string msg = std::string("EntityManager DESTROY_ENTITY desync: id=") + std::to_string(id)
               + " not found in entityMap at its own (atX,atY)=(" + std::to_string(atX) + "," + std::to_string(atY) + ")"
-              + " - entity NOT removed from entityList/AIGameView";
+              + " or anywhere else - entity NOT removed from entityList/AIGameView";
             MickLogger::getInstance()->warn(nullptr, msg);
           }
         }
@@ -207,6 +235,12 @@ void EntityManager::processMessageQueue()
         break;
       case EntityMessage::MOVE_ENTITY:
         {
+          // a MOVE posted before the entity was destroyed (same frame) arrives
+          // after it is gone; there is nothing left to move
+          if (m_pDynamicMap->entityList.find(message->getSender()) == m_pDynamicMap->entityList.end())
+          {
+            break;
+          }
           m_pDynamicMap->moveEntityOnMap(message->getSender(),
                                          message->getFromX(), message->getFromY(),
                                          message->getToX(), message->getToY());

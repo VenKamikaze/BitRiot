@@ -69,6 +69,10 @@ class EntityManager
     void runAI(); // runs AI and movement for every entity
     void runCollisions(); // sends collision data between colliding entities
 
+    // Removes id from the dynamic map's tile lists. Looks at (tileX, tileY) first,
+    // then everywhere; on success tileX/tileY are where it actually was.
+    bool removeFromEntityMap(int id, int & tileX, int & tileY);
+
     //std::vector<bool>* m_playerDead = NULL;
     //bool m_playerDead[4];
 
