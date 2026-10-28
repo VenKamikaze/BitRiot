@@ -7,7 +7,6 @@ TODO / bugs / feature ideas, in order of importance:
 
 * Rules: co-op stalemate - a round can still never end. Seen at full-suite BITRIOT_TEST_SEED=276 (FullRoundTest.ThreeConsecutiveCoopRoundsAllComplete, round 3): the last AI player is on ~7 health, every energy drop is walled off by blocks it can't afford to bomb (and it is too hurt to lay eggs), and the last hostile robot can't reach it or be reached, so nobody ever dies. Not an AI bug - fix/ai-seek-energy covers the cases a bot can get out of - but a rules gap. Options: a stalemate timeout (end the round when the spawner is spent and no health/position changes for N ticks), a "sudden death" phase that slowly drains everyone or shrinks the arena, or leave it as a rare edge case. Must be tick-based so it stays deterministic for netplay.
 
-* Bug: the game-over countdown only happens on the first round of a session. GameOverTimer/GameScoreBoardTimer latch timerTriggered with no reset, so from the second round on getTimerCompleted() compares against the previous round's startTime and is immediately true - the death-animation pause is skipped. Needs a reset() on GameTimer called from GameEngine::resetGame(). Found while building the test harness; see tests/README.md.
 
 DONE, but needs verification:
 

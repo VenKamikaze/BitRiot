@@ -16,7 +16,7 @@ Each brief (`NN-*.md`) is one unit of work, sized for a single implement → rev
 
 | # | Brief | Repo | Depends on | Status |
 |---|---|---|---|---|
-| 01 | [Round lifecycle hygiene](01-round-lifecycle-hygiene.md) | BitRiot | Q1 | todo |
+| 01 | [Round lifecycle hygiene](01-round-lifecycle-hygiene.md) | BitRiot | — | done |
 | 02 | [Seeded simulation RNG and float guards](02-sim-rng-and-float-guards.md) | BitRiot | 01, Q2 | todo |
 | 03a | [`Simulation`, `MatchConfig` and state hash](03a-simulation-and-state-hash.md) | BitRiot | 01, 02 | todo |
 | 03b | [Surface-free sim library and frame loop](03b-surface-free-sim-and-frame-loop.md) | BitRiot | 03a | todo |
@@ -73,7 +73,7 @@ Don't reopen these inside a brief. If one turns out to be wrong, stop and raise 
 
 ## Open questions for the user (prerequisites)
 
-1. **(Before 01) GameOverTimer length.** The intended countdown is 2 s, but a bug makes it 5 s (code-facts §3). Until answered, keep the 5 s players are used to.
+1. ~~(Before 01) GameOverTimer length~~ **Answered: 2 s / 60 ticks** (at 33 ms/tick), as originally intended. The old 5 s was an accident of a virtual call in a base constructor (code-facts §3). Brief 01 makes it one named constant.
 2. **(Before 02) D6.** Is floats-plus-gate acceptable, rather than fixed-point up front?
 3. ~~vnet repo~~ **Answered:** MIT licence, public repo.
 4. **(Before 07) Online player cap.** Keep the local maximum of 6?

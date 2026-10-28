@@ -125,18 +125,42 @@ rockets fire at nothing" bug (`AIGameView` was never cleared between games).
 | `GameSettings` | Every field restored explicitly — note `setNumberOfPlayers()` deliberately *preserves* existing slots, so it is not a reset |
 | `EntityMessageQueue` | Cleared by `SetUp()`, and by `EntityManager`'s constructor on every `startRound()` |
 
-**Known gaps** — no reset path exists for these. They do not currently affect
-any test, but they are real:
+**Reset on every round.** `EntityManager`'s constructor is the one point every
+new round passes through, so it resets the process-lifetime state that must not
+leak from the previous round:
 
-- `EntityFactory::m_idCount` only ever increments, so entity ids keep climbing
-  across tests (and across games in the real binary). Harmless today because
-  nothing assumes an id range.
-- `GameOverTimer` / `GameScoreBoardTimer` latch `timerTriggered` with no way to
-  clear it. In the shipped game this means the second and later rounds of a
-  session skip the game-over countdown: `getTimerCompleted()` compares against
-  the *previous* round's `startTime`, which is always long past. Cosmetic, but
-  it is a genuine bug — the death animation pause only happens once per launch.
-  Fixing it needs a `reset()` on `GameTimer` called from `GameEngine::resetGame()`.
+| State | Reset |
+| --- | --- |
+| `EntityMessageQueue` | Cleared |
+| `GameOverTimer` | `reset()`: un-latched, so every round waits the full countdown |
+| `EntityFactory` ids | `resetIds()`: every round numbers entities from 1 |
+
+`Map` carries a generation counter, bumped by every `init()`. A `BlockEntity`
+destroyed after the map was rebuilt (a map resize between rounds, where `Map` is
+rebuilt before the old `EntityManager` goes) skips its write into the new map.
+`setMapSize()` followed by `startRound()` reproduces that order.
+
+**Known gaps** - no reset path or coverage exists for these:
+
+- `GameEngine` cannot be driven headlessly (it needs the renderer, `InfoPanel`
+  and the menu). So `GameEngine::resetGame()`, the scoreboard game length
+  (`m_gameTicks`, ticks x `NORMAL_TICKS_SPEED`) and the call to
+  `GameOverTimer::advance()` are checked by hand, not by a test. The countdown
+  logic itself is `GameTimer::advance()`, which the tests do call.
+- There is no automated AddressSanitizer job. To run one by hand, outside the
+  source tree:
+
+  ```bash
+  cmake -S . -B /tmp/asan-build -DCMAKE_BUILD_TYPE=Debug \
+    -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer" \
+    -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer" \
+    -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address"
+  cmake --build /tmp/asan-build -j4 --target bitriot_tests
+  ASAN_OPTIONS=detect_leaks=0 /tmp/asan-build/tests/bitriot_tests
+  ```
+
+  `RoundHygieneTest.ShrinkingTheMapNeverWritesOutsideIt` is only meaningful
+  under ASan: without the `Map` generation guard it is a silent heap overflow.
 
 ## Test at the seams, not just the units
 
@@ -197,7 +221,7 @@ files, run, swap back.
 
 ## Coverage today
 
-125 tests across nine files:
+137 tests across ten files:
 
 - `WinConditionTest.cpp` — free-for-all, team and co-op round-end rules,
   including the co-op "board cleared and pool exhausted" win and the
@@ -225,6 +249,13 @@ files, run, swap back.
   headings exist, every data cell aligns with its heading, columns don't
   overlap or wrap, rows group by team, the winning team is marked, and a real
   round with dead players yields one row per player, dead ones included.
+
+- `RoundHygieneTest.cpp` - the round lifecycle: the game-over countdown is 60
+  ticks (2 s), ends exactly that many ticks after the end condition first holds,
+  ignores wall-clock time and is the same length in every round; entity ids
+  restart each round; shrinking or growing the map between rounds with blocks
+  present leaves the new walls intact; `GameEntity` scalars are initialised;
+  `runCollisions` tolerates a stale id.
 
 - `AISeekEnergyTest.cpp` — bot energy-seeking on a 9x9 board with one bot (the
   game needs two players, so the second is created and `destroyPlayer`ed): a

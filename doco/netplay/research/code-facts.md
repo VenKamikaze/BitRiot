@@ -28,7 +28,7 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
   - `FAST_TICKS_SPEED` (GameSettings.h:221) is unused.
 - **`GameEngine::runEngine()`** (GameEngine.cpp:115-194) switches on the global `GameSettings::gameState`:
   - `MENU_RUNNING`: `menuSystem->showMenu()`. This pumps SDL events itself and calls RmlUi Update/Render (MenuSDLRenderer.cpp:108-256).
-  - `GAME_INIT`: `applyMapDimensionsIfChanged()` + `resetGame()`, and stamps `m_gameStartedAtTicks=SDL_GetTicks()` (GameEngine.cpp:132-140). No sim tick runs.
+  - `GAME_INIT`: `applyMapDimensionsIfChanged()` + `resetGame()`, and stamps `m_gameStartedAtTicks=SDL_GetTicks()` (GameEngine.cpp:132-140). No sim tick runs. *(Brief 01 replaced the `SDL_GetTicks()` stamp with a per-round tick counter.)*
   - `GAME_RUNNING`, in this order:
     1. Win check and GameOverTimer (143-159).
     2. `m_pInputHandler->processKeyboardInput()` (162). This is where SDL events are pumped.
@@ -74,8 +74,7 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 
 **Wall clock**
 
-- GameTimer.h:25 and :35 (the GameOverTimer).
-- GameEngine.cpp:138, :157 and :169: scoreboard game length. Cosmetic, but it differs per peer.
+- ~~GameTimer.h:25 and :35 (the GameOverTimer).~~ ~~GameEngine.cpp:138, :157 and :169: scoreboard game length.~~ Both fixed by brief 01: they count sim ticks (game length = ticks x `NORMAL_TICKS_SPEED`).
 - RmlUi `GetElapsedTime` (SystemInterfaceSDL2.cpp:409): UI only.
 
 **Containers.** There are no unordered containers.
@@ -99,17 +98,17 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 
 **`EntityFactory::m_idCount`**
 
-- Set to 1 only in the constructor (EntityFactory.cpp:88-91), incremented at :9-10, never reset per round.
+- Set to 1 only in the constructor (EntityFactory.cpp:88-91), incremented at :9-10, never reset per round. *(Brief 01: `EntityFactory::resetIds()`, called from `EntityManager`'s constructor, now resets it every round.)*
 - IDs are only compared for equality, and `std::map` order follows creation order. So a different base changes checksums, not behaviour.
 - InputHandler keys its per-player maps by entity id (InputHandler.cpp:66, :498).
 
-**GameOverTimer: wall-clock, with three bugs**
+**GameOverTimer: wall-clock, with three bugs** *(1, 2 and the wall-clock part fixed by brief 01: the timer now counts ticks, is reset by `EntityManager`'s constructor, and the countdown is `GameOverTimer::GAME_OVER_COUNTDOWN_TICKS = 60`, i.e. 2 s. Item 3 stands.)*
 
 1. It latches: `timerTriggered` is never reset, so from round 2 onwards the round ends on the tick the end condition first holds.
 2. The base constructor calls the virtual `getDefaultTimeout()` (GameTimer.cpp:20). The countdown is therefore 5 s (`STANDARD_COUNTDOWN`), not the intended `GAME_OVER_COUNTDOWN=2`.
 3. During the countdown the sim keeps running, and AI takeover is still allowed.
 
-`GameScoreBoardTimer` is defined but never used.
+`GameScoreBoardTimer` was defined but never used; brief 01 removed it.
 
 **All other sim timing is integer tick counters.** Bomb and mine fuses, egg hatch, power-up decay, effect and explosion health, rocket lifespan, robot actions, the spawner delay, AI WAIT/`checkTimer`, and SimpleBrain `m_minMoveTimer`.
 
@@ -283,7 +282,8 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
 
 - **Map-resize bug.**
   - `applyMapDimensionsIfChanged()` rebuilds `Map` before `resetGame()` deletes the old EntityManager (GameEngine.cpp:135, :73, :86-90).
-  - The old `BlockEntity` destructors then call `setBlockAt(x,y,false)` using the new map's stride. That can overwrite walls with EMPTY, or write out of bounds if the map shrank.
+  - The old `BlockEntity` destructors then call `setBlockAt(x,y,false)` with the *old* map's tile coordinates against the *new* map's array and stride. That can overwrite the new map's walls with EMPTY (an old block at (8,3) hits the east wall of a 9x7 map), or write past the end of the array if the map shrank. *(Correction to the earlier wording, which blamed "the wrong stride": the stride is the new one; the coordinates are the old ones.)*
+  - *Fixed by brief 01:* `Map` has a generation counter bumped by every `init()`. `BlockEntity` remembers the generation it was placed in and its destructor skips the write if the map has since been rebuilt.
 - **ESC/quit** is local: it throws `InputException` and flips this machine to the scoreboard (GameEngine.cpp:164-171).
 - **`GameSettings::setNumberOfPlayers`** keeps existing slots. `InputHandler::setPointers` writes keyboard assignments back into `GameSettings` (InputHandler.cpp:106).
 - **Debug logging** is compiled in by default (the default build type is Debug), and `MickLogger` writes debug output to `cout` every frame.
