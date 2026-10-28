@@ -1,5 +1,6 @@
 
 #include "SimpleBrain.h"
+#include "SimRandom.h"
 
 SimpleBrain::SimpleBrain(int &rTileXref, int &rTileYref,
                          float &rOffsetXref, float &rOffsetYref,
@@ -13,7 +14,7 @@ SimpleBrain::SimpleBrain(int &rTileXref, int &rTileYref,
   rAnimState(animStateRef),
   rWalkThroughBlocks(rWalkThroughBlocksRef),
   rVelocity(rVelocityRef),
-  m_lastMovingState((rand()%4) + 1),
+  m_lastMovingState((SimRandom::sim().nextInt(4)) + 1),
   m_minMoveTimer(INITIAL_MIN_MOVE_TIMER)
 {}
 
@@ -67,7 +68,7 @@ void SimpleBrain::setDirectionToMove()
         // weights to adjust directions
         Heading heading;
 
-        int random = rand()%100;
+        int random = SimRandom::sim().nextInt(100);
         if (random < 100)
         {
           heading = TURN_LEFT;  // 0.3p

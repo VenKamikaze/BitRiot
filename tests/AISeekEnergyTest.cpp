@@ -708,10 +708,9 @@ TEST_F(AISeekEnergyTest, ChoosingAReachablePickupRunsExactlyOnePathSearch)
 
 TEST_F(AISeekEnergyTest, SameSeedGivesTheSamePickupTiming)
 {
-  const unsigned int resumeSeed = (unsigned int) std::rand(); // put the harness's RNG back after
   auto run = [this]() -> int
   {
-    std::srand(1234);
+    setRoundSeed(1234);
     startRound();
     destroyPlayer(2);
     clearBlocks();
@@ -724,7 +723,6 @@ TEST_F(AISeekEnergyTest, SameSeedGivesTheSamePickupTiming)
 
   const int first = run();
   const int second = run();
-  std::srand(resumeSeed);
   ASSERT_GT(first, 0);
   EXPECT_EQ(first, second);
 }

@@ -115,6 +115,7 @@ set(SOURCES ./src/AIGameView.cpp
 ./src/RuntimeException.cpp
 ./src/SDLHelper.cpp
 ./src/RmlUI/glue/ShellFileInterface.cpp
+./src/SimRandom.cpp
 ./src/SimpleBrain.cpp
 ./src/SimpleMovingEntity.cpp
 ./src/SpawningPool.cpp

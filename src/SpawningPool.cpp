@@ -1,4 +1,5 @@
 #include "SpawningPool.h"
+#include "SimRandom.h"
 
 
 SpawningPool::SpawningPool(int CPUpoints)
@@ -16,7 +17,7 @@ SpawningPool::SpawningPool(int CPUpoints)
     m_minDelay = m_maxDelay - 1;
   }
 
-  m_delayCounter = m_minDelay + (rand()%(m_maxDelay - m_minDelay));
+  m_delayCounter = m_minDelay + (SimRandom::sim().nextInt(m_maxDelay - m_minDelay));
 }
 
 SpawningPool::~SpawningPool()
@@ -36,7 +37,7 @@ void SpawningPool::update()
   if (m_delayCounter <= 0)
   {
     // reset counter
-    m_delayCounter = m_minDelay + (rand()%(m_maxDelay - m_minDelay));
+    m_delayCounter = m_minDelay + (SimRandom::sim().nextInt(m_maxDelay - m_minDelay));
 
     // try to spawn cpu entity
 
@@ -126,7 +127,7 @@ int SpawningPool::getTypeCost(EntityType type)
 
 EntityType SpawningPool::getRandomType()
 {
-  int roll = rand()%100;
+  int roll = SimRandom::sim().nextInt(100);
 
   int powerupChance = DataReader::getInstance()->getIntFromFile("SPAWN_POWERUP_CHANCE", "data/entity.txt");
   // first consider powerups
@@ -157,7 +158,7 @@ EntityType SpawningPool::getRandomType()
 
   }
 
-  roll = rand()%100;
+  roll = SimRandom::sim().nextInt(100);
 
   int eggChance[5];
   eggChance[0] = DataReader::getInstance()->getIntFromFile("SPAWN_EGG1_CHANCE", "data/entity.txt");
@@ -194,8 +195,8 @@ EntityType SpawningPool::getRandomType()
 
 bool SpawningPool::getEmptyTile(int & x, int & y)
 {
-  x = 1 + (rand()%(GameSettings::getInstance()->getMapWidth() - 1));
-  y = 1 + (rand()%(GameSettings::getInstance()->getMapHeight() - 1));
+  x = 1 + (SimRandom::sim().nextInt(GameSettings::getInstance()->getMapWidth() - 1));
+  y = 1 + (SimRandom::sim().nextInt(GameSettings::getInstance()->getMapHeight() - 1));
 
   if (Map::getInstance()->staticTileAt(x, y) == Map::EMPTY)
   {
@@ -230,14 +231,14 @@ unsigned int SpawningPool::getRobotFlags()
   unsigned int flagsToSet = 0;
   DataReader * data = DataReader::getInstance();
 
-  int roll1 = rand()%100;
+  int roll1 = SimRandom::sim().nextInt(100);
 
   if (roll1 < data->getIntFromFile("WALK_THROUGH_BLOCKS_CHANCE", "data/entity.txt"))
   {
     flagsToSet = flagsToSet | GameEntity::WALK_THROUGH_BLOCKS;
   }
 
-  int roll2 = rand()%100;
+  int roll2 = SimRandom::sim().nextInt(100);
 
   if (roll2 < data->getIntFromFile("LAY_BLOCKS_CHANCE", "data/entity.txt"))
   {

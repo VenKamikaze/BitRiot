@@ -46,31 +46,24 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 
 ## 2. Randomness and other nondeterminism
 
-**Seeding.** `srand(SDL_GetTicks())` at MickSDLRenderer.cpp:95, once at window init, never reseeded per round. Tests call `srand(seed)` once per process (tests/test_main.cpp:33).
+**Seeding.** *Done by brief 02.* The sim draws from `SimRandom::sim()` (`src/SimRandom.h`, PCG32), reseeded from `GameSettings::beginRoundSeed()` as the first statement of `GameEngine::resetGame()`. Presentation randomness uses `SimRandom::cosmetic()`. There is no `srand`/`rand` left in `src/`, and `SimRandomSourceGuardTest` keeps it that way. (Before: `srand(SDL_GetTicks())` once at window init in MickSDLRenderer.cpp, and the tests called `srand(seed)` once per process.)
 
-**`rand()` call sites.** 27 sim sites and 1 UI site, all on the single libc stream.
+**RNG call sites** (re-found by grep for brief 02; 28 `rand()` sites, 26 sim and 2 cosmetic, all formerly on the single libc stream; the cosmetic ones, EffectEntity and ScoreBoardBinder, consumed the sim stream too).
 
-| File | Lines | Controls |
+| File | Controls | Stream |
 |---|---|---|
-| SpawningPool.cpp | :19, :39 | spawn delay |
-| | :129, :160 | type roll |
-| | :197-198 | tile x/y |
-| | :233, :240 | robot flags |
-| GameEngine.cpp | :269 | block seeding per tile |
-| PlayerCharacterEntity.cpp (bot AI) | :30, :76 | `m_checkTimer` 37/67 (:30 also runs for humans) |
-| | :37 | initial wait |
-| | :43 | initial EGG2 goal |
-| | :335, :339, :346, :350, :354, :357, :361 | `determineGoals` |
-| | :385 | energy goal |
-| | :486 | per-create wait |
-| RobotEntity.cpp | :34, :57 | action counter |
-| SimpleBrain.cpp | :16 | initial heading |
-| | :70 | heading roll inside a `while` loop, so the number of calls depends on data |
-| EffectEntity.cpp | :23 | damage-effect anim frame. Cosmetic, but it consumes the sim stream. |
-| ScoreBoardBinder.cpp (UI) | :114 | `randomWinText`; consumes the same stream between rounds |
+| SpawningPool.cpp | spawn delay (ctor and `update`), type rolls (2), tile x/y (2), robot flags (2) | sim |
+| GameEngine.cpp (`seedBlocksOnMap`) | block seeding per tile | sim |
+| PlayerCharacterEntity.cpp | `m_checkTimer` 37/67 (ctor and `update`, also for humans), initial wait, initial EGG2 goal, `determineGoals` (7 draws), energy goal, per-create wait | sim |
+| RobotEntity.cpp | action counter (ctor and `update`) | sim |
+| SimpleBrain.cpp | initial heading; heading roll inside a `while` loop, so the number of draws depends on data | sim |
+| EffectEntity.cpp | damage-effect anim frame (`m_currentAnimFrame`, render-only; it never affects timing, which runs off `m_health` and `m_animCounter`) | cosmetic |
+| ScoreBoardBinder.cpp | `randomWinText` | cosmetic |
 
-- No expression contains two `rand()` calls, so there is no evaluation-order hazard today.
+- No full-expression contains two draws, so there is no evaluation-order hazard (the rule is in the SimRandom.h header comment).
+- `% 0` is now defined: `nextInt(0)` and `nextInt(1)` return 0.
 - RmlUi's `Math::Random*` functions exist but are unused.
+- **For the state hash (03a):** a `DAMAGE_EFFECT` entity's `m_currentAnimFrame` comes from the cosmetic stream and differs per machine, so it must not be hashed.
 
 **Wall clock**
 
@@ -269,11 +262,11 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
 - Small test maps.
 - `runRoundToCompletion(maxFrames)` in engine order.
 - Consecutive rounds in one process.
-- A fixed seed per process (`BITRIOT_TEST_SEED`).
+- A base seed per process (`BITRIOT_TEST_SEED`); each test derives its round seeds from it, its name and its round count.
 
 **Missing**
 
-- A per-round seed or PRNG object.
+- ~~A per-round seed or PRNG object.~~ Done by brief 02: `GameSettings::setRoundSeed()` / `beginRoundSeed()`, harness `setRoundSeed()`, `BITRIOT_TEST_SEED` as the base seed.
 - A state-hash function.
 - An input-injection path. `processKeyboardInput` hard-wires the `GameRunningSDLInput` singleton.
 - A headless `GameEngine` tick. GameEngine needs the renderer, InfoPanel and the menu, and `seedBlocksOnMap`/`initPlayerCharacters` are private. **The harness duplicates the spawn positions and seeds no blocks, so harness rounds are not real rounds.**
@@ -303,9 +296,9 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
 - EntityManager.cpp ~342 reads `numConfiguredTeams`.
 - There are many `getMapWidth`/`getMapHeight` reads.
 
-**RNG is consumed before world seeding.** `SpawningPool`'s constructor (SpawningPool.cpp:19) and the `PlayerCharacterEntity` constructors draw from `rand()` before `seedBlocksOnMap`.
+**RNG is consumed before world seeding.** `SpawningPool`'s constructor and the `PlayerCharacterEntity` constructors draw from the sim stream before `seedBlocksOnMap`. That is why `resetGame()` reseeds before anything else, and the harness's `startRound()` does likewise.
 
-**`% 0` is undefined behaviour.** `rand() % (m_maxDelay - m_minDelay)` in SpawningPool divides by zero if the two delays are equal.
+**`% 0` was undefined behaviour.** `rand() % (m_maxDelay - m_minDelay)` in SpawningPool (and `rand() % range` in RobotEntity) divided by zero if the two bounds were equal. `SimRandom::nextInt(n)` returns 0 for n <= 1. (The shipped data has min < max in both cases, so it never fired.)
 
 **The round-end tick.** On the tick the GameOverTimer completes, the state flips to `MENU_RUNNING`, but input, pool and `runFrame` still run for that tick (GameEngine.cpp ~157-179). An ESC quit behaves the same way.
 

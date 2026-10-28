@@ -85,8 +85,32 @@ the CPU. Getting this backwards is the single easiest mistake to make here.
 
 ## Determinism
 
-`SpawningPool` and several entity behaviours call `rand()` directly, so
-`test_main.cpp` pins the seed to `1`. To shake out luck-dependent tests:
+The simulation draws every random number from `SimRandom::sim()` (`src/SimRandom.h`,
+PCG32), reseeded at the start of every round; libc `rand()` is gone from `src/`.
+Presentation randomness (damage-effect frame, scoreboard win text) uses
+`SimRandom::cosmetic()`, which is seeded from the OS and must never influence
+the sim. A test (`SimRandomSourceGuardTest`) fails if `rand`/`srand` or a std
+random engine reappears in `src/`.
+
+The harness seeds rounds the way `GameEngine::resetGame()` does: `startRound()`
+calls the production `GameSettings::beginRoundSeed()` first, before the
+`EntityManager` and `SpawningPool` are built (their constructors draw numbers).
+`SetUp()` seeds the sim stream too, so a test that builds entities without
+`startRound()` is deterministic as well.
+
+- **Default:** each round gets a seed derived from the base seed, the test's
+  own name and how many rounds that test has started. A test therefore plays the
+  same rounds whatever order or `--gtest_filter` it runs with, and several rounds
+  in one test (a "play again" test) are different rounds.
+- **Pin a round:** `setRoundSeed(n)` before `startRound()` pins the next round to
+  exactly `n` (one round only). Use it to replay a round or compare two runs.
+- **Reproduce a failing round:** when a test fails, the harness prints every
+  round seed it used (`[bitriot] round seeds in this test: ...`, the first is
+  `SetUp()`'s, then one per `startRound()`). Put `setRoundSeed(<seed>)` before the
+  matching `startRound()` to replay exactly that round, whatever the base seed.
+- **Base seed:** `BITRIOT_TEST_SEED` (default `1`) changes every test's rounds.
+
+To shake out luck-dependent tests:
 
 ```bash
 BITRIOT_TEST_SEED=42 ./tests/bitriot_tests   # any seed; 0 = time-based
@@ -99,6 +123,8 @@ generous cap) rather than guess a tick count: `ADisabledPoolStillLetsPowerUpsThr
 used a fixed 4000 ticks, which misses a 10%-per-attempt power-up ~2.5% of the
 time, and failed on those seeds and on whichever test orderings happened to
 hand it one.
+
+Never call `std::srand`/`std::rand` in a test: they no longer influence the sim.
 
 Do a seed sweep before trusting a new test:
 
@@ -147,6 +173,10 @@ rebuilt before the old `EntityManager` goes) skips its write into the new map.
   (`m_gameTicks`, ticks x `NORMAL_TICKS_SPEED`) and the call to
   `GameOverTimer::advance()` are checked by hand, not by a test. The countdown
   logic itself is `GameTimer::advance()`, which the tests do call.
+- That `resetGame()` reseeds the sim RNG as its very first statement is checked
+  by hand: the harness's `startRound()` copies the order, and the production
+  piece it calls (`GameSettings::beginRoundSeed()`) is tested, but the call in
+  `resetGame()` is not.
 - There is no automated AddressSanitizer job. To run one by hand, outside the
   source tree:
 
@@ -221,7 +251,7 @@ files, run, swap back.
 
 ## Coverage today
 
-138 tests across ten files:
+155 tests across eleven files:
 
 - `WinConditionTest.cpp` — free-for-all, team and co-op round-end rules,
   including the co-op "board cleared and pool exhausted" win and the
@@ -267,6 +297,16 @@ files, run, swap back.
   `AIProbe` (a bot that is not in the round) lets a test ask for one goal
   decision and read the answer; it also checks the flood fill against A*, and
   that path searches leave no nodes allocated (`livePathNodes()`).
+
+- `SimRandomTest.cpp` - the sim RNG (brief 02): PCG32 known answers (the
+  reference implementation's own output for seed 42, plus values from an
+  independent implementation), `nextInt` edge cases (0 and 1 return 0 and still
+  consume one draw), the round-seed plumbing in `GameSettings` (a pin lasts one
+  round), whole rounds (same seed gives the same winner, frame count and
+  per-tick entity counts; different seeds differ; cosmetic draws change
+  nothing), that a damage effect and the scoreboard win text each draw exactly
+  one cosmetic value and no sim value, and a source guard that fails if libc
+  `rand`/`srand` or a std random engine appears in `src/`.
 
 Not covered: rendering (rasterisation), input and device assignment, and
 specific weapon behaviours and most AI behaviours. Input would need real refactoring to test;

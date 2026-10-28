@@ -17,7 +17,7 @@ Each brief (`NN-*.md`) is one unit of work, sized for a single implement → rev
 | # | Brief | Repo | Depends on | Status |
 |---|---|---|---|---|
 | 01 | [Round lifecycle hygiene](01-round-lifecycle-hygiene.md) | BitRiot | — | done |
-| 02 | [Seeded simulation RNG](02-sim-rng.md) | BitRiot | 01 | todo |
+| 02 | [Seeded simulation RNG](02-sim-rng.md) | BitRiot | 01 | done |
 | 02b | [Fixed-point simulation maths](02b-fixed-point-sim.md) | BitRiot | 01, 02 | todo |
 | 03a | [`Simulation`, `MatchConfig` and state hash](03a-simulation-and-state-hash.md) | BitRiot | 01, 02, 02b | todo |
 | 03b | [Surface-free sim library and frame loop](03b-surface-free-sim-and-frame-loop.md) | BitRiot | 03a | todo |

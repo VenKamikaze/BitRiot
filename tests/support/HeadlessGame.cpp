@@ -123,6 +123,48 @@ NullSound* HeadlessEnvironment::sound()
 // HeadlessGameTest
 // ---------------------------------------------------------------------------
 
+namespace
+{
+uint64_t g_baseSeed = 1;
+
+// FNV-1a over the bytes, then a splitmix64 finaliser.
+uint64_t mixSeed(uint64_t base, const std::string& name, uint64_t round)
+{
+  uint64_t h = 1469598103934665603ULL;
+  auto feed = [&h](uint8_t byte) { h ^= byte; h *= 1099511628211ULL; };
+  for (int i = 0; i < 8; i++) feed((uint8_t) (base >> (8 * i)));
+  for (char c : name) feed((uint8_t) c);
+  for (int i = 0; i < 8; i++) feed((uint8_t) (round >> (8 * i)));
+  h += 0x9E3779B97F4A7C15ULL;
+  h = (h ^ (h >> 30)) * 0xBF58476D1CE4E5B9ULL;
+  h = (h ^ (h >> 27)) * 0x94D049BB133111EBULL;
+  return h ^ (h >> 31);
+}
+}
+
+void HeadlessEnvironment::setBaseSeed(uint64_t seed) { g_baseSeed = seed; }
+uint64_t HeadlessEnvironment::baseSeed() { return g_baseSeed; }
+
+void HeadlessGameTest::beginRoundRng()
+{
+  // Same production path GameEngine::resetGame() uses. Unless the test pinned a
+  // seed, derive one from (base seed, test name, rounds started so far).
+  std::GameSettings* settings = std::GameSettings::getInstance();
+  if (!settings->isRoundSeedPinned())
+  {
+    const ::testing::TestInfo* info = ::testing::UnitTest::GetInstance()->current_test_info();
+    const std::string name = info ? std::string(info->test_suite_name()) + "." + info->name() : "";
+    settings->setRoundSeed(mixSeed(g_baseSeed, name, m_roundsStarted));
+  }
+  m_roundsStarted++;
+  m_roundSeedsUsed.push_back(settings->beginRoundSeed());
+}
+
+void HeadlessGameTest::setRoundSeed(uint64_t seed)
+{
+  std::GameSettings::getInstance()->setRoundSeed(seed);
+}
+
 void HeadlessGameTest::SetUp()
 {
   // MickLogger's DEBUG level is compile-time enabled in Debug builds and is
@@ -135,10 +177,27 @@ void HeadlessGameTest::SetUp()
   }
 
   resetSingletons();
+
+  m_roundsStarted = 0;
+  m_roundSeedsUsed.clear();
+  std::GameSettings::getInstance()->clearRoundSeedPin();
+  beginRoundRng();
 }
 
 void HeadlessGameTest::TearDown()
 {
+  // A failing round can be replayed on its own: pin the seed with
+  // setRoundSeed(<seed>) before the matching startRound().
+  if (HasFailure() && !m_roundSeedsUsed.empty())
+  {
+    std::cerr << "[bitriot] round seeds in this test (SetUp, then each startRound):";
+    for (uint64_t seed : m_roundSeedsUsed)
+    {
+      std::cerr << " " << seed;
+    }
+    std::cerr << "\n[bitriot] replay one with setRoundSeed(<seed>) before startRound()" << std::endl;
+  }
+
   m_spawningPool.reset();
   m_entityManager.reset();
 
@@ -241,6 +300,11 @@ void HeadlessGameTest::startRound()
   // DynamicMap's constructor performs.
   m_entityManager.reset();
   m_spawningPool.reset();
+
+  // First thing, as in GameEngine::resetGame(): the SpawningPool and player
+  // constructors draw random numbers.
+  beginRoundRng();
+
   m_entityManager.reset(new EntityManager());
 
   std::GameSettings* settings = std::GameSettings::getInstance();

@@ -8,6 +8,7 @@
 #ifndef GAMESETTINGS_H_
 #define GAMESETTINGS_H_
 
+#include <cstdint>
 #include <string>
 #include "RuntimeException.h"
 #include <vector>
@@ -189,6 +190,36 @@ class GameSettings
       return false;
     }
 
+    // Seed for the NEXT round's simulation RNG (SimRandom::sim()). Local play
+    // leaves this alone: GameEngine::resetGame() draws a fresh seed for every
+    // round. Calling setRoundSeed() pins the next round to exactly this value
+    // (a netplay host's MatchConfig, a replay, a debug override); the pin is
+    // used up by that one round, so "Play again" gets a fresh seed again.
+    // After a round starts, getRoundSeed() is the seed that round used.
+    // 03a moves this into MatchConfig.
+    inline uint64_t getRoundSeed()
+    {
+      return roundSeed;
+    }
+    inline void setRoundSeed(uint64_t seed)
+    {
+      roundSeed = seed;
+      roundSeedPinned = true;
+    }
+    inline bool isRoundSeedPinned()
+    {
+      return roundSeedPinned;
+    }
+    inline void clearRoundSeedPin()
+    {
+      roundSeedPinned = false;
+    }
+    // Called once at the very start of every round (GameEngine::resetGame(),
+    // before anything that draws random numbers is built): picks the round's
+    // seed (the pinned one, else a fresh one), releases the pin, reseeds
+    // SimRandom::sim() with it and returns it. Out-of-line in the .cpp.
+    uint64_t beginRoundSeed();
+
     inline GAME_STATE getGameState()
     {
       return gameState;
@@ -231,6 +262,8 @@ class GameSettings
     int numPlayers = 4;
     int blockPercentage = 55;
     bool npcSpawnerEnabled = true; // NPC Spawner toggle; default on.
+    uint64_t roundSeed = 0;        // see getRoundSeed()
+    bool roundSeedPinned = false;
     // Canonical per-player setup. Genders/playerAIs below are derived mirrors.
     std::vector<Player> m_players;
     std::vector<bool> genders;

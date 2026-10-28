@@ -33,6 +33,7 @@
 
 #include <SDL2/SDL.h>
 
+#include <cstdint>
 #include <initializer_list>
 #include <memory>
 #include <string>
@@ -97,6 +98,13 @@ class HeadlessEnvironment : public ::testing::Environment
 
     static SDL_Surface* surface();
     static NullSound* sound();
+
+    // The process-wide base seed (BITRIOT_TEST_SEED, default 1). Every test
+    // derives its round seeds from this, its own name and a per-test round
+    // counter, so a test plays the same rounds whatever order or filter it is
+    // run with, and a different base seed gives it different rounds.
+    static void setBaseSeed(uint64_t seed);
+    static uint64_t baseSeed();
 };
 
 // Base fixture. Resets every process-lifetime singleton the simulation touches
@@ -146,6 +154,14 @@ class HeadlessGameTest : public ::testing::Test
     void useTestMap() { setMapSize(7, 7); }
 
     // -- round lifecycle ----------------------------------------------------
+
+    // Pins the sim RNG seed of the NEXT startRound() to exactly this value (it
+    // is used up by that round; the one after goes back to the derived seeds).
+    // Without a call, every startRound() gets a distinct seed derived from the
+    // base seed, the test's name and how many rounds the test has started.
+    // SetUp() also seeds the sim stream, so a test that builds entities or a
+    // SpawningPool without startRound() is still deterministic.
+    void setRoundSeed(uint64_t seed);
 
     // Builds a fresh EntityManager and spawns one PlayerCharacterEntity per
     // configured slot at a distinct tile. Safe to call more than once in a
@@ -215,11 +231,14 @@ class HeadlessGameTest : public ::testing::Test
 
   private:
     void resetSingletons();
+    void beginRoundRng();
 
     std::unique_ptr<EntityManager> m_entityManager;
     std::unique_ptr<SpawningPool> m_spawningPool;
     int m_mapWidth = DEFAULT_MAP_WIDTH;
     int m_mapHeight = DEFAULT_MAP_HEIGHT;
+    uint64_t m_roundsStarted = 0;
+    std::vector<uint64_t> m_roundSeedsUsed; // reported on failure
     std::streambuf* m_savedCout = nullptr;
 };
 
