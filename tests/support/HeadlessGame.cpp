@@ -360,6 +360,14 @@ void HeadlessGameTest::killPlayer(int playerNumber)
   p->setAlive(false);
 }
 
+void HeadlessGameTest::destroyPlayer(int playerNumber)
+{
+  std::shared_ptr<PlayerCharacterEntity> p = player(playerNumber);
+  ASSERT_NE(p, nullptr) << "no live player character with playerNumber " << playerNumber;
+  EntityMessageQueue::getInstance()->postDestroyMessage(p->getID());
+  em().processMessageQueue();
+}
+
 void HeadlessGameTest::spawnEntity(EntityType type, int playerNumber, int tileX, int tileY,
                                    unsigned int flags)
 {

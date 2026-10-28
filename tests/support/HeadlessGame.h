@@ -187,6 +187,12 @@ class HeadlessGameTest : public ::testing::Test
     // conditions should not depend on how much health an explosion does.
     void killPlayer(int playerNumber);
 
+    // Kills a player the way the game does: posts DESTROY_ENTITY and processes
+    // the queue, so the character is flagged dead *and* erased from the live
+    // entity list (unlike killPlayer, which only flips the flag). Use this for
+    // anything that cares about what happens to a dead player's entity.
+    void destroyPlayer(int playerNumber);
+
     // Posts a create message and processes the queue, returning immediately
     // with the entity live on the map. playerNumber 0 is the CPU/hostile
     // owner; 1..N are the player slots.

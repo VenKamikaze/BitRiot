@@ -26,7 +26,18 @@ class EntityManager
     void renderEntities(SDL_Surface*  destination); // renders frame to supplied surface
 
     void processMessageQueue(); // processes all messages in EntityMessageQueue (create, move and destroy entities)
+    // The *live* player characters only: a dead player is erased from the entity
+    // list, so it drops out of this set. Win-condition, AI and getPlayerPointer
+    // logic all rely on that - use getRoundPlayerRoster() for "everyone who played".
     unique_ptr<vector<shared_ptr<PlayerCharacterEntity>>> getAllPlayerCharacters();
+    // Every player character created since this EntityManager was constructed
+    // (i.e. this round), in creation order, including those since destroyed.
+    // Read-only history for the end-of-round scoreboard; entries are never
+    // simulated, rendered or collided. Reset by constructing a new EntityManager.
+    const vector<shared_ptr<PlayerCharacterEntity>>& getRoundPlayerRoster() const
+    {
+      return m_roundPlayerRoster;
+    }
     shared_ptr<PlayerCharacterEntity> getPlayerPointer(int playerNumber);
     //bool getPlayerDead(int playerIndex)
     //{
@@ -63,6 +74,10 @@ class EntityManager
 
     // entity manager data structures
     DynamicMap * m_pDynamicMap;
+
+    // Every player character spawned this round, kept alive past DESTROY_ENTITY
+    // so the scoreboard can still read their stats. Populated in CREATE_ENTITY.
+    vector<shared_ptr<PlayerCharacterEntity>> m_roundPlayerRoster;
 
 };
 

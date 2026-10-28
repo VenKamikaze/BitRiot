@@ -72,6 +72,7 @@ Useful fixture members:
 | `runFrames(n)` | `n` × `EntityManager::runFrame()` — AI, message queue, collisions |
 | `player(n)` | The `PlayerCharacterEntity` for playerNumber `n` (1-based; 0 is the CPU) |
 | `killPlayer(n)` | Flip the alive flag. Win-condition tests should not depend on damage numbers |
+| `destroyPlayer(n)` | Real death path: DESTROY_ENTITY, so the player is also erased from the live entity list |
 | `spawnEntity(type, owner, x, y)` | Create an entity and process the queue |
 | `countEntities(group[, owner])` | Count live entities by group, optionally by owner |
 | `clearBlocks()` | Strip terrain when a test needs predictable movement |
@@ -179,7 +180,7 @@ files, run, swap back.
 
 ## Coverage today
 
-80 tests across seven files:
+90 tests across eight files:
 
 - `WinConditionTest.cpp` — free-for-all, team and co-op round-end rules,
   including the co-op "board cleared and pool exhausted" win and the
@@ -196,6 +197,10 @@ files, run, swap back.
   guards across repeated rounds.
 - `FullRoundTest.cpp` — whole rounds played to their natural end (PvP, team,
   2- and 4-player co-op), plus consecutive rounds in one process.
+- `RoundRosterTest.cpp` — `EntityManager::getRoundPlayerRoster()`: every player
+  who played stays listed (with stats and alive flag) after dying and being
+  erased from the live entity list, the live-set semantics of
+  `getAllPlayerCharacters()` are unchanged, and the roster resets per round.
 - `ScoreboardLayoutTest.cpp` — the scoreboard's real computed geometry: column
   headings exist, every data cell aligns with its heading, columns don't
   overlap or wrap, rows group by team, the winning team is marked.

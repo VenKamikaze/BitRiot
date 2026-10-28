@@ -14,6 +14,8 @@
 #include <memory>
 #include <vector>
 
+#include "EntityManager.h"
+#include "EntityMessageQueue.h"
 #include "GameSettings.h"
 #include "PlayerCharacterEntity.h"
 #include "RmlUI/binders/ScoreBoardBinder.h"
@@ -381,6 +383,81 @@ TEST_F(ScoreboardLayoutTest, ResultColumnShowsSurvivedOrDiedButNeverBoth)
 
   // Both must land in the same column despite being different elements.
   EXPECT_NEAR(aliveRow.back().left, deadRow.back().left, ALIGNMENT_TOLERANCE_PX);
+}
+
+// -- every player who played appears, dead or alive -------------------------
+
+TEST_F(ScoreboardLayoutTest, ScoreboardFromRealRoundListsPlayersWhoDiedAsWellAsSurvivors)
+{
+  // The reported bug: dead players were erased from the entity list, so a
+  // scoreboard fed from getAllPlayerCharacters() only ever showed survivors.
+  // This drives the real EntityManager (create + DESTROY_ENTITY messages) and
+  // feeds the scoreboard from the round roster, as GameEngine does.
+  std::GameSettings* settings = std::GameSettings::getInstance();
+  settings->setMapWidth(17);
+  settings->setMapHeight(13);
+
+  EntityMessageQueue* emq = EntityMessageQueue::getInstance();
+  {
+    EntityManager entityManager;
+    for (int i = 1; i <= 4; i++)
+    {
+      emq->postCreateMessage(PLAYER_CHARACTER, i, 1 + (2 * i), 1, 0);
+      entityManager.processMessageQueue();
+    }
+    for (int i = 1; i <= 4; i++)
+    {
+      std::shared_ptr<PlayerCharacterEntity> p = entityManager.getPlayerPointer(i);
+      ASSERT_NE(p, nullptr);
+      for (int e = 0; e < i; e++)
+      {
+        p->incNumberEggsPlaced();
+      }
+    }
+    // Players 1, 2 and 4 die for real: flagged dead and erased from the list.
+    const int dead[] = {1, 2, 4};
+    for (int i : dead)
+    {
+      emq->postDestroyMessage(entityManager.getPlayerPointer(i)->getID());
+      entityManager.processMessageQueue();
+    }
+    ASSERT_EQ(entityManager.getAllPlayerCharacters()->size(), 1u) << "precondition: only a survivor is live";
+
+    std::shared_ptr<PlayerCharacterEntity> winner = entityManager.getWinningPlayer(false);
+    ASSERT_NE(winner, nullptr);
+    Rml::ElementDocument* document =
+        loadScoreboard(winner, entityManager.getRoundPlayerRoster(), 120);
+    ASSERT_NE(document, nullptr);
+
+    ScoreTable table = readTable(document);
+    ASSERT_NE(table.header, nullptr);
+    ASSERT_EQ((int) table.dataRows.size(), 4) << "one row per player, including the dead";
+
+    // Rows are sorted by team then player, so row r is player r + 1.
+    int survivedRows = 0;
+    int diedRows = 0;
+    for (size_t r = 0; r < table.dataRows.size(); r++)
+    {
+      const std::vector<CellBox> cells = cellsOf(table.dataRows[r]);
+      ASSERT_EQ((int) cells.size(), EXPECTED_COLUMNS) << "row " << r;
+      EXPECT_EQ(std::atoi(cells[1].text.c_str()), (int) r + 1) << "row " << r << " player";
+      EXPECT_EQ(std::atoi(cells[2].text.c_str()), (int) r + 1) << "row " << r << " eggs";
+      if (cells.back().text == "survived")
+      {
+        survivedRows++;
+        EXPECT_EQ(r, 2u) << "only player 3 survived";
+      }
+      else
+      {
+        EXPECT_EQ(cells.back().text, "died") << "row " << r;
+        diedRows++;
+      }
+    }
+    EXPECT_EQ(survivedRows, 1);
+    EXPECT_EQ(diedRows, 3);
+
+    // Tear the data model down while the roster's entities are still alive.
+  }
 }
 
 } // namespace
