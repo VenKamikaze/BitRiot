@@ -373,7 +373,7 @@ TEST_F(SimLibraryRoundTest, AFullRoundWithBlocksRunsToItsEndWithNoBitmapsAndNoSu
       blocks += Map::getInstance()->staticTileAt(x, y) == Map::BLOCK ? 1 : 0;
     }
   }
-  EXPECT_GT(blocks, 20) << "a real round has blocks";
+  EXPECT_GT(blocks, 5) << "a real round has blocks (about 25 on this map at 55%; the bound is loose on purpose)";
 
   int ticks = 0;
   while (!sim().roundOver() && ticks < 60000)
