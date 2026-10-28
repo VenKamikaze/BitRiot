@@ -2,6 +2,8 @@
 
 A fact check of the current code, made for the briefs in `doco/netplay/`. File:line refs are against `claude` at 996c1ba (Oct 2026). Since then `fix/round-message-leak` has been merged, which shifts lines in `src/EntityManager.*` and `src/EntityMessageQueue.*`, so re-find anything in those two files by name. Re-check any line ref before relying on it.
 
+*Brief 03a (Oct 2026) moved round setup and the tick out of `GameEngine` into `Simulation` (`src/Simulation.*`); §1, §2, §3, §7, §10 and §12 are updated for it, and the `GameEngine.cpp` line refs below that predate it (marked) no longer exist.*
+
 An earlier design chat analysed the April-2022 code. Where this file disagrees with that chat, this file wins.
 
 **Corrections to the earlier analysis**
@@ -28,14 +30,13 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
   - `FAST_TICKS_SPEED` (GameSettings.h:221) is unused.
 - **`GameEngine::runEngine()`** (GameEngine.cpp:123-196) switches on the global `GameSettings::gameState`:
   - `MENU_RUNNING`: `menuSystem->showMenu()`. This pumps SDL events itself and calls RmlUi Update/Render (MenuSDLRenderer.cpp:108-256).
-  - `GAME_INIT`: `applyMapDimensionsIfChanged()` + `resetGame()`, (GameEngine.cpp:140-147). No sim tick runs. *(It used to stamp `m_gameStartedAtTicks=SDL_GetTicks()`; brief 01 replaced that with the per-round tick counter `m_gameTicks`, zeroed in `resetGame()`.)*
-  - `GAME_RUNNING`, in this order:
-    1. Win check and GameOverTimer, as one `GameOverTimer::advance(...)` call (150-162).
-    2. `m_pInputHandler->processKeyboardInput()` (164). This is where SDL events are pumped.
-    3. `m_pSpawningPool->update()` (177).
-    4. `m_pEntityManager->runFrame()` (179), which is `runAI` → `processMessageQueue` → `runCollisions`.
-    5. Render to the CPU surface (181-183), then `pushCpuBufferToHardwareBuffer()` (185).
-- **Sim and render are one call.** On the tick a round ends, the state flips to `MENU_RUNNING` and the scoreboard loads mid-tick (159-160). Input, pool, runFrame and render still run for the rest of that tick.
+  - `GAME_INIT`: `applyMapDimensionsIfChanged()` + `resetGame()`. No sim tick runs. *(03a: `resetGame()` builds a `MatchConfig` from `GameSettings` with `pickRoundSeed()`, calls `Simulation::start(config)`, then does the presentation side: the `InfoPanel`, `resetInputEvents`, each player's controller and team sprite, `InputHandler::setPointers`. The tick counter is `Simulation::tick()`; the engine's own `m_gameTicks` is gone.)*
+  - `GAME_RUNNING`, in this order *(03a; it used to be win check, then input, then pool, runFrame)*:
+    1. `m_pInputHandler->processKeyboardInput()`. This is where SDL events are pumped; ESC sets a local quit flag.
+    2. `Simulation::step()`: tick++, the win check and `GameOverTimer::advance(tick, ...)` at the top, then `SpawningPool::update()`, then `EntityManager::runFrame()` (`runAI` → `processMessageQueue` → `runCollisions`). See Simulation.h for the exact semantics.
+    3. If `roundOver()` (or ESC was pressed): state to `MENU_RUNNING` and the scoreboard loads, from the state after the step.
+    4. Render to the CPU surface, then `pushCpuBufferToHardwareBuffer()`.
+- **The engine does one sim step and one render per call.** The round is over only after the whole step has run: pool and `runFrame` run on the tick it ends. The scoreboard therefore sees the state after that final step (the winner itself is fixed at the top of the tick). Moving the win check ahead of input is harmless: input only moves players and posts messages, and the win check reads alive flags and entity groups.
 - **Exceptions are control flow.**
   - ESC throws `InputException(GOT_QUIT)` (InputHandler.cpp:650), caught at GameEngine.cpp:166 and main.cpp:218.
   - There are 16 `throw` sites in src. WASM builds therefore need `-fexceptions` or `-fwasm-exceptions`.
@@ -46,14 +47,14 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 
 ## 2. Randomness and other nondeterminism
 
-**Seeding.** *Done by brief 02.* The sim draws from `SimRandom::sim()` (`src/SimRandom.h`, PCG32), reseeded from `GameSettings::beginRoundSeed()` as the first statement of `GameEngine::resetGame()`. Presentation randomness uses `SimRandom::cosmetic()`. There is no `srand`/`rand` left in `src/`, and `SimRandomSourceGuardTest` keeps it that way. (Before: `srand(SDL_GetTicks())` once at window init in MickSDLRenderer.cpp, and the tests called `srand(seed)` once per process.)
+**Seeding.** *Done by brief 02.* The sim draws from `SimRandom::sim()` (`src/SimRandom.h`, PCG32), reseeded by `Simulation::start()` from `MatchConfig::seed` before anything that draws is built (`GameEngine::resetGame()` picks the seed with `GameSettings::pickRoundSeed()`, which takes a pin or draws a fresh one). Presentation randomness uses `SimRandom::cosmetic()`. There is no `srand`/`rand` left in `src/`, and `SimRandomSourceGuardTest` keeps it that way. (Before: `srand(SDL_GetTicks())` once at window init in MickSDLRenderer.cpp, and the tests called `srand(seed)` once per process.)
 
 **RNG call sites** (re-found by grep for brief 02; 28 `rand()` sites, 26 sim and 2 cosmetic, all formerly on the single libc stream; the cosmetic ones, EffectEntity and ScoreBoardBinder, consumed the sim stream too).
 
 | File | Controls | Stream |
 |---|---|---|
 | SpawningPool.cpp | spawn delay (ctor and `update`), type rolls (2), tile x/y (2), robot flags (2) | sim |
-| GameEngine.cpp (`seedBlocksOnMap`) | block seeding per tile | sim |
+| Simulation.cpp (`seedBlocks`, was `GameEngine::seedBlocksOnMap`) | block seeding per tile (a draw for every eligible tile, whatever the percentage) | sim |
 | PlayerCharacterEntity.cpp | `m_checkTimer` 37/67 (ctor and `update`, also for humans), initial wait, initial EGG2 goal, `determineGoals` (7 draws), energy goal, per-create wait | sim |
 | RobotEntity.cpp | action counter (ctor and `update`) | sim |
 | SimpleBrain.cpp | initial heading; heading roll inside a `while` loop, so the number of draws depends on data | sim |
@@ -63,7 +64,7 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 - No full-expression contains two draws, so there is no evaluation-order hazard (the rule is in the SimRandom.h header comment).
 - `% 0` is now defined: `nextInt(0)` and `nextInt(1)` return 0.
 - RmlUi's `Math::Random*` functions exist but are unused.
-- **For the state hash (03a):** a `DAMAGE_EFFECT` entity's `m_currentAnimFrame` comes from the cosmetic stream and differs per machine, so it must not be hashed.
+- **For the state hash (03a, done):** a `DAMAGE_EFFECT` entity's `m_currentAnimFrame` comes from the cosmetic stream and differs per machine, so it is not hashed (nor is any other `m_currentAnimFrame`).
 
 **Wall clock**
 
@@ -92,7 +93,7 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 **`EntityFactory::m_idCount`**
 
 - Set to 1 only in the constructor (EntityFactory.cpp:88-91), incremented at :9-10, never reset per round. *(Brief 01: `EntityFactory::resetIds()`, called from `EntityManager`'s constructor, now resets it every round.)*
-- IDs are only compared for equality, and `std::map` order follows creation order. So a different base changes checksums, not behaviour.
+- IDs are only compared for equality, and `std::map` order follows creation order. So a different base changes checksums, not behaviour. *(03a: the state hash never contains an absolute id; references between entities are written as walk positions. `Simulation::start()` checks `EntityFactory::nextId() == 1` after building the `EntityManager`.)*
 - InputHandler keys its per-player maps by entity id (InputHandler.cpp:66, :498).
 
 **GameOverTimer: wall-clock, with three bugs** *(1, 2 and the wall-clock part fixed by brief 01: the timer now counts ticks, is reset by `EntityManager`'s constructor, and the countdown is `GameOverTimer::GAME_OVER_COUNTDOWN_TICKS = 60`, i.e. 2 s. Item 3 stands.)*
@@ -102,6 +103,8 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 3. During the countdown the sim keeps running, and AI takeover is still allowed.
 
 `GameScoreBoardTimer` was defined but never used; brief 01 removed it.
+
+*(03a: `GameTimer` keeps no clock of its own any more. `advance(tick, endConditionHolds)` and `getTimerCompleted(tick)` are handed `Simulation::tick()`, so the scoreboard length and the countdown derive from the one counter. `getTriggeredAtTick()` exposes the latch for the state hash.)*
 
 **All other sim timing is integer tick counters.** Bomb and mine fuses, egg hatch, power-up decay, effect and explosion health, rocket lifespan, robot actions, the spawner delay, AI WAIT/`checkTimer`, and SimpleBrain `m_minMoveTimer`.
 
@@ -207,11 +210,13 @@ The old AI goal and instruction lists persist across the switch.
 - `npcSpawnerEnabled`. It is read live every tick (SpawningPool.cpp:72), so it must be frozen per match.
 - `mapWidth`/`mapHeight`: odd values, 13-33 by 11-25. The `-b` flag gives 25×19 (main.cpp:153-162).
 
+*(03a: all of the above, plus the seed, is `MatchConfig`. `Simulation::start()` applies it into `GameSettings`, and the sim keeps reading `GameSettings`. `GameSettings::setNumberOfPlayers` silently ignores a count outside 2-6, so `MatchConfig::problem()` rejects those up front.)*
+
 **Derived values**
 
-- Pool points = `numPlayers*100` (GameEngine.cpp:111).
+- Pool points = `numPlayers*100` (`Simulation::start`).
 - Co-op vs PvP (`numConfiguredTeams`).
-- Fixed spawn tiles per slot (GameEngine.cpp:283-374, `initPlayerCharacters`).
+- Fixed spawn tiles per slot (`startingTileFor` in Simulation.cpp, was `GameEngine::initPlayerCharacters`).
 
 **Local or cosmetic only:** gender/portrait, `attachedControllerId`, `attachedKeyboardId`.
 
@@ -274,16 +279,16 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
 **Missing**
 
 - ~~A per-round seed or PRNG object.~~ Done by brief 02: `GameSettings::setRoundSeed()` / `beginRoundSeed()`, harness `setRoundSeed()`, `BITRIOT_TEST_SEED` as the base seed.
-- A state-hash function.
-- An input-injection path. `processKeyboardInput` hard-wires the `GameRunningSDLInput` singleton.
-- A headless `GameEngine` tick. GameEngine needs the renderer, InfoPanel and the menu, and `seedBlocksOnMap`/`initPlayerCharacters` are private. **The harness duplicates the spawn positions and seeds no blocks, so harness rounds are not real rounds.**
+- ~~A state-hash function.~~ Done by 03a: `Simulation::stateHash()`.
+- An input-injection path. `processKeyboardInput` hard-wires the `GameRunningSDLInput` singleton. (Brief 04a.)
+- ~~A headless `GameEngine` tick; the harness duplicated the spawn positions and seeded no blocks.~~ Done by 03a: the harness starts rounds with `Simulation::start()` and steps `Simulation::step()`, the code `GameEngine` runs. It defaults to 0% blocks so older scenario tests keep open ground. `GameEngine` itself still cannot run headlessly (renderer, `InfoPanel`, menu), but it is now only glue around `Simulation`.
 - Two sims in one process, which the singletons rule out.
 - A sim without bitmaps: it still needs `EntityRendererFactory` surfaces, because `incAnimFrame` calls `getNumFrames` (GameEntity.cpp:358-368).
 
 ## 11. Other surprises
 
 - **Map-resize bug.**
-  - `applyMapDimensionsIfChanged()` rebuilds `Map` before `resetGame()` deletes the old EntityManager (GameEngine.cpp:143, :72, :91).
+  - `applyMapDimensionsIfChanged()` rebuilds `Map` before `Simulation::start()` (via `resetGame()`) deletes the old EntityManager.
   - The old `BlockEntity` destructors then call `setBlockAt(x,y,false)` with the *old* map's tile coordinates against the *new* map's array and stride. That can overwrite the new map's walls with EMPTY (an old block at (8,3) hits the east wall of a 9x7 map), or write past the end of the array if the map shrank. *(Correction to the earlier wording, which blamed "the wrong stride": the stride is the new one; the coordinates are the old ones.)*
   - *Fixed by brief 01:* `Map` has a generation counter bumped by every `init()`. `BlockEntity` remembers the generation it was placed in and its destructor skips the write if the map has since been rebuilt.
 - **ESC/quit** is local: it throws `InputException` and flips this machine to the scoreboard (GameEngine.cpp:166-172).
@@ -303,11 +308,11 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
 - EntityManager.cpp ~342 reads `numConfiguredTeams`.
 - There are many `getMapWidth`/`getMapHeight` reads.
 
-**RNG is consumed before world seeding.** `SpawningPool`'s constructor and the `PlayerCharacterEntity` constructors draw from the sim stream before `seedBlocksOnMap`. That is why `resetGame()` reseeds before anything else, and the harness's `startRound()` does likewise.
+**RNG is consumed before world seeding.** `SpawningPool`'s constructor and the `PlayerCharacterEntity` constructors draw from the sim stream before block seeding. That is why `Simulation::start()` reseeds before it builds anything (the order is pool, players, blocks, and is part of the replay contract). The harness goes through the same function.
 
 **`% 0` was undefined behaviour.** `rand() % (m_maxDelay - m_minDelay)` in SpawningPool (and `rand() % range` in RobotEntity) divided by zero if the two bounds were equal. `SimRandom::nextInt(n)` returns 0 for n <= 1. (The shipped data has min < max in both cases, so it never fired.)
 
-**The round-end tick.** On the tick the GameOverTimer completes, the state flips to `MENU_RUNNING`, but input, pool and `runFrame` still run for that tick (GameEngine.cpp ~157-179). An ESC quit behaves the same way.
+**The round-end tick.** On the tick the GameOverTimer completes, pool and `runFrame` still run (and, in the engine, so does that tick's input): the round is over only after the whole step (03a pinned this down in `Simulation`; the engine used to flip the state to `MENU_RUNNING` part-way through the tick). An ESC quit behaves the same way. `winner()` is fixed at the top of the end tick; the roster and scoreboard stats are those after the step.
 
 **Action input rules today** (InputHandler.cpp ~494-619):
 

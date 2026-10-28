@@ -19,9 +19,13 @@ against a "primary" surface, and nothing in the entity/AI/collision code needs
 a window or a renderer. A bare `SDL_CreateRGBSurface()` after `SDL_Init(0)`
 satisfies all of it.
 
-That is what makes this harness cheap: **no production code was refactored and
-nothing is mocked.** Tests exercise the same `EntityManager::runFrame()` the
-game loop calls.
+That is what makes this harness cheap: nothing is mocked, and tests exercise
+the same code the game loop calls. Since brief 03a that includes round setup and
+the per-tick step: a round starts through `Simulation::start(MatchConfig)` and is
+stepped by `Simulation::step()`, exactly what `GameEngine` does, so a harness
+round **is** a real round (same spawn tiles, same block seeding, same draw order,
+same win check and game-over countdown). The harness has no setup code of its own
+any more.
 
 The same trick works one level up for the menus: RmlUi resolves layout in
 `Context::Update()` and only touches the `RenderInterface` in
@@ -68,9 +72,11 @@ Useful fixture members:
 | --- | --- |
 | `configurePlayers(n)` | Set roster size; resets every slot to AI, own team, no device |
 | `setTeams({...})` | 0-based alliance team per slot |
-| `setMapSize(w, h)` | Resize map (must be odd); rebuilds `Map` and `AIGameView` |
-| `startRound()` | Fresh `EntityManager` + a character per slot. Call twice to test "play again" |
-| `runFrames(n)` | `n` × `EntityManager::runFrame()` — AI, message queue, collisions |
+| `setMapSize(w, h)` | Resize map (must be odd); rebuilds `Map` and `AIGameView`. `Simulation::start` will not do this for you |
+| `setBlockPercentage(p)` | Block density of the next `startRound()`. **The harness default is 0**, not the game's 55, so scenario tests keep open ground; use the game's value in tests about real rounds |
+| `startRound()` | `Simulation::start()` with a `MatchConfig` built from `GameSettings`: a character per slot at its fixed start tile, the pool, blocks. Call twice to test "play again" |
+| `sim()` | The test's `Simulation` (`step()`, `tick()`, `roundOver()`, `winner()`, `stateHash()`, ...). `em()` and `pool()` are its entity manager and spawning pool |
+| `runFrames(n)` | `n` bare `EntityManager::runFrame()` calls — AI, message queue, collisions. **No tick, no win check, no countdown, no spawning pool**: the world moves and nothing else does. Use `sim().step()` for real ticks |
 | `player(n)` | The `PlayerCharacterEntity` for playerNumber `n` (1-based; 0 is the CPU) |
 | `killPlayer(n)` | Flip the alive flag. Win-condition tests should not depend on damage numbers |
 | `destroyPlayer(n)` | Real death path: DESTROY_ENTITY, so the player is also erased from the live entity list |
@@ -93,9 +99,10 @@ Presentation randomness (damage-effect frame, scoreboard win text) uses
 the sim. A test (`SimRandomSourceGuardTest`) fails if `rand`/`srand` or a std
 random engine reappears in `src/`.
 
-The harness seeds rounds the way `GameEngine::resetGame()` does: `startRound()`
-calls the production `GameSettings::beginRoundSeed()` first, before the
-`EntityManager` and `SpawningPool` are built (their constructors draw numbers).
+The harness seeds rounds the way `GameEngine::resetGame()` does: the seed goes
+into the round's `MatchConfig` (`GameSettings::pickRoundSeed()`) and
+`Simulation::start()` reseeds the sim stream from it before the `SpawningPool`,
+the players or the blocks are built (their constructors draw numbers).
 `SetUp()` seeds the sim stream too, so a test that builds entities without
 `startRound()` is deterministic as well.
 
@@ -143,6 +150,42 @@ compile-time enabled in Debug builds and is very chatty. Set
 `BITRIOT_TEST_VERBOSE=1` to see it. `std::cerr` is left alone, so warnings and
 errors (including `DynamicMap::moveEntityOnMap` desync warnings) always show.
 
+## The state hash
+
+`Simulation::stateHash()` is the desync detector (FNV-1a 64 over integers; the
+full specification, what it covers and what it leaves out on purpose, is the
+comment at the top of `src/Simulation.h`). Tests use it to ask "is this the same
+world?":
+
+```cpp
+const uint64_t before = sim().stateHash();
+// ... change one thing ...
+EXPECT_NE(sim().stateHash(), before);
+```
+
+- **Same config, same hash on every tick** is the determinism check
+  (`SimulationTest.TheSameConfigGivesTheSameHashOnEveryTick`); play a config
+  twice with `playHashes()`-style loops and compare vectors.
+- **Golden digests.** `SimulationTest.PinnedRoundsKeepTheirHashes` plays four
+  pinned rounds to their natural end and compares a digest of every tick's hash.
+  It pins the hash specification *and* the simulation together, so it fails when
+  either changes on purpose (add a hashed field, change a bot's behaviour, change
+  how many numbers a round draws) and has to be regenerated:
+
+  ```bash
+  BITRIOT_HASH_DUMP=1   ./tests/bitriot_tests --gtest_filter='SimulationTest.PinnedRounds*'
+  BITRIOT_HASH_DUMP=all ./tests/bitriot_tests --gtest_filter='SimulationTest.PinnedRounds*'  # every tick's hash
+  ```
+
+  The first prints one `digest=0x...ULL` per round to put in `GOLDEN_ROUNDS`; the
+  second prints `HASH <round> <tick> <hash>` lines, which is how two builds (GCC
+  and Clang, or the real engine and the harness) are compared tick by tick. The
+  same digests must pass on every compiler. Check the change is deliberate before
+  regenerating: a digest that moves for no reason is a determinism bug.
+- Hashing is read-only and needs no tick, so a test can hash a world it has just
+  edited. To change a protected field, use the pointer-to-member trick in
+  `SimulationTest.cpp` (`struct Access`).
+
 ## Fixed-point maths
 
 The simulation uses `fixed_t` (`src/Fixed.h`, Q16.16 in an `int32_t`) for every
@@ -177,12 +220,16 @@ rockets fire at nothing" bug (`AIGameView` was never cleared between games).
 
 **Reset on every round.** `EntityManager`'s constructor is the one point every
 new round passes through, so it resets the process-lifetime state that must not
-leak from the previous round:
+leak from the previous round. `Simulation::start()` builds an `EntityManager`
+(so everything below is reset for every real and harness round), clears the
+`Map`'s blocks, and then **checks that all five singletons are fresh** (queue,
+timer, ids, `AIGameView`, `Map` blocks), throwing `std::logic_error` if one is
+not, so a reset that someone removes fails loudly:
 
 | State | Reset |
 | --- | --- |
 | `EntityMessageQueue` | Cleared |
-| `GameOverTimer` | `reset()`: un-latched, so every round waits the full countdown |
+| `GameOverTimer` | `reset()`: un-latched, so every round waits the full countdown. It keeps no clock: `advance(tick, endConditionHolds)` is handed `Simulation::tick()` |
 | `EntityFactory` ids | `resetIds()`: every round numbers entities from 1 |
 
 `Map` carries a generation counter, bumped by every `init()`. A `BlockEntity`
@@ -193,14 +240,14 @@ rebuilt before the old `EntityManager` goes) skips its write into the new map.
 **Known gaps** - no reset path or coverage exists for these:
 
 - `GameEngine` cannot be driven headlessly (it needs the renderer, `InfoPanel`
-  and the menu). So `GameEngine::resetGame()`, the scoreboard game length
-  (`m_gameTicks`, ticks x `NORMAL_TICKS_SPEED`) and the call to
-  `GameOverTimer::advance()` are checked by hand, not by a test. The countdown
-  logic itself is `GameTimer::advance()`, which the tests do call.
-- That `resetGame()` reseeds the sim RNG as its very first statement is checked
-  by hand: the harness's `startRound()` copies the order, and the production
-  piece it calls (`GameSettings::beginRoundSeed()`) is tested, but the call in
-  `resetGame()` is not.
+  and the menu). Since 03a the world setup and the tick live in `Simulation`,
+  which the tests do drive, so what is left unchecked is the glue: that
+  `GameEngine::resetGame()` builds its `MatchConfig` from `GameSettings` and
+  hands it to `Simulation::start()`, that `runEngine()` applies input, calls
+  `step()` and loads the scoreboard when `roundOver()`, and the scoreboard game
+  length (`Simulation::tick()` x `NORMAL_TICKS_SPEED`). These were checked by
+  hand (brief 03a's Outcome: a scratch autoplay hook under `xvfb-run`, which
+  compared the engine's per-tick state hashes with the harness's).
 - There is no automated AddressSanitizer job. To run one by hand, outside the
   source tree:
 
@@ -221,11 +268,11 @@ rebuilt before the old `EntityManager` goes) skips its write into the new map.
 The suite's first real catch came from a test that composed two things each of
 which passed its own tests. `WinConditionTest` feeds `oneOrZeroPlayersRemain()`
 a literal `true`/`false`; `SpawningPoolTest` checks `canSpawnMore()` on its own.
-Both were green while the composition — what `GameEngine` actually calls —
-ended a co-op round on frame one:
+Both were green while the composition — what the game loop actually calls (now
+inside `Simulation::step()`) — ended a co-op round on frame one:
 
 ```cpp
-m_pEntityManager->oneOrZeroPlayersRemain(m_pSpawningPool->canSpawnMore())
+m_entityManager->oneOrZeroPlayersRemain(m_spawningPool->canSpawnMore())
 ```
 
 `RoundLifecycleTest.cpp` exists to wire real objects together in exactly the
@@ -234,13 +281,18 @@ level as well as the unit ones.
 
 ## Playing a whole round (and then another)
 
-`runRoundToCompletion(maxFrames)` drives a round to its natural end in exactly
-the order `GameEngine::runEngine()` uses — win check at the *top* of the tick,
-then `pool.update()`, then `runFrame()`. It never asserts; it returns a
-`RoundOutcome` with `ended`, `frames`, `playersAlive`, `aliveTeams`,
-`hostilesRemain`, `poolSpent` and the winner, so a round that fails to
-terminate is diagnosable instead of just timing out. `describe()` renders it
-for a failure message.
+`runRoundToCompletion(maxFrames)` drives a round with `Simulation::step()` — win
+check at the *top* of the tick, then `pool.update()`, then `runFrame()`, exactly
+`GameEngine::runEngine()`'s order — until `roundOver()`, which is **60 ticks
+after the end condition first holds** and after the whole of that tick (see the
+round-end semantics at the top of `src/Simulation.h`). It never asserts; it
+returns a `RoundOutcome` with `ended`, `frames`, `ticks`, `playersAlive`,
+`aliveTeams`, `hostilesRemain`, `poolSpent` and the winner, so a round that fails
+to terminate is diagnosable instead of just timing out. `frames` is the number
+of ticks before the end condition first held (so `frames > 0` still means "the
+round was not over at kickoff"); `ticks` is the total stepped, countdown
+included. The player and pool fields describe the state when the round ended.
+`describe()` renders it for a failure message.
 
 Small maps (`useTestMap()` = 7×7, or `setMapSize()` down to 4×4) exist for this:
 they force AI players into contact so a round ends in hundreds of frames rather
@@ -275,7 +327,7 @@ files, run, swap back.
 
 ## Coverage today
 
-186 tests across fourteen files:
+240 tests across fifteen files:
 
 - `WinConditionTest.cpp` — free-for-all, team and co-op round-end rules,
   including the co-op "board cleared and pool exhausted" win and the
@@ -305,7 +357,7 @@ files, run, swap back.
   round with dead players yields one row per player, dead ones included.
 
 - `RoundHygieneTest.cpp` - the round lifecycle: the game-over countdown is 60
-  ticks (2 s), ends exactly that many ticks after the end condition first holds,
+  ticks (2 s; `GameTimer` is handed the tick, it keeps no clock), ends exactly that many ticks after the end condition first holds,
   ignores wall-clock time and is the same length in every round; entity ids
   restart each round; shrinking or growing the map between rounds with blocks
   present (including a wider-but-shorter one) leaves the new walls intact; `GameEntity` scalars are initialised;
@@ -355,6 +407,18 @@ files, run, swap back.
   line-level exception for the rumble call in `PlayerCharacterEntity.cpp`
   (removed by brief 04b), are tested too. Shared scanning helpers are in
   `support/SourceScan.h`.
+
+- `SimulationTest.cpp` - `Simulation`, `MatchConfig` and the state hash (brief
+  03a; suites `SimulationTest`, `SingletonResetTest`, `StateHashTest`,
+  `StateHasherTest`): config capture, apply, validation and restore; one
+  `Simulation` per process; the world `start()` builds (start tiles, blocks per
+  the config, a real round to its natural end); the round-end semantics (the
+  60-tick countdown, the whole final tick, the winner fixed at the top of it);
+  the same config giving the same hash on every tick; round A, round B, round A
+  with each singleton left stale in turn; what the hash does and does not
+  notice (health, offsets as raw bits, tile-list order, pending messages,
+  per-type counters; not `m_currentAnimFrame`, the cosmetic RNG or local
+  devices); the FNV-1a vectors; and golden digests of four pinned rounds.
 
 Not covered: rendering (rasterisation), input and device assignment, and
 specific weapon behaviours and most AI behaviours. Input would need real refactoring to test;
