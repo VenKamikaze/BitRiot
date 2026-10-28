@@ -19,6 +19,9 @@ class BombEntity : public GameEntity
     virtual void update();
 
 
+  protected:
+    virtual void hashExtraState(StateHasher& h) const;
+
   private:
     int m_fuse;
 

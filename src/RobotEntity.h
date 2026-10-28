@@ -21,6 +21,9 @@ class RobotEntity : public SimpleMovingEntity
 
     virtual void update();
 
+  protected:
+    virtual void hashExtraState(StateHasher& h) const;
+
   private:
     int m_minActionCount, m_maxActionCount;
     int m_actionCounter;

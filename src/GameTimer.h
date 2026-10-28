@@ -8,6 +8,7 @@
 #ifndef GAMETIMER_H_
 #define GAMETIMER_H_
 
+#include <cstdint>
 #include <string>
 
 namespace std
@@ -16,10 +17,12 @@ namespace std
 /**
  * A countdown measured in simulation ticks, not wall-clock time.
  *
- * The sim loop calls tick() exactly once per simulation tick. setTimerTriggered()
- * starts the countdown on the current tick; getTimerCompleted() becomes true
- * exactly timeoutTicks ticks later, however long those ticks took in real time.
- * reset() un-latches the timer so it can be used again next round.
+ * The timer keeps no clock of its own: the caller passes the simulation's tick
+ * number (Simulation::tick()) on every call, so the whole simulation has exactly
+ * one notion of "now". setTimerTriggered(now) starts the countdown on tick `now`;
+ * getTimerCompleted(now) becomes true exactly timeoutTicks ticks later, however
+ * long those ticks took in real time. reset() un-latches the timer so it can be
+ * used again next round.
  *
  * The timeout is passed to the constructor by the subclass (never read through a
  * virtual call from the base constructor, where it would not dispatch to the subclass).
@@ -29,16 +32,10 @@ class GameTimer
   public:
     GameTimer(std::string name, int timeoutTicks);
 
-    // Advance the timer's clock by one simulation tick. Call once per sim tick.
-    inline void tick()
-    {
-      ++currentTick;
-    }
-
-    inline void setTimerTriggered()
+    inline void setTimerTriggered(uint64_t now)
     {
       this->timerTriggered = true;
-      this->triggeredAtTick = currentTick;
+      this->triggeredAtTick = now;
     }
 
     inline bool isTimerTriggered() const
@@ -46,35 +43,41 @@ class GameTimer
       return timerTriggered;
     }
 
-    inline bool getTimerCompleted() const
+    // The tick the countdown started on (0 while it is not triggered).
+    inline uint64_t getTriggeredAtTick() const
     {
-      return timerTriggered && (currentTick - triggeredAtTick) >= timeoutTicks;
+      return triggeredAtTick;
     }
 
-    // The whole per-tick protocol in one call, shared by the engine and the tests:
-    // advances the clock, starts the countdown the first tick the end condition
-    // holds, and returns true once the countdown has run out. Call exactly once
-    // per sim tick, with whether the round-end condition currently holds.
-    inline bool advance(bool endConditionHolds)
+    inline bool getTimerCompleted(uint64_t now) const
     {
-      tick();
+      return timerTriggered && now >= triggeredAtTick
+             && (now - triggeredAtTick) >= (uint64_t) timeoutTicks;
+    }
+
+    // The whole per-tick protocol in one call, shared by the simulation and the
+    // tests: starts the countdown the first tick the end condition holds, and
+    // returns true once the countdown has run out. Call exactly once per sim tick,
+    // with that tick's number (1 for the first tick of a round, counting up by one)
+    // and whether the round-end condition currently holds.
+    inline bool advance(uint64_t now, bool endConditionHolds)
+    {
       if (!endConditionHolds)
       {
         return false;
       }
       if (!timerTriggered)
       {
-        setTimerTriggered();
+        setTimerTriggered(now);
         return false;
       }
-      return getTimerCompleted();
+      return getTimerCompleted(now);
     }
 
     // Back to the untriggered state, for the start of each round.
     inline void reset()
     {
       timerTriggered = false;
-      currentTick = 0;
       triggeredAtTick = 0;
     }
 
@@ -91,8 +94,7 @@ class GameTimer
   private:
     std::string name;
     int timeoutTicks;
-    long currentTick = 0;
-    long triggeredAtTick = 0;
+    uint64_t triggeredAtTick = 0;
     bool timerTriggered = false;
 };
 

@@ -69,6 +69,8 @@ class PlayerCharacterEntity : public GameEntity
     bool m_controlledByAI;
 
   protected:
+    virtual void hashExtraState(StateHasher& h) const;
+
     int m_animCounter;
     int m_animDelay;
     int m_velocityModifier;

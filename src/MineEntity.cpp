@@ -74,3 +74,8 @@ void MineEntity::update()
     }
   }
 }
+
+void MineEntity::hashExtraState(StateHasher& h) const
+{
+  h.i32(m_fuse, "mine.fuse"); // m_animDelay only paces the animation
+}

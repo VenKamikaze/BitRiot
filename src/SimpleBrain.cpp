@@ -317,3 +317,9 @@ DIRECTION SimpleBrain::getDirectionFromHeading(Heading h, int moveState)
   return UP; // shouldn't get called
 
 }
+
+void SimpleBrain::hashState(StateHasher& h) const
+{
+  h.i32(m_lastMovingState, "brain.lastMovingState");
+  h.i32(m_minMoveTimer, "brain.minMoveTimer");
+}

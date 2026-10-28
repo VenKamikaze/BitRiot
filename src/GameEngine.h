@@ -12,6 +12,7 @@
 #include "InputHandler.h"
 #include "PlayerCharacterEntity.h"
 #include "SpawningPool.h"
+#include "Simulation.h"
 #include "Map.h"
 #include <SDL2/SDL.h>
 
@@ -36,23 +37,25 @@ class GameEngine
   private:
     SDL_Surface* m_surface = nullptr;
     unique_ptr<MenuSDLRenderer> menuSystem = nullptr;
-    EntityManager* m_pEntityManager = nullptr;
+    // The deterministic world: setup (start) and the per-tick step. Everything the
+    // sim needs lives in there; this class keeps rendering, the InfoPanel, sound,
+    // the menu and input, and drives the Simulation.
+    Simulation m_sim;
     InfoPanel* m_pPanel = nullptr;
     shared_ptr<InputHandler> m_pInputHandler = nullptr;
-    SpawningPool* m_pSpawningPool = nullptr;
     //PlayerCharacterEntity* m_pPlayers[NUM_TEAMS];
     vector<shared_ptr<PlayerCharacterEntity>> m_pPlayers;
 
-    // Sim ticks run this round (GAME_RUNNING ticks); drives the scoreboard game length.
-    unsigned long m_gameTicks = 0;
+    // Scoreboard game length: the simulation's tick count x NORMAL_TICKS_SPEED.
     int gameLengthSeconds() const;
     void resetGame();
     // Pre-game: if the menu changed the map size, push GameSettings dims into the
     // Map statics and resize the window/back-buffer/texture + rebuild the static
     // map. No-op when dimensions are unchanged.
     void applyMapDimensionsIfChanged();
-    void initPlayerCharacters(unsigned int numPlayers, std::vector<bool>* malePlayers, std::vector<bool>* playerAIs);
-    void seedBlocksOnMap(int blockPercentage);
+    // The presentation side of setting up the players the Simulation spawned:
+    // which controller drives each, and their team-coloured sprites.
+    void initPlayerCharacters(unsigned int numPlayers, std::vector<bool>* malePlayers);
     void uninitialise();
 };
 

@@ -21,17 +21,18 @@ using bitriot_test::HeadlessGameTest;
 
 namespace
 {
-// Mirrors how GameEngine::runEngine() drives the countdown each GAME_RUNNING
-// tick, via the same GameTimer::advance() it calls.
+// Mirrors how Simulation::step() drives the countdown each tick, via the same
+// GameTimer::advance() it calls. The timer keeps no clock of its own: the caller
+// passes the tick number, so these tests count ticks in `clock`.
 //
 // Returns the number of ticks from the first tick the end condition holds (which
 // is tick 0) until the tick on which the round ends, or -1 if it did not end
 // within maxTicks.
-int ticksUntilRoundEnds(std::GameTimer* timer, int maxTicks)
+int ticksUntilRoundEnds(std::GameTimer* timer, uint64_t& clock, int maxTicks)
 {
   for (int tick = 0; tick < maxTicks; tick++)
   {
-    if (timer->advance(true))
+    if (timer->advance(++clock, true))
     {
       return tick;
     }
@@ -92,44 +93,46 @@ TEST_F(RoundHygieneTest, GameOverTimerEndsExactlyNTicksAfterTheConditionFirstHol
 {
   std::GameTimer* timer = std::GameOverTimer::getInstance();
   timer->reset();
+  uint64_t clock = 0;
   const int n = std::GameOverTimer::GAME_OVER_COUNTDOWN_TICKS;
 
   // The condition is false for a while first: that must not start the clock.
   for (int i = 0; i < 25; i++)
   {
-    ASSERT_FALSE(timer->advance(false));
+    ASSERT_FALSE(timer->advance(++clock, false));
   }
   EXPECT_FALSE(timer->isTimerTriggered());
 
   // First tick it holds starts the countdown; it ends n ticks later, not before.
-  EXPECT_EQ(ticksUntilRoundEnds(timer, n * 3), n);
+  EXPECT_EQ(ticksUntilRoundEnds(timer, clock, n * 3), n);
 }
 
 TEST_F(RoundHygieneTest, GameOverTimerIgnoresWallClockTime)
 {
   std::GameTimer* timer = std::GameOverTimer::getInstance();
   timer->reset();
+  uint64_t clock = 0;
   const int n = std::GameOverTimer::GAME_OVER_COUNTDOWN_TICKS;
 
-  ASSERT_FALSE(timer->advance(true)); // triggers
+  ASSERT_FALSE(timer->advance(++clock, true)); // triggers
 
   // Real time passing without sim ticks must not move the countdown: the sim
-  // clock only advances when the loop calls tick()/advance().
+  // clock only advances when the loop passes a new tick number to advance().
   SDL_Delay(50);
-  EXPECT_FALSE(timer->getTimerCompleted());
+  EXPECT_FALSE(timer->getTimerCompleted(clock));
 
   for (int i = 1; i < n; i++)
   {
-    ASSERT_FALSE(timer->advance(true)) << "ended early at tick " << i;
+    ASSERT_FALSE(timer->advance(++clock, true)) << "ended early at tick " << i;
   }
-  EXPECT_TRUE(timer->advance(true));
+  EXPECT_TRUE(timer->advance(++clock, true));
 }
 
 TEST_F(RoundHygieneTest, GameOverTimerWaitsTheFullCountdownInEveryRound)
 {
   // Today's bug: timerTriggered was never cleared, so from round 2 on the round
-  // ended on the first tick the condition held. Drive the real round setup
-  // (EntityManager construction is what resets the timer) three times over.
+  // ended on the first tick the condition held. Drive the real round setup and the
+  // real tick (Simulation::start() and step()) three times over.
   configurePlayers(2);
   std::GameTimer* timer = std::GameOverTimer::getInstance();
   const int n = std::GameOverTimer::GAME_OVER_COUNTDOWN_TICKS;
@@ -140,19 +143,25 @@ TEST_F(RoundHygieneTest, GameOverTimerWaitsTheFullCountdownInEveryRound)
     EXPECT_FALSE(timer->isTimerTriggered()) << "round " << round << " starts latched";
 
     // Mid-round, the condition holds for the first time.
-    runFrames(10);
+    for (int i = 0; i < 10; i++)
+    {
+      sim().step();
+    }
+    ASSERT_FALSE(sim().roundOver());
     killPlayer(1);
     ASSERT_TRUE(em().oneOrZeroPlayersRemain(pool().canSpawnMore()));
 
+    // `tick` counts steps from the first one that sees the condition; the round
+    // ends on the n-th after it.
     int ticks = -1;
     for (int tick = 0; tick < n * 3; tick++)
     {
-      if (timer->advance(em().oneOrZeroPlayersRemain(pool().canSpawnMore())))
+      sim().step();
+      if (sim().roundOver())
       {
         ticks = tick;
         break;
       }
-      em().runFrame();
     }
     EXPECT_EQ(ticks, n) << "round " << round;
   }

@@ -22,6 +22,8 @@ class SimpleMovingEntity : public GameEntity
     virtual void update();
 
   protected:
+    virtual void hashExtraState(StateHasher& h) const;
+
     SimpleBrain * m_pBrain;
 
     int m_velocityModifier;

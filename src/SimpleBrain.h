@@ -9,6 +9,7 @@
 
 #include "Map.h"
 #include "Fixed.h"
+#include "StateHash.h"
 
 class SimpleBrain
 {
@@ -25,6 +26,10 @@ class SimpleBrain
 
     void setDirectionToMove(); // changes the entity's currentAnimState
     // so move depending on this
+
+    // The brain's own timers (the rest of its state is the owning entity's
+    // tile, offset, velocity and anim state, hashed with the entity).
+    void hashState(StateHasher& h) const;
 
   protected:
     // data references

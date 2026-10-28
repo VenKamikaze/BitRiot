@@ -43,6 +43,7 @@
 #include "EntityManager.h"
 #include "MickBaseSound.h"
 #include "PlayerCharacterEntity.h"
+#include "Simulation.h"
 #include "SpawningPool.h"
 
 namespace bitriot_test
@@ -53,8 +54,11 @@ namespace bitriot_test
 // diagnosable from the outcome rather than just timing out.
 struct RoundOutcome
 {
-  bool ended = false;          // did the win condition fire within the budget?
-  int frames = 0;              // frames simulated
+  bool ended = false;          // did the round end (Simulation::roundOver()) within the budget?
+  int frames = 0;              // ticks stepped before the end condition first held
+                               // (what "frames" always meant: 0 means the round was
+                               // already over at kickoff)
+  int ticks = 0;               // ticks stepped in all, the game-over countdown included
   int playersAlive = 0;
   int aliveTeams = 0;
   bool hostilesRemain = false; // CPU-owned eggs/monsters still on the board
@@ -64,6 +68,13 @@ struct RoundOutcome
 
   std::string describe() const;
 };
+
+// What starting a round does with its seed, in one step: GameSettings::
+// pickRoundSeed() (the pinned seed, else a fresh one; the pin is spent) and then
+// a reseed of SimRandom::sim() with it. The game itself never does this in one
+// call: it puts the picked seed in the MatchConfig and Simulation::start()
+// reseeds. Test-only, for the seed plumbing tests.
+uint64_t beginRoundSeed(std::GameSettings* settings);
 
 // Silent MickBaseSound backend. Registering itself in the constructor mirrors
 // what MickSDLSound does, so GameSound::playSound() becomes a no-op instead of
@@ -163,35 +174,51 @@ class HeadlessGameTest : public ::testing::Test
     // SpawningPool without startRound() is still deterministic.
     void setRoundSeed(uint64_t seed);
 
-    // Builds a fresh EntityManager and spawns one PlayerCharacterEntity per
-    // configured slot at a distinct tile. Safe to call more than once in a
-    // test: the previous round is torn down first, which is exactly the
-    // "play again" path that historically leaked AIGameView state.
+    // Starts a round through Simulation::start(), the very code GameEngine
+    // uses: the config comes from GameSettings (configurePlayers, setTeams,
+    // setMapSize), plus the seed and the block percentage (setBlockPercentage;
+    // 0 unless a test says otherwise, so existing scenarios keep their open
+    // ground). Spawns one PlayerCharacterEntity per configured slot at its fixed
+    // start tile. Safe to call more than once in a test: the previous round is
+    // torn down first, which is exactly the "play again" path that historically
+    // leaked AIGameView state.
     void startRound();
+
+    // Chance (0-100) that each eligible tile of the NEXT startRound() gets a
+    // block. The harness default is 0; the game's default is 55.
+    void setBlockPercentage(int percent);
+
+    // The round's Simulation, created on first use and kept for the test.
+    Simulation& sim();
+
+    // Destroys the test's Simulation (and with it the round), freeing the
+    // one-per-process slot. For tests of that rule; the next sim() makes a new one.
+    void discardSimulation();
 
     EntityManager& em();
 
-    // The round's spawning pool, sized as GameEngine::resetGame() sizes it
+    // The round's spawning pool, sized as Simulation::start() sizes it
     // (numPlayers * 100). Created by startRound().
     SpawningPool& pool();
 
-    // Advances the simulation. Each call is one EntityManager::runFrame(),
-    // i.e. AI + message queue + collisions - the same work the real game loop
-    // does per tick.
+    // Advances the simulation by bare frames. Each call is one
+    // EntityManager::runFrame(), i.e. AI + message queue + collisions: the world
+    // moves, but the tick counter, the win check, the game-over countdown and the
+    // spawning pool do NOT run. That is what most scenario tests want (a bot, a
+    // bomb, a fuse, no monsters dripping in). Use sim().step() or
+    // runRoundToCompletion() for real ticks.
     void runFrames(int frames);
 
-    // Drives the round until the win condition fires or the frame budget runs
-    // out, in exactly the order GameEngine::runEngine() uses for GAME_RUNNING:
-    //
-    //     check oneOrZeroPlayersRemain(pool.canSpawnMore())   <- top of tick
-    //     pool.update()
-    //     entityManager.runFrame()
-    //
-    // The check being at the *top* matters: it is what makes an "already over
-    // at kickoff" bug observable on frame zero.
+    // Drives the round with Simulation::step() until it is over (win condition
+    // held and the game-over countdown ran out) or the tick budget runs out. That
+    // is exactly what GameEngine does per tick, so a harness round and a real
+    // round are the same round. maxFrames bounds the ticks stepped.
     //
     // Does not assert. Inspect the returned RoundOutcome so a round that fails
-    // to terminate is diagnosable rather than a bare timeout.
+    // to terminate is diagnosable rather than a bare timeout. The outcome's
+    // player/team/pool fields describe the state when the round ended, after the
+    // countdown; `frames` is the number of ticks before the end condition first
+    // held, which is what a "was it already over at kickoff?" check wants.
     RoundOutcome runRoundToCompletion(int maxFrames);
 
     // -- world queries and manipulation -------------------------------------
@@ -231,10 +258,9 @@ class HeadlessGameTest : public ::testing::Test
 
   private:
     void resetSingletons();
-    void beginRoundRng();
+    uint64_t nextRoundSeed();
 
-    std::unique_ptr<EntityManager> m_entityManager;
-    std::unique_ptr<SpawningPool> m_spawningPool;
+    std::unique_ptr<Simulation> m_sim;
     int m_mapWidth = DEFAULT_MAP_WIDTH;
     int m_mapHeight = DEFAULT_MAP_HEIGHT;
     uint64_t m_roundsStarted = 0;

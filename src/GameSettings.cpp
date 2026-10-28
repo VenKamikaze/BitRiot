@@ -90,15 +90,37 @@ int GameSettings::numConfiguredTeams()
   return (int) teams.size();
 }
 
-uint64_t GameSettings::beginRoundSeed()
+uint64_t GameSettings::pickRoundSeed()
 {
   if (!roundSeedPinned)
   {
     roundSeed = SimRandom::freshSeed();
   }
   roundSeedPinned = false; // a pin lasts for one round
-  SimRandom::sim().seed(roundSeed);
   return roundSeed;
+}
+
+GameSettings::Snapshot GameSettings::snapshot() const
+{
+  Snapshot saved;
+  saved.numPlayers = numPlayers;
+  saved.blockPercentage = blockPercentage;
+  saved.npcSpawnerEnabled = npcSpawnerEnabled;
+  saved.mapWidth = mapWidth;
+  saved.mapHeight = mapHeight;
+  saved.players = m_players;
+  return saved;
+}
+
+void GameSettings::restore(const Snapshot& saved)
+{
+  numPlayers = saved.numPlayers;
+  blockPercentage = saved.blockPercentage;
+  npcSpawnerEnabled = saved.npcSpawnerEnabled;
+  mapWidth = saved.mapWidth;
+  mapHeight = saved.mapHeight;
+  m_players = saved.players;
+  syncMirrors();
 }
 
 void GameSettings::setPlayerGender(int playerIndex, bool isMale)

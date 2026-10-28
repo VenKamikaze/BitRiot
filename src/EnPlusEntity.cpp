@@ -63,3 +63,8 @@ void EnPlusEntity::update()
     EntityMessageQueue::getInstance()->postDestroyMessage(m_ID);
   }
 }
+
+void EnPlusEntity::hashExtraState(StateHasher& h) const
+{
+  h.i32(m_decayCounter, "enplus.decayCounter");
+}

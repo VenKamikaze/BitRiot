@@ -1967,3 +1967,55 @@ void PlayerCharacterEntity::clearGoalsAndInstructions()
     m_insList.pop_front();
   }
 }
+
+void PlayerCharacterEntity::hashExtraState(StateHasher& h) const
+{
+  h.flag(alive, "player.alive");
+  h.flag(m_controlledByAI, "player.controlledByAI");
+  h.i32(m_IQ, "player.iq");
+  h.i32(m_numberBombsPlaced, "player.bombsPlaced");
+  h.i32(m_numberEggsPlaced, "player.eggsPlaced");
+  h.i32(m_checkTimer, "player.checkTimer");
+  h.i32(m_aiFrame, "player.aiFrame");
+
+  // The bot's plan. Entity ids inside it are written as walk positions (see
+  // StateHash.h), so the hash does not depend on the id counter.
+  h.count(m_goalList.size(), "player.goals.count");
+  for (list<AIGoal *>::const_iterator it = m_goalList.begin(); it != m_goalList.end(); ++it)
+  {
+    const AIGoal * g = *it;
+    h.i32(g->m_goalType, "goal.type");
+    h.i32(g->m_targetAmount, "goal.targetAmount");
+    h.i32(g->m_tileX, "goal.tileX");
+    h.i32(g->m_tileY, "goal.tileY");
+    h.i32(g->m_targetType, "goal.targetType");
+    h.ref(g->m_targetID, "goal.target");
+  }
+  h.count(m_insList.size(), "player.instructions.count");
+  for (list<AIInstruction *>::const_iterator it = m_insList.begin(); it != m_insList.end(); ++it)
+  {
+    const AIInstruction * ins = *it;
+    h.i32(ins->m_type, "instruction.type");
+    h.i32(ins->m_targetAmount, "instruction.targetAmount");
+    h.i32(ins->m_targetType, "instruction.targetType");
+    h.i32(ins->m_targetTileX, "instruction.targetTileX");
+    h.i32(ins->m_targetTileY, "instruction.targetTileY");
+  }
+  h.count(m_abandonedPickups.size(), "player.abandonedPickups.count");
+  for (map<int, int>::const_iterator it = m_abandonedPickups.begin(); it != m_abandonedPickups.end(); ++it)
+  {
+    h.ref(it->first, "abandoned.pickup");
+    h.i32(it->second, "abandoned.frame");
+  }
+  h.count(m_pickupAttempts.size(), "player.pickupAttempts.count");
+  for (map<int, PickupAttempt>::const_iterator it = m_pickupAttempts.begin(); it != m_pickupAttempts.end(); ++it)
+  {
+    h.ref(it->first, "attempt.pickup");
+    h.i32(it->second.bestBlocks, "attempt.bestBlocks");
+    h.i32(it->second.bestSteps, "attempt.bestSteps");
+    h.i32(it->second.failures, "attempt.failures");
+  }
+  // Not hashed: attachedController (which local device drives the player),
+  // m_animCounter / m_animDelay (animation pacing), m_velocityModifier (a data
+  // constant).
+}

@@ -118,3 +118,13 @@ void RobotEntity::performAction()
   }
   return;
 }
+
+void RobotEntity::hashExtraState(StateHasher& h) const
+{
+  SimpleMovingEntity::hashExtraState(h);
+  h.i32(m_actionCounter, "robot.actionCounter");
+  h.flag(m_layBlocks, "robot.layBlocks");
+  h.flag(m_layMines, "robot.layMines");
+  h.flag(m_fireRockets, "robot.fireRockets");
+  h.flag(m_layBombs, "robot.layBombs");
+}

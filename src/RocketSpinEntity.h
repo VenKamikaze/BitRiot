@@ -19,6 +19,9 @@ class RocketSpinEntity : public GameEntity
 
     virtual void update();
 
+  protected:
+    virtual void hashExtraState(StateHasher& h) const;
+
   private:
     int m_lifespan;
     void fireAt(const DIRECTION d, const int destX, const int destY);

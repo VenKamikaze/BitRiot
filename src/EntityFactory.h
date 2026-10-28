@@ -42,6 +42,9 @@ class EntityFactory
     // about behaviour - it just makes rounds comparable).
     void resetIds();
 
+    // The id the next entity will get. 1 straight after resetIds().
+    int nextId() const { return m_idCount; }
+
     shared_ptr<GameEntity> getEntity(EntityType t, int playerNumber, int atX, int atY,
                            unsigned int flags, fixed_t offsetX = 0, fixed_t offsetY = 0,
                            int targetX = 0, int targetY = 0);

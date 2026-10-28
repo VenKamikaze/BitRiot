@@ -36,6 +36,26 @@ GameEntity::GameEntity()
 
 }
 
+void GameEntity::hashState(StateHasher& h) const
+{
+  h.i32(m_type, "entity.type");
+  h.i32(m_playerNumber, "entity.owner");
+  h.i32(m_tileX, "entity.tileX");
+  h.i32(m_tileY, "entity.tileY");
+  h.i32(m_offsetX, "entity.offsetX");   // raw Q16.16 bits
+  h.i32(m_offsetY, "entity.offsetY");
+  h.i32(m_velocity, "entity.velocity");
+  h.i32(m_health, "entity.health");
+  h.i32(m_currentAnimState, "entity.animState"); // sim state: it drives movement (SimpleBrain, bots)
+  h.flag(m_walkThroughBlocks, "entity.walkThroughBlocks");
+  hashExtraState(h);
+}
+
+void GameEntity::hashExtraState(StateHasher&) const
+{
+  // Blocks, explosions, energy drops: nothing beyond the common fields.
+}
+
 void GameEntity::moveInDirection(DIRECTION d)
 {
   Map * staticMap = Map::getInstance();

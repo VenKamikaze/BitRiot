@@ -28,7 +28,7 @@ void EntityMessageQueue::clear()
     {
       delete em;
     }
-    m_msgQueue.pop();
+    m_msgQueue.pop_front();
   }
 }
 
@@ -36,7 +36,7 @@ void EntityMessageQueue::postDestroyMessage(int sender)
 {
   EntityMessage * msg = new EntityMessage(EntityMessage::DESTROY_ENTITY, sender);
 
-  m_msgQueue.push(msg);
+  m_msgQueue.push_back(msg);
 }
 
 void EntityMessageQueue::postCreateMessage(int typeParam, int teamParam, int atX, int atY,
@@ -47,7 +47,7 @@ void EntityMessageQueue::postCreateMessage(int typeParam, int teamParam, int atX
                                           teamParam, atX, atY, 1, 1, flags, offsetX, offsetY,
                                           targetX, targetY);
 
-  m_msgQueue.push(msg);
+  m_msgQueue.push_back(msg);
 }
 
 void EntityMessageQueue::postMoveMessage(int sender, int fromX, int fromY, int toX, int toY)
@@ -55,7 +55,7 @@ void EntityMessageQueue::postMoveMessage(int sender, int fromX, int fromY, int t
   EntityMessage * msg = new EntityMessage(EntityMessage::MOVE_ENTITY,
                                           sender, 0, 0, toX, toY, fromX, fromY);
 
-  m_msgQueue.push(msg);
+  m_msgQueue.push_back(msg);
 }
 
 EntityMessage * EntityMessageQueue::getMessageAtFront()
@@ -80,8 +80,17 @@ bool EntityMessageQueue::deleteMessageAtFront()
   else
   {
     EntityMessage * msg = m_msgQueue.front();
-    m_msgQueue.pop();
+    m_msgQueue.pop_front();
     delete msg;
     return true;
+  }
+}
+
+void EntityMessageQueue::hashState(StateHasher& h) const
+{
+  h.count(m_msgQueue.size(), "queue.count");
+  for (std::deque<EntityMessage *>::const_iterator it = m_msgQueue.begin(); it != m_msgQueue.end(); ++it)
+  {
+    (*it)->hashState(h);
   }
 }

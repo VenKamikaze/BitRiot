@@ -190,13 +190,14 @@ class GameSettings
       return false;
     }
 
-    // Seed for the NEXT round's simulation RNG (SimRandom::sim()). Local play
-    // leaves this alone: GameEngine::resetGame() draws a fresh seed for every
-    // round. Calling setRoundSeed() pins the next round to exactly this value
-    // (a netplay host's MatchConfig, a replay, a debug override); the pin is
-    // used up by that one round, so "Play again" gets a fresh seed again.
+    // Seed for the NEXT local round's simulation RNG (SimRandom::sim()). Local
+    // play leaves this alone: GameEngine::resetGame() asks pickRoundSeed() for a
+    // fresh seed for every round and puts it in the round's MatchConfig. Calling
+    // setRoundSeed() pins the next local round to exactly this value (a replay, a
+    // debug override); the pin is used up by that one round, so "Play again" gets
+    // a fresh seed again. A netplay peer does not use any of this: the host's
+    // MatchConfig carries the seed, and Simulation::start() seeds from it.
     // After a round starts, getRoundSeed() is the seed that round used.
-    // 03a moves this into MatchConfig.
     inline uint64_t getRoundSeed()
     {
       return roundSeed;
@@ -214,11 +215,30 @@ class GameSettings
     {
       roundSeedPinned = false;
     }
-    // Called once at the very start of every round (GameEngine::resetGame(),
-    // before anything that draws random numbers is built): picks the round's
-    // seed (the pinned one, else a fresh one), releases the pin, reseeds
-    // SimRandom::sim() with it and returns it. Out-of-line in the .cpp.
-    uint64_t beginRoundSeed();
+    // Picks the next local round's seed (the pinned one, else a fresh one),
+    // releases the pin, remembers it as getRoundSeed() and returns it. Does not
+    // touch SimRandom: Simulation::start() seeds the stream from the config.
+    // Out-of-line in the .cpp.
+    uint64_t pickRoundSeed();
+
+    // The player-facing choices a match overwrites, saved whole: the roster with
+    // every field of every Player (team, human/AI, gender, portrait, controller,
+    // keyboard set), the player count (the roster can be longer or shorter than a
+    // match's), block percentage, NPC spawner toggle and map size. Not the game
+    // state, and not the seed. Netplay snapshots before a networked match and
+    // restores after it, because Simulation::start() applies the host's
+    // MatchConfig into these (and a smaller player count truncates the roster).
+    struct Snapshot
+    {
+      int numPlayers = 0;
+      int blockPercentage = 0;
+      bool npcSpawnerEnabled = true;
+      int mapWidth = 0;
+      int mapHeight = 0;
+      std::vector<Player> players;
+    };
+    Snapshot snapshot() const;
+    void restore(const Snapshot& saved); // also re-derives the genders/playerAIs mirrors
 
     inline GAME_STATE getGameState()
     {
