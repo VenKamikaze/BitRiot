@@ -60,7 +60,7 @@ Don't reopen these inside a brief. If one turns out to be wrong, stop and raise 
 - **D5. No SDL_net.** Native netplay uses vnet's native UDP backend. vnet also has an in-process **loopback backend** with simulated delay and loss, for tests.
 - **D6. Fixed-point sim maths, then prove it.** *(The user's answer to Q2, Oct 2026. Brief 02b landed it.)*
   - The sim uses no floating point. Offsets, velocities, the A\* open-list keys and the rocket's target are integers: `fixed_t`, Q16.16, in `src/Fixed.h` (brief **02b**, done; it carries a play-test because play feel shifts very slightly).
-  - Floats remain only outside the sim (rendering and HUD, rumble, window scaling, RmlUi, audio). `FixedPointSourceGuardTest` fails if a `float`, `double`, floating literal or libm call appears in any `src/` file that is not on its allowlist, so they cannot creep back.
+  - Floats remain only outside the sim (rendering and HUD, rumble, window scaling, RmlUi, audio). `FixedPointSourceGuardTest` fails if a `float`, `double`, floating literal or libm call appears in any `src/` file that is not on its allowlist, so they cannot creep back. (It is a text scan: it cannot see an `auto` carrying a double or an implicit int-to-float conversion, so brief 03b adds an object-level check on the `bitriot_sim` objects.)
   - Brief **05b** still runs **before** netplay is built, as a confirmation gate for other sources of divergence (UB, libstdc++ vs libc++, evaluation order):
     - GCC vs Clang;
     - an aggressive-flags build;

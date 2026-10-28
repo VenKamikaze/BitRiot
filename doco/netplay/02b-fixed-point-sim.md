@@ -82,16 +82,17 @@ Movement speed and feel must match today's. Mark the brief `done (play-test pend
 
 ## Outcome
 
-**Status: done, play-test pending.** The sim has no floating point left, and a test keeps it that way. Everything automated passes. The conversion changes behaviour in three small ways, listed below; the user should confirm in play that they are not noticeable.
+**Status: done, play-test pending.** The sim has no floating point left, and a test keeps it that way. Everything automated passes, on GCC and on Clang. The conversion changes behaviour in two small ways (monster steering ties, and one-pixel / one-tick quantisation of slow movers), listed below; rocket timing is **identical** to the float code after a review round (see item 2). The user should confirm in play that the remaining changes are not noticeable.
 
 **What landed**
 
 1. **`src/Fixed.h`.** `fixed_t` is an `int32_t` in Q16.16 (`FIXED_ONE` = 65536); it is called `fixed_t`, not `fixed`, because `using namespace std;` is in force in several headers and `std::fixed` (an iostream manipulator) makes the bare name ambiguous. Helpers, each with its rounding rule in the header comment:
    - `fixedFromInt(n)`: exact.
-   - `fixedFromRatio(n, d)`: nearest; exact ties round **away from zero**; symmetric for negatives (so `-n/d` is `-(n/d)`); `d <= 0` gives 0 (the float code would have produced inf or NaN); saturates to the int32 range.
+   - `fixedFromRatio(n, d)`: nearest; exact ties round **away from zero**; symmetric for negatives (so `-n/d` is `-(n/d)`); `d <= 0` gives 0 (the float code gave a *negative* velocity for a negative modifier, and inf for zero; no data file has either); saturates to the int32 range. The arguments are `int32_t`, so the scaled numerator cannot overflow (an earlier `int64_t` version returned `INT32_MAX` for representable results once the numerator passed 2^48).
+   - `fixedFromRatioCeil(n, d)`: rounds **up** (toward +infinity: the smallest value not below the quotient); same `d <= 0` and saturation rules. Used for the rocket only (item 2).
    - `fixedAbs(v)`: `INT32_MIN`, the one value with no positive counterpart, saturates.
    - `fixedToPixels(v, ppu)`: truncates toward zero, which is what the old `(int)(offset * 16)` cast did. (`>>` would floor, which is different for negatives.)
-2. **Velocities** are `fixedFromRatio(health + k, modifier)`: player `k=10` with `PLAYER_VELOCITY_MODIFIER`; robot, drone, wall eater, egg thief `k=2` with their modifiers; rocket `10 / ROCKET_VELOCITY`. Table below.
+2. **Velocities** are `fixedFromRatio(health + k, modifier)`: player `k=10` with `PLAYER_VELOCITY_MODIFIER`; robot, drone, wall eater, egg thief `k=2` with their modifiers; rocket `10 / ROCKET_VELOCITY`, **rounded up** with `fixedFromRatioCeil` (26215, where nearest gives 26214; see Behaviour changes). Table below.
 3. **Movement** (`GameEntity::moveInDirection`): the same branches, with integer adds, subtracts and compares; `0.0f` became `0`, `1.0f` `FIXED_ONE`, `2.0f` `2 * FIXED_ONE`.
 4. **`nearTileCenter`** (player and `SimpleBrain`) and the **rocket arrival checks** use `fixedAbs`. **What `abs` resolved to before:** the rocket's `abs(m_offsetX)` called the **float** overload (`using namespace std;` plus `<cmath>`; checked with a `static_assert` on the old code, which accepted `float` and rejected `int`). So today's code did not truncate, nothing needed preserving, and the brief's worry did not apply.
 5. **Entity creation** carries fixed offsets (`EntityMessage`, `EntityMessageQueue::postCreateMessage`, `EntityFactory::getEntity`, `EffectEntity`, `SimpleMovingEntity`). The **rocket target tile** now travels as two ints (`targetX`, `targetY`, defaulting to 0 like the old default `0.0f`) through the same chain into `RocketFiredEntity`, and `RocketSpinEntity::fireAt` passes `destX, destY` there; nothing is smuggled through offsets any more.
@@ -100,7 +101,7 @@ Movement speed and feel must match today's. Mark the brief `done (play-test pend
    - **Result:** 2592 searches over 48 block layouts (routes followed hop by hop, with and without bombing through blocks) plus nine open-board cases choose identical routes before and after.
 7. **Rendering and the HUD** use `fixedToPixels`, so sprites are drawn on the same pixel as today. A test sweeps every offset from -1 to +1 against the old float expression and they agree on all of them.
 8. Removed `GameSettings::mapRatio` (an unused `float`).
-9. **Guard.** `FixedPointSourceGuardTest` scans every `src/` file for `float`, `double`, floating-point literals, `<cmath>`/`<math.h>` and libm calls, and fails on any not on an explicit allowlist (whole non-sim files and directories with a reason each, plus one excused line). A new file counts as simulation until listed. Brief 03b can point it at the `bitriot_sim` target's sources. Stale allowlist entries fail too.
+9. **Guard.** `FixedPointSourceGuardTest` scans every `src/` file for `float`, `double`, floating-point literals, `<cmath>`/`<math.h>` libm calls (hypot, exp2, log2, cbrt, trunc, fmin/fmax, asin..tanh and the rest), `atof`/`strto[fd]`/`sto[fd]`, `float_t`/`double_t`/`GLfloat`/`SDL_FPoint`, hex-float literals and character literals such as `'"'` (handled so they cannot hide what follows), and fails on any not on an explicit allowlist (whole non-sim files and directories with a reason each, plus one excused line). **What a text scan cannot see:** an `auto` initialised from something that returns a double, and an implicit int to float conversion at a call; see the 03b follow-up. A new file counts as simulation until listed. Brief 03b can point it at the `bitriot_sim` target's sources. Stale allowlist entries fail too.
 
 **Velocity table** (from the real classes; `ticks/tile` is 2 / velocity, `10 tiles` is the ticks the real movement code takes to cross ten tiles from rest). **No velocity's whole number of ticks per tile changes**; the nearest thing is flagged.
 
@@ -117,19 +118,21 @@ Movement speed and feel must match today's. Mark the brief `done (play-test pend
 | Wall eater | 1 | 3/160 | 0.018750001 | 1229 (0.018753) | 106.667 / 106.649 | 1014 / 1014 |
 | Egg thief | 20 | 22/140 | 0.157142863 | 10299 (0.157150) | 12.7273 / 12.7267 | 121 / 121 |
 | Egg thief | 1 | 3/140 | 0.021428572 | 1404 (0.021423) | 93.3333 / 93.3561 | 887 / 887 |
-| Rocket | 10 (fixed) | 10/25 | 0.400000006 | 26214 (0.399994) | 5.00000 / **5.00008** | 48 / 48 |
+| Rocket | 10 (fixed) | 10/25, rounded **up** | 0.400000006 | 26215 (0.400009) | 5.00000 / 4.99989 | 48 / 48 |
 
 - Monsters and robots do not gain health, so their maximum is their initial health; only the player has a different maximum (200). Health 1 is shown as the slowest case.
 - A velocity is off by at most half of 1/65536 (at most 0.03% in ticks per tile, at the lowest healths). Over 100 tiles the low-health rows differ by at most 3 ticks in 12,600.
-- **Flagged:** the rocket's 2 / 0.4 is exactly 5 ticks per tile; 2 / (26214/65536) is 5.00008. The tile spacing stays 5 ticks (a rocket crosses 100 tiles in 498 ticks both ways), but it is what makes the arrival tick shift below.
+- **The rocket is the one rounded up.** Rounded to nearest, 10/25 is 26214, a hair *below* 0.4, and that moved every rocket's explosion one tick later than with floats (the first version of this change; see item 2). 26215 puts it a hair above, which restores the float timing exactly. A rocket still crosses 100 tiles in 498 ticks both ways.
+- **Low-speed rows can shift a tile crossing by one tick:** the player at health 1 takes 692 ticks for ten tiles instead of 691 (and 100 tiles differ by up to 3 ticks in 12,600 for the slowest monsters). The sprite is at most 1 pixel off (about 2 px of the 0.03% error accumulating at most), but the tile the entity belongs to for collisions changes one tick earlier or later, which is a sim-level effect, not only a drawing one.
 - The velocity of players, monsters and robots is recomputed from health every tick, as before; the table gives the value at each health.
 
-**Behaviour changes** (all found by measuring the old float code, not predicted)
+**Behaviour changes** (all found by measuring the old float code, not predicted; re-measured after the rocket fix)
 
-1. **Rockets explode one tick (33 ms) later at their target.** Fired along a clear row, the old code exploded on ticks 1, 4, 9, 14, 19, ... (target 1, 2, 3, ...). It now explodes on 1, 5, 10, 15, 20, ... Same tile every time; no other rocket timing changes. Cause: in every tile after the first, the rocket's offset lands on exactly -0.4 one tick before the middle, and `|offset| <= velocity` was decided by rounding: float gave -0.39999995 against 0.4000000059 (inside, so it exploded 6 pixels before the middle of the tile), fixed gives -26216 against 26214 (just outside), so it waits for the middle. If this feels wrong in play, the fix is a one-line change of the rocket's velocity rounding or its comparison, not a redesign.
-2. **Self-steering robots, drones and egg thieves (not wall eaters, in the tests) make different random turns.** `SimpleBrain` turns when it is "within one step of the middle of a tile", and for a velocity like a robot's 4/19 the offset lands on exactly one step away every 19 ticks. Float noise decided those ties one way; fixed-point decides some of them the other way, so the entity turns one tick earlier or later and, being random, wanders a different path from then on. The pace is the same: tile changes over 1500 ticks were 161/130/160/125/127/90/120/77 before and 161/131/160/125/127/90/120/77 after. Players, whose movement is direct input, are not affected except as in item 3.
-3. **A sprite is drawn one pixel from where the float code drew it on about 0.5% of ticks** (37 of 7200 in the scripted walks; never more than one pixel; 8 of 12 walks identical). This is the 0.03% velocity quantisation reaching a pixel boundary. It is checked against a float reference model of the old `moveInDirection` kept in the test.
-4. Bots' A\* routes: unchanged (see item 6 above). Because items 1 and 2 change what happens in a full round, a seed no longer plays the identical round it did before, and the seed sweep below compares failure counts, not seeds.
+1. **Self-steering robots, drones and egg thieves make different random turns** (wall eaters did not, in the tests), and **so do AI bots in one place.** `SimpleBrain` turns when it is "within one step of the middle of a tile" (`|offset| <= velocity`), and for a velocity like a robot's 4/19 the offset lands on exactly one step away every 19 ticks. Float noise decided those ties one way; fixed-point decides some of them the other way, so the entity turns one tick earlier or later and, being random, wanders a different path from then on. The pace is the same: tile changes over 1500 ticks were 161/130/160/125/127/90/120/77 before and 161/131/160/125/127/90/120/77 after.
+   - The same test decides when a **bot** counts as having arrived on the middle of a tile of its route (`PlayerCharacterEntity::nearTileCenter`, used at the end of a GO_TO in `processNextInstruction`, around line 1000), so a bot can finish a step one tick earlier or later than before. Human players are not affected by this one (their movement is direct input). The A\* routes bots choose are unchanged (item 6 above), but a bot's timing is, so a full round with a given seed no longer plays out identically.
+2. **Rockets: no change.** The first version of this conversion rounded every velocity to nearest and made rockets explode one tick (33 ms) later at their target (ticks 1, 5, 10, 15, ... instead of 1, 4, 9, 14, ...; wall and block stops 70 instead of 69). Cause: in every tile after the first, the rocket's offset lands on exactly -0.4 one tick before the middle, and `|offset| <= velocity` was decided by rounding: float gave -0.39999995 against 0.4000000059 (inside), nearest-fixed gave -26216 against 26214 (just outside). The review's decision was to keep the old timing, so the rocket velocity is rounded **up** (`fixedFromRatioCeil`, 26215). Re-measured: the 52-flight rocket digest equals the float code's exactly (`0x0bdb3f6c29ac1b6f`: every explosion tick and tile, in all four directions and for wall stops), and the full per-flight trace is identical value for value. The same digest comes out on GCC and on Clang.
+3. **A sprite is drawn one pixel from where the float code drew it on about 0.5% of ticks** (37 of 7200 in the scripted walks; never more than one pixel; 8 of 12 walks identical). This is the 0.03% velocity quantisation reaching a pixel boundary, and for the slowest movers it can also move the tick at which the entity crosses into the next tile by one (player at health 1: 692 ticks for ten tiles, not 691), so the tile it is considered to be in for collisions can change for one tick. It is checked against a float reference model of the old `moveInDirection` kept in the test; that model reproduces all 12 recorded float runs digest for digest.
+4. A\* routes: unchanged.
 
 Not a change: the old code never truncated in the rocket check, rendering truncation is identical, an entity stopped by a wall still comes to rest with offset exactly 0, `moveInDirection`'s branch structure is untouched, and the data files are untouched.
 
@@ -142,6 +145,7 @@ Not a change: the old code never truncated in the rocket check, rendering trunca
 | `PlayerCharacterEntity.cpp:151` `rumbleController(attachedController, 0.5f, 200)` | haptic strength | the one float left in a sim file, excused by one allowlisted line in the guard. Brief 04b moves rumble out of `onCollision`, and the exception goes with it |
 | `InfoPanel.cpp` (portrait scale `double`, health-bar intensity and width, portrait x position) | HUD drawing | presentation |
 | `MickSDLRenderer.cpp:168` `double scale` | window letterboxing | presentation |
+| `MenuSDLRenderer.cpp:155` `ProcessMouseWheel(event.wheel.y, ...)` | an **implicit int to float conversion** at a call into RmlUi (its parameter is a float) | menu input; the text scan cannot see it, so it is not on the guard's allowlist or in `-Wfloat-conversion` output |
 | `src/RmlUI/glue/SystemInterfaceSDL2.*` (`double GetElapsedTime`), `RenderInterfaceSDL2.cpp` (`float*` vertices) | RmlUi's interface types | UI library API |
 | `src/RmlUI/events/Shell.h`, `src/RmlUI/shell/**` | | dead code, not compiled |
 
@@ -149,11 +153,11 @@ Not a change: the old code never truncated in the rocket check, rendering trunca
 
 **Float-sensitive things left?** Nothing in the sim depends on floating-point behaviour any more, so `-ffp-contract=off` and the `-ffast-math`/`-Ofast` rejection were not added and are not needed for determinism. The rendering and HUD floats are single operations on values that never feed back. Other divergence sources (UB, libstdc++ vs libc++, evaluation order) are still 05b's.
 
-**Tests** (suite 155 to 184; 29 new)
+**Tests** (suite 155 to 186; 31 new; the same 186 pass with GCC 13 and with Clang)
 
-- `FixedMathTest.cpp` (18): helper rounding, symmetry, ties, saturation, zero and negative denominators, abs; `fixedToPixels` against the old expression for every offset; the velocity table above through the real classes (initial, max and low health, ticks for ten tiles); negative-health velocity; 240 movement rows from an independent integer model (including starts that land exactly on +-1.0); wall stops; no drift out of range; `nearTileCenter` boundaries for players and `SimpleBrain`.
+- `FixedMathTest.cpp` (20): helper rounding (including `fixedFromRatioCeil` and large-argument results that must not saturate), symmetry, ties, saturation, zero and negative denominators, abs; `fixedToPixels` against the old expression for every offset; the velocity table above through the real classes (initial, max and low health, ticks for ten tiles); negative-health velocity; 240 movement rows from an independent integer model (including starts that land exactly on +-1.0); wall stops; no drift out of range; `nearTileCenter` boundaries for players and `SimpleBrain`.
 - `FixedPointSimTest.cpp` (8): characterisation tests written first against the float code (commit `246f469`, all passing there) then updated where the fixed result legitimately differs, as described above: scripted walks (digest plus a tick-by-tick float-model comparison, at most one pixel), self-steering walks, rocket explosion ticks, a rocket created by message exploding in its target tile, a rocket fired by a real `RocketSpinEntity` at an enemy that then leaves still exploding in the enemy's tile, A\* routes on 48 layouts, A\* first steps on an open board.
-- `FixedPointGuardTest.cpp` (3): the source scan, the scan's own positives and negatives, and that an excused line is excused only in its own file.
+- `FixedPointGuardTest.cpp` (3): the source scan, the scan's own positives and negatives (a positive case for each of the reviewer's bypasses), and that an excused line is excused only in its own file.
 - The first sweep of the new tests found 21 failing seeds, all the "rocket created by message" test (the two bots wandered into the rocket's path on some seeds). It now removes both bots; the sweep numbers below are from the fixed test.
 - `GameEntity::pixelX()/pixelY()` were added (the sprite's top-left, used by `render()` and the HUD) so the tests exercise the real pixel expression.
 
@@ -177,8 +181,10 @@ Not a change: the old code never truncated in the rocket check, rendering trunca
 | A\* open key = insertion sequence instead of next free number | 1: `PathSearchPicksTheSameRoutes...` (shows the brief's suggestion changes routes) |
 | A\* tie-break counts down instead of up | 2: route test and open-board first steps |
 | Rocket velocity from `health + 1` | 2: rocket velocity and rocket ticks |
+| Rocket velocity rounded to nearest again (26214) | 2: `RocketVelocityIsATenthOver...RoundedUp` and `RocketsExplodeOnTheSameTickAsTheOriginalMaths` (the float digest) |
 | Player velocity uses `health + 9` in `update()` | 5: player velocities, negative health, movement rows, two walk tests |
 | A `static float` added to `RobotEntity.cpp`; a `double` member in `EntityMessage.h`; `#include <cmath>` in `SimpleBrain.cpp`; a float literal in `DroneEntity.cpp` | 1 each: `NoFloatingPointInSimulationSources` |
+| The review's bypasses added to `DroneEntity.cpp`: `(int)hypot(3,4)`, `exp2`, `log2`, `cbrt`, `float_t`, `double_t`, `0x1p-1`, `atof`, `std::stod`, `SDL_FPoint`, and a float after a `'"'` character literal | all 11 caught (passed the guard before the fix round) |
 
 
 **Cannot fail by construction:** the A\* route tests pass on both representations by design (that is the claim); what proves they can fail is the insertion-order key above. The velocity-table float columns and the float reference model are inputs, not assertions of their own. The negative/zero denominator guard in `fixedFromRatio`: dropping the `< 0` half of the check gives the same result by accident (a huge unsigned divisor yields 0), so that is an equivalent mutation; the `== 0` half, which prevents a divide by zero, is covered by the zero-denominator test.
@@ -186,56 +192,60 @@ Not a change: the old code never truncated in the rocket check, rendering trunca
 **Sweep** (200 seeds, `BITRIOT_TEST_SEED=1..200`, from the build directory)
 
 - Before (`claude`, 155 tests): 1 failing seed, **6**: `AISeekEnergyTest.HealthyBotWithAnEggUnderItselfStillGetsOutToAPickupInTime`, the known bot livelock in `TODO`.
-- After (184 tests): 1 failing seed, **6**, the same test, with the same message (`bot never got out, stuck at (1,1)`) and the same round seeds as on `claude`, so it is the known livelock and not the conversion (the bot is boxed in at its start tile, where no movement maths is involved). Nothing else fails on any of the 200 seeds. The earlier sweep that showed 21 failing seeds was my own new rocket-by-message test (see Tests), fixed before this run.
-- An AddressSanitizer + UBSan build of the whole suite (the recipe in `tests/README.md` with `,undefined` added) is clean: 184 pass, no reports.
+- After (186 tests, after the review fix round): 1 failing seed, **6**, the same test, with the same message (`bot never got out, stuck at (1,1)`) and the same round seeds as on `claude`, so it is the known livelock and not the conversion (the bot is boxed in at its start tile, where no movement maths is involved). Nothing else fails on any of the 200 seeds. (An earlier sweep that showed 21 failing seeds was my own new rocket-by-message test, fixed before the numbers here.)
+- An AddressSanitizer + UBSan build of the whole suite (the recipe in `tests/README.md` with `,undefined` added) is clean: 186 pass, no reports.
+- The same 186 tests pass when built with Clang (including the rocket digest, so it is the same on both compilers).
 
 **Deviations from the brief**
 
 - The type is `fixed_t`, not `fixed` (name clash with `std::fixed`).
+- The rocket velocity is rounded **up**, not to nearest (review decision, to keep float timing); the brief's rounding rule applies to every other velocity.
 - The A\* tie-break is the next free number, not insertion order (see item 6); the brief's wording was imprecise.
 - `abs(m_offsetX)` was already the float overload, so there was nothing to preserve (brief's check item).
 - `GameSettings::mapRatio` was deleted rather than allowlisted.
 - The guard scans all of `src/` minus an explicit non-sim allowlist, rather than a hand-maintained list of sim files, so a new file is held to the rule by default.
 - `stripCommentsAndStrings` moved from `SimRandomTest.cpp` to `tests/support/SourceScan.h`, now shared with the new guard (it also keeps the line breaks inside block comments).
-- No `GameEngine` or `main.cpp` change.
+- No `GameEngine` change. `main.cpp`: only an unused `#include <math.h>` removed (the guard flagged it).
+- Fix round: the project is pinned to C++17 (`CMAKE_CXX_STANDARD`, extensions off) for every target; `-Wfloat-conversion` is on for the library.
 
 **Follow-ups**
 
 - **03a:** the state hash can cover `m_offsetX/Y` and `m_velocity` as plain `int32_t`s. `m_velocity` is a pure function of health for players and monsters (recomputed each tick), so it need not be hashed if health is.
 - **04b:** removing rumble from `onCollision` lets the allowlisted line in `FixedPointGuardTest.cpp` go; the test fails if the line is gone but the entry remains.
 - **03b:** point `FixedPointSourceGuardTest` at the `bitriot_sim` sources instead of `src/` minus the allowlist.
-- The brain-walk and rocket differences above are the only visible changes. If the play-test dislikes the rocket's extra tick, rounding the rocket velocity up (26215) would put it back to exploding early at the float code's tick, but that is a deliberate departure from the stated round-to-nearest rule, so it is the user's call.
+- **03b: an object-level float check.** The text scan cannot see an `auto` that carries a double, or an implicit int to float conversion at a call. When `bitriot_sim` exists, add a check on its compiled objects (e.g. `objdump -d` for `cvtsi2s[sd]`, `cvtts[sd]2si`, and `...ss`/`...sd` arithmetic, or a link-time check) so the guarantee does not rest on source text alone. (`-Wfloat-conversion` is on for the library and catches float to int narrowing, e.g. `setOffsetX(0.5f)`.)
 
-**Play-test** (needs a display; not run in the cloud container). Build the game from a fresh checkout of `claude` on Arch Linux, and optionally the version before this change next to it to compare:
+**Play-test** (needs a display; not run in the cloud container). Build the game on Arch Linux **from `claude` once this branch is merged**, and the version before this change next to it (commit f3c45f6) to compare. The commands are untested on Arch (the container is Ubuntu): RmlUi 4.3 is not packaged for Arch, so it is built from source as `scripts/cloud-setup.sh` does, with two flags Arch's newer tools need. RmlUi 4.3 declares `cmake_minimum_required(VERSION 3.1)`, which CMake 4.x refuses unless told a minimum policy version, and GCC 15 no longer pulls in `<cstdint>` transitively, so it is forced in (the same workaround BitRiot's own CMakeLists applies).
 
 ```bash
-# one-time: dependencies (RmlUi 4.3 is not packaged for Arch; build it as scripts/cloud-setup.sh does)
+# one-time: dependencies
 sudo pacman -S --needed base-devel cmake git sdl2 sdl2_mixer sdl2_ttf sdl2_image freetype2 mesa
 git clone --depth 1 --branch 4.3 https://github.com/mikke89/RmlUi.git /tmp/RmlUi
 cmake -S /tmp/RmlUi -B /tmp/RmlUi/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local \
-  -DBUILD_SHARED_LIBS=ON -DBUILD_SAMPLES=OFF -DBUILD_TESTING=OFF -DBUILD_LUA_BINDINGS=OFF
+  -DBUILD_SHARED_LIBS=ON -DBUILD_SAMPLES=OFF -DBUILD_TESTING=OFF -DBUILD_LUA_BINDINGS=OFF \
+  -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_CXX_FLAGS="-include cstdint"
 cmake --build /tmp/RmlUi/build -j"$(nproc)" && sudo cmake --install /tmp/RmlUi/build && sudo ldconfig
 
-# AFTER (this change): fresh checkout of claude
+# AFTER: claude, after this branch is merged
 git clone --branch claude https://github.com/VenKamikaze/BitRiot.git ~/bitriot-after
 cmake -S ~/bitriot-after -B ~/bitriot-after/build -DCMAKE_BUILD_TYPE=Release -DBITRIOT_BUILD_TESTS=OFF
 cmake --build ~/bitriot-after/build -j"$(nproc)" --target BitRiot
 (cd ~/bitriot-after/build && ./BitRiot)
 
 # BEFORE (for comparison): the commit before this change, f3c45f6
-git clone --branch claude https://github.com/VenKamikaze/BitRiot.git ~/bitriot-before
+git clone https://github.com/VenKamikaze/BitRiot.git ~/bitriot-before
 git -C ~/bitriot-before checkout f3c45f6
 cmake -S ~/bitriot-before -B ~/bitriot-before/build -DCMAKE_BUILD_TYPE=Release -DBITRIOT_BUILD_TESTS=OFF
 cmake --build ~/bitriot-before/build -j"$(nproc)" --target BitRiot
 (cd ~/bitriot-before/build && ./BitRiot)
 ```
 
-If this branch is not merged to `claude` yet, check out `netplay/02b-fixed-point` in the first clone (`git clone --branch netplay/02b-fixed-point ...`). `./BitRiot -b` plays on the big 25x19 map; `-f` asks for fullscreen. Play a few rounds with at least one human and several bots, with the spawner on (it makes robots, drones, wall eaters and egg thieves). Compare with the BEFORE build where useful, and look at:
+To play before the merge, use `--branch netplay/02b-fixed-point` in the AFTER clone (the branch is on origin). `./BitRiot -b` plays on the big 25x19 map; `-f` asks for fullscreen. Play a few rounds with at least one human and several bots, with the spawner on (it makes robots, drones, wall eaters and egg thieves). Compare with the BEFORE build where useful, and look at:
 
 1. **Players:** top speed along a corridor at the start of a round (about 4 tiles a second at 100 health), turning into a side corridor (the player should slide onto the corridor line smoothly, as before), stopping flush against walls and blocks with no jitter or creeping, and speed after eating energy (faster) and after being hurt (slower).
 2. **Robots, drones, wall eaters, egg thieves:** speed relative to a player; that they still turn at junctions and do not stop dead or dither in a corridor; wall eaters still pass through blocks; egg thieves still steal eggs.
-3. **Rockets** (a player laying a rocket spinner, or a robot that fires rockets): flight speed along a corridor, and that the rocket still explodes on the target tile (it should look like it explodes at the middle of the tile, a fraction of a second later than before at most; this is the intended one-tick change).
-4. **Bots:** they still path around blocks and bomb through them (same A\* routes as before).
+3. **Rockets** (a player laying a rocket spinner, or a robot that fires rockets): flight speed along a corridor, and that the rocket still explodes on the target tile (the timing is meant to be identical to before).
+4. **Bots:** they still path around blocks and bomb through them (same A\* routes as before; a step can finish a tick earlier or later).
 5. Anything that looks one pixel off at a tile boundary is the expected quantisation, not a bug.
 
 **Play-test result:** *(pending)*

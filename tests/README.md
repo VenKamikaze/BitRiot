@@ -275,7 +275,7 @@ files, run, swap back.
 
 ## Coverage today
 
-184 tests across fourteen files:
+186 tests across fourteen files:
 
 - `WinConditionTest.cpp` — free-for-all, team and co-op round-end rules,
   including the co-op "board cleared and pool exhausted" win and the
@@ -333,7 +333,7 @@ files, run, swap back.
   `rand`/`srand` or a std random engine appears in `src/`.
 
 - `FixedMathTest.cpp` - fixed-point maths (brief 02b): `src/Fixed.h` rounding
-  (positive, negative, exact ties, saturation, zero and negative denominators),
+  (positive, negative, exact ties, round-up for the rocket, saturation, zero and negative denominators),
   `fixedToPixels` equal to the old `(int)(offset * 16)` for every offset in range;
   every entity type's velocity at initial, max and low health against raw
   expected values (with the float value and ticks per tile alongside); 240
