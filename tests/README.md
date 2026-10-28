@@ -146,8 +146,8 @@ offset and velocity, so there is no floating point in sim code and
 - Floats are fine in test code (a float reference model is how the conversion was
   checked), but write expectations about the sim as raw integers: 65536 is 1.0,
   and a tile is 2.0 wide (offsets run from -1 to +1).
-- Read positions the way the screen does: `fixedToPixels(offset, TILE_WIDTH / 2)`
-  plus `tile * TILE_WIDTH`.
+- Read positions the way the screen does: `entity.pixelX()` / `pixelY()` (tile
+  origin plus `fixedToPixels(offset, TILE_WIDTH / 2)`, truncating toward zero).
 - `getOffsetX()` and friends return `fixed_t`. Do not compare them with float
   literals: `EXPECT_EQ(e->getOffsetX(), 0.5f)` would silently truncate.
 
@@ -265,7 +265,7 @@ files, run, swap back.
 
 ## Coverage today
 
-183 tests across fourteen files:
+184 tests across fourteen files:
 
 - `WinConditionTest.cpp` — free-for-all, team and co-op round-end rules,
   including the co-op "board cleared and pool exhausted" win and the
@@ -326,7 +326,7 @@ files, run, swap back.
   (positive, negative, exact ties, saturation, zero and negative denominators),
   `fixedToPixels` equal to the old `(int)(offset * 16)` for every offset in range;
   every entity type's velocity at initial, max and low health against raw
-  expected values (with the float value and ticks per tile alongside); 176
+  expected values (with the float value and ticks per tile alongside); 240
   movement rows (4 directions, open and blocked, assorted start offsets) from an
   independent integer model of the original algorithm; walls stopping entities
   exactly on the middle of a tile; `nearTileCenter` at the +-velocity boundary for
@@ -336,7 +336,7 @@ files, run, swap back.
   compared tick by tick, pixel by pixel with a float reference model of the old
   `moveInDirection` kept in the test, self-steering robots/drones/wall eaters/egg
   thieves, the tick and tile each rocket explodes on, a rocket created by message
-  exploding in its target tile, and the A* routes on 48 block layouts (2592
+  and a rocket fired by a real spinner exploding in its target tile, and the A* routes on 48 block layouts (2592
   searches). Where fixed-point differs from float the test says why next to the
   expected value. `BITRIOT_FIXED_DUMP=1` prints the digests for regenerating them.
 - `FixedPointGuardTest.cpp` - no `float`, `double`, floating literal, `<cmath>` or
