@@ -112,7 +112,7 @@ rockets fire at nothing" bug (`AIGameView` was never cleared between games).
 | `AIGameView` | `setMapSize()` clears it |
 | `Map` | `init()` rebuilds walls and clears blocks |
 | `GameSettings` | Every field restored explicitly — note `setNumberOfPlayers()` deliberately *preserves* existing slots, so it is not a reset |
-| `EntityMessageQueue` | Drained |
+| `EntityMessageQueue` | Cleared by `SetUp()`, and by `EntityManager`'s constructor on every `startRound()` |
 
 **Known gaps** — no reset path exists for these. They do not currently affect
 any test, but they are real:
@@ -186,7 +186,7 @@ files, run, swap back.
 
 ## Coverage today
 
-91 tests across eight files:
+93 tests across eight files:
 
 - `WinConditionTest.cpp` — free-for-all, team and co-op round-end rules,
   including the co-op "board cleared and pool exhausted" win and the
@@ -200,7 +200,8 @@ files, run, swap back.
   spent, spawner toggled off) and that power-ups are exempt from the toggle.
 - `EntitySimTest.cpp` — round setup, multi-frame simulation on 4- and 6-player
   maps, `AIGameView` add/move/destroy bookkeeping, and ghost-entity regression
-  guards across repeated rounds.
+  guards across repeated rounds, and undelivered `EntityMessageQueue` messages
+  not leaking into the next round.
 - `FullRoundTest.cpp` — whole rounds played to their natural end (PvP, team,
   2- and 4-player co-op), the scoreboard roster after a real round, plus
   consecutive rounds in one process.

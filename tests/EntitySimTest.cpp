@@ -219,6 +219,51 @@ TEST_F(EntitySimTest, AIGameViewHasNoGhostsAcrossThreeRounds)
   EXPECT_EQ(aiGameViewEntryCount(DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT), 2);
 }
 
+TEST_F(EntitySimTest, MessagesPostedInTheLastFrameDoNotLeakIntoTheNextRound)
+{
+  // Regression guard for the stray-entity-in-round-two bug. EntityManager::
+  // runFrame() drains the queue and *then* runs collisions, and collision
+  // handlers post follow-ups (damage effects, drops, destroys). Those sit in the
+  // process-lifetime EntityMessageQueue when the round ends - nobody runs
+  // another frame - and the next round's first processMessageQueue() used to
+  // spawn them into its brand-new map. This posts the messages by hand so it
+  // does not depend on a seed or on what a real round happens to leave behind.
+  configurePlayers(2);
+  startRound();
+  const int staleId = player(1)->getID();
+
+  EntityMessageQueue* emq = EntityMessageQueue::getInstance();
+  emq->postCreateMessage(DAMAGE_EFFECT, 1, 3, 1, 0);
+  emq->postCreateMessage(EGG1, 0, 5, 3, 0);
+  emq->postMoveMessage(staleId, 1, 1, 2, 1);
+  emq->postDestroyMessage(staleId);
+  ASSERT_FALSE(emq->empty()) << "precondition: the previous round left messages behind";
+
+  startRound(); // "play again": the old messages were never processed
+
+  EXPECT_EQ(countAllEntities(), 2) << "only the two fresh player characters belong here";
+  EXPECT_EQ(countEntities(EFFECT_GROUP), 0) << "last round's damage effect leaked";
+  EXPECT_EQ(countEntities(EGG_GROUP), 0) << "last round's egg leaked";
+  EXPECT_TRUE(AIGameView::getInstance()->getEntityInfoAtLocation(5, 3).empty());
+  EXPECT_EQ(em().numPlayersAlive(), 2);
+  EXPECT_EQ((int) em().getRoundPlayerRoster().size(), 2);
+}
+
+TEST_F(EntitySimTest, ANewEntityManagerStartsWithAnEmptyMessageQueue)
+{
+  // The seam itself: constructing the manager is what every new round (the real
+  // GameEngine::resetGame() and this harness' startRound()) goes through.
+  EntityMessageQueue* emq = EntityMessageQueue::getInstance();
+  emq->postCreateMessage(EXPLOSION, 0, 4, 4, 0);
+  emq->postDestroyMessage(12345);
+  ASSERT_FALSE(emq->empty());
+
+  EntityManager fresh;
+
+  EXPECT_TRUE(emq->empty());
+  EXPECT_TRUE(fresh.getDynamicMap()->entityList.empty());
+}
+
 TEST_F(EntitySimTest, AIGameViewIsResizedWhenTheMapGrows)
 {
   configurePlayers(2);

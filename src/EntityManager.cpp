@@ -9,6 +9,15 @@
 
 EntityManager::EntityManager()
 {
+  // The queue is a process-lifetime singleton, but its messages describe the
+  // previous world. runFrame() posts collision results (damage effects, drops,
+  // destroys) *after* it drains the queue, so whatever the last frame of a round
+  // posted is still sitting there when the round ends - and the next round's
+  // first processMessageQueue() would spawn it into the fresh map. Quitting
+  // mid-round leaves arbitrary messages behind too. Construction is the one
+  // point every new round passes through, before anything posts into it.
+  EntityMessageQueue::getInstance()->clear();
+
   // set dynamicMap vector sizes to map width and height
   m_pDynamicMap = new DynamicMap(GameSettings::getInstance()->getMapWidth(), GameSettings::getInstance()->getMapHeight());
 
