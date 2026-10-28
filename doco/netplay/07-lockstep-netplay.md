@@ -107,7 +107,7 @@ This brief is native-only and driven from the command line. The lobby UI is brie
 **Dependency.**
 
 - Pull in vnet as a submodule at `ext/vnet` or through `FetchContent` with `GIT_REPOSITORY`. Justify the choice.
-- Update `scripts/cloud-setup.sh` as needed. A private vnet repo needs credentials; see Q3.
+- Update `scripts/cloud-setup.sh` as needed. vnet is public, so no credentials are needed to fetch it.
 - Add a `BITRIOT_NETPLAY` CMake option: ON by default, and OFF on MinGW unless brief 06 verified that vnet builds there.
 
 **Command line until brief 08.**

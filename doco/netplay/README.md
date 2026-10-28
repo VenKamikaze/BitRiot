@@ -8,6 +8,8 @@ Bit Riot has local (couch) multiplayer only. This folder plans:
 
 Each brief (`NN-*.md`) is one unit of work, sized for a single implement → review → merge cycle, and written so that a fresh session with no other context can pick it up.
 
+**Starting a fresh session on this work?** Point it at [`PROMPT.md`](PROMPT.md).
+
 **Reading order:** this file, then the brief, then [`research/code-facts.md`](research/code-facts.md), which records what the code actually does with file:line refs. Then read the **Outcome** sections of every brief yours depends on: they record what actually landed.
 
 ## Order and dependencies
@@ -22,12 +24,12 @@ Each brief (`NN-*.md`) is one unit of work, sized for a single implement → rev
 | 04b | [Control events, rumble and UI plumbing](04b-control-events.md) | BitRiot | 04a | todo |
 | 05 | [Match record, replay and `bitriot_headless`](05-replay-and-determinism.md) | BitRiot | 03b, 04b | todo |
 | 05b | [Cross-platform determinism gate](05b-cross-platform-gate.md) | BitRiot | 05 | todo |
-| 06 | [vnet core: API, loopback and native UDP](06-vnet-core.md) | vnet | Q3, vnet repo exists | todo |
+| 06 | [vnet core: API, loopback and native UDP](https://github.com/VenKamikaze/vnet/blob/claude/doco/06-vnet-core.md) | vnet | — | tracked in vnet |
 | 07 | [Native lockstep netplay](07-lockstep-netplay.md) | BitRiot (+vnet) | 05b, 06, Q4 | todo |
 | 08 | [Lobby UI](08-lobby-ui.md) | BitRiot | 07 | todo |
 | 09 | [WASM port (local play)](09-wasm-port.md) | BitRiot | 03b | todo |
-| 10 | [vnet relay and WebSocket transport](10-vnet-relay-websocket.md) | vnet | 06 | todo |
-| 11 | [vnet WebTransport datagrams](11-vnet-webtransport.md) | vnet | 10 | todo |
+| 10 | [vnet relay and WebSocket transport](https://github.com/VenKamikaze/vnet/blob/claude/doco/10-vnet-relay-websocket.md) | vnet | 06 | tracked in vnet |
+| 11 | [vnet WebTransport datagrams](https://github.com/VenKamikaze/vnet/blob/claude/doco/11-vnet-webtransport.md) | vnet | 10 | tracked in vnet |
 | 12 | [Browser netplay](12-browser-netplay.md) | BitRiot (+vnet) | 07, 08, 09, 10 | todo |
 | 13 | [Disconnects and hot-join](13-disconnect-and-hot-join.md) | BitRiot | 05, 07, 08 (12 for browser) | todo |
 
@@ -49,10 +51,10 @@ Don't reopen these inside a brief. If one turns out to be wrong, stop and raise 
 
 - **D1. Deterministic lockstep, input-only.** No state snapshots. Every peer simulates everything, and AI players cost no bandwidth.
 - **D2. Star topology.** One peer is the **host**: it collects inputs, decides each tick's final inputs, and rebroadcasts them. The relay (10) is only a router and has no game logic.
-- **D3. vnet lives in its own repository**, `VenKamikaze/vnet`, holding the C library, its backends and the relay.
-  - **The user creates the repository.** The session's GitHub integration can't.
-  - A session working on 06, 10 or 11 needs the vnet repo attached, and 07 and 12 need both repos.
-  - Briefs 06, 10 and 11 stay here until 06 starts. When they move into the vnet repo's `doco/`, copy D3–D5, D7 and D9 into that repo's `doco/README.md`, because links back to this folder won't resolve there.
+- **D3. vnet lives in its own repository**, [`VenKamikaze/vnet`](https://github.com/VenKamikaze/vnet), holding the C library, its backends and the relay.
+  - **Licence:** MIT. **Visibility:** public, so fetching it needs no credentials.
+  - Briefs 06, 10 and 11 live in that repo's `doco/`, on its `claude` branch. Its `doco/README.md` repeats D3–D5, D7 and D9, and its status table is the one that counts for those briefs.
+  - A session working on 06, 10 or 11 needs the vnet repo attached. Briefs 07 and 12 need both repos.
 - **D4. The relay is written in Go**, using `quic-go/webtransport-go` plus a WebSocket library, built as one static binary. Python is fine for test tools. Not Java/Spring.
 - **D5. No SDL_net.** Native netplay uses vnet's native UDP backend. vnet also has an in-process **loopback backend** with simulated delay and loss, for tests.
 - **D6. Keep floats, guard them, and prove it.**
@@ -73,7 +75,7 @@ Don't reopen these inside a brief. If one turns out to be wrong, stop and raise 
 
 1. **(Before 01) GameOverTimer length.** The intended countdown is 2 s, but a bug makes it 5 s (code-facts §3). Until answered, keep the 5 s players are used to.
 2. **(Before 02) D6.** Is floats-plus-gate acceptable, rather than fixed-point up front?
-3. **(Before 06) vnet repo.** Visibility (private or public) and licence. A private repo also needs credentials wherever BitRiot fetches it: cloud setup and CI.
+3. ~~vnet repo~~ **Answered:** MIT licence, public repo.
 4. **(Before 07) Online player cap.** Keep the local maximum of 6?
 
 ## How to work a brief
