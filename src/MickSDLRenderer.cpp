@@ -91,9 +91,6 @@ void MickSDLRenderer::init(WindowMetadata windowMetadata)
 
   SDL_SetClipRect(m_surfaceBackBufferHandle, &clientArea);
 
-  // seed random number generator
-  srand(SDL_GetTicks());
-
   initialised = true;
 }
 

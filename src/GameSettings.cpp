@@ -6,6 +6,7 @@
  */
 
 #include "GameSettings.h"
+#include "SimRandom.h"
 #include <set>
 
 using namespace std;
@@ -87,6 +88,17 @@ int GameSettings::numConfiguredTeams()
     teams.insert(m_players.at(i).team);
   }
   return (int) teams.size();
+}
+
+uint64_t GameSettings::beginRoundSeed()
+{
+  if (!roundSeedPinned)
+  {
+    roundSeed = SimRandom::freshSeed();
+  }
+  roundSeedPinned = false; // a pin lasts for one round
+  SimRandom::sim().seed(roundSeed);
+  return roundSeed;
 }
 
 void GameSettings::setPlayerGender(int playerIndex, bool isMale)

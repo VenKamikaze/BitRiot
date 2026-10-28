@@ -1,6 +1,7 @@
 // implementation of player character entity class
 
 #include "PlayerCharacterEntity.h"
+#include "SimRandom.h"
 
 #include <algorithm>
 #include <functional>
@@ -52,20 +53,20 @@ PlayerCharacterEntity::PlayerCharacterEntity(int uniqueID, int playerNumber, int
   m_animCounter = m_animDelay;
 
   m_IQ = 0;
-  m_checkTimer = (rand()%2 > 0) ? 37 : 67;
+  m_checkTimer = (SimRandom::sim().nextInt(2) > 0) ? 37 : 67;
 
   if ((flags & AI_CONTROLLED_BOT_FLAG) > 0)
   {
     m_controlledByAI = true;
 
     // pause to give human players a little time at beginning of game
-    AIInstruction * ins = new AIInstruction(AIInstruction::WAIT, 23 + (rand()%42), getType(), 0, 0);
+    AIInstruction * ins = new AIInstruction(AIInstruction::WAIT, 23 + (SimRandom::sim().nextInt(42)), getType(), 0, 0);
     m_insList.push_front(ins);
 
     // set initial goals
     //AIGoal * goal1 = new AIGoal(AIGoal::GOAL_SECURE_AREA, targetAmount, tileX, tileY, targetType, targetID);
     //m_goalList.push_back(goal1);
-    AIGoal * goal2 = new AIGoal(AIGoal::GOAL_CREATE_ENTITIES, (rand() % 3) + 2, -1, -1, EGG2, -1);
+    AIGoal * goal2 = new AIGoal(AIGoal::GOAL_CREATE_ENTITIES, (SimRandom::sim().nextInt(3)) + 2, -1, -1, EGG2, -1);
     m_goalList.push_back(goal2);
 
     //AIGoal * goal3 = new AIGoal(AIGoal::GOAL_CREATE_ENTITIES, 8, -1, -1, EGG1, -1);
@@ -99,7 +100,7 @@ void PlayerCharacterEntity::update()
     m_checkTimer--;
     if (m_checkTimer <= 0)
     {
-      m_checkTimer = (rand()%2 > 0) ? 37 : 67;
+      m_checkTimer = (SimRandom::sim().nextInt(2) > 0) ? 37 : 67;
       checkEnvironment();
     }
 
@@ -286,33 +287,33 @@ void PlayerCharacterEntity::determineGoals()
     // create some entities
 
     // drone or robot
-    if (rand()%2 > 0)
+    if (SimRandom::sim().nextInt(2) > 0)
     {
       // tanks
       AIGoal * goal = new AIGoal(AIGoal::GOAL_CREATE_ENTITIES,
-                                 1 + rand()%3, getTileX(), getTileY(), EGG5, 0);
+                                 1 + SimRandom::sim().nextInt(3), getTileX(), getTileY(), EGG5, 0);
       m_goalList.push_back(goal);
     }
     else
     {
       // drones
       AIGoal * goal = new AIGoal(AIGoal::GOAL_CREATE_ENTITIES,
-                                 1 + rand()%4, getTileX(), getTileY(), EGG4, 0);
+                                 1 + SimRandom::sim().nextInt(4), getTileX(), getTileY(), EGG4, 0);
       m_goalList.push_back(goal);
 
     }
-    if (rand()%2 > 0)
+    if (SimRandom::sim().nextInt(2) > 0)
     {
       // wall eater or two
       AIGoal * goal = new AIGoal(AIGoal::GOAL_CREATE_ENTITIES,
-                                 (rand()%2) + 1, getTileX(), getTileY(), EGG3, 0);
+                                 (SimRandom::sim().nextInt(2)) + 1, getTileX(), getTileY(), EGG3, 0);
       m_goalList.push_back(goal);
     }
-    if (rand()%10 > 3)
+    if (SimRandom::sim().nextInt(10) > 3)
     {
       // egg thief?
       AIGoal * goal = new AIGoal(AIGoal::GOAL_CREATE_ENTITIES,
-                                 (rand()%2) + 1, getTileX(), getTileY(), EGG2, 0);
+                                 (SimRandom::sim().nextInt(2)) + 1, getTileX(), getTileY(), EGG2, 0);
       m_goalList.push_back(goal);
     }
 
@@ -647,7 +648,7 @@ void PlayerCharacterEntity::determineInstructionsFromGoal()
       {
         // create 8 energy drops at once
 
-        AIGoal * create = new AIGoal(AIGoal::GOAL_CREATE_ENTITIES, 2 + rand()%5,
+        AIGoal * create = new AIGoal(AIGoal::GOAL_CREATE_ENTITIES, 2 + SimRandom::sim().nextInt(5),
                                      getTileX(), getTileY(), EGG1, 0);
         m_goalList.push_back(create);
 
@@ -748,7 +749,7 @@ void PlayerCharacterEntity::determineInstructionsFromGoal()
           // add pause to simulate human player decision/action delay
           // could remove for more difficult AI bots
           AIInstruction * waitIns =
-            new AIInstruction(AIInstruction::WAIT, 5 + (rand()%11), getType(), -1, -1);
+            new AIInstruction(AIInstruction::WAIT, 5 + (SimRandom::sim().nextInt(11)), getType(), -1, -1);
           m_insList.push_back(waitIns);
 
 

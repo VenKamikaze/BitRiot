@@ -1,4 +1,5 @@
 #include "GameEngine.h"
+#include "SimRandom.h"
 #include "GameSettings.h"
 #include "MickBaseInput.h"
 #include "GameRunningSDLInput.h"
@@ -74,6 +75,12 @@ void GameEngine::applyMapDimensionsIfChanged()
 
 void GameEngine::resetGame()
 {
+  // Must stay the very first thing here: the SpawningPool and player
+  // constructors below draw from the sim RNG, and the same seed has to give the
+  // same round on every machine.
+  const uint64_t roundSeed = GameSettings::getInstance()->beginRoundSeed();
+  std::MickLogger::getInstance()->info(this, std::string("Round seed=").append(std::to_string(roundSeed)));
+
   int numHumanPlayers = GameSettings::getInstance()->getNumberOfHumanPlayers();
   int numPlayers =  GameSettings::getInstance()->getNumberOfPlayers();
   int blockPercentage =  GameSettings::getInstance()->getBlockSpawnPercentage();
@@ -266,7 +273,7 @@ void GameEngine::seedBlocksOnMap(int blockPercentage)
 
       if (!badSpot)
       {
-        int roll = rand()%100;
+        int roll = SimRandom::sim().nextInt(100);
         if (roll < blockPercentage)
         {
           emq->postCreateMessage(BLOCK, team, x, y, 0);

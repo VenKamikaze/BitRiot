@@ -1,5 +1,6 @@
 
 #include "ScoreBoardBinder.h"
+#include "SimRandom.h"
 #include "MickLogger.h"
 #include <cstddef>
 #include <algorithm>
@@ -111,7 +112,7 @@ namespace std
 
   const string ScoreBoardBinder::randomWinText()
   {
-    int val = rand() % 5;
+    int val = SimRandom::cosmetic().nextInt(5);
     switch(val)
     {
       case 0:

@@ -1,4 +1,5 @@
 #include "EffectEntity.h"
+#include "SimRandom.h"
 
 EffectEntity::EffectEntity(int uniqueID, EntityType effectType, int atX, int atY, float offX, float offY)
 {
@@ -20,7 +21,7 @@ EffectEntity::EffectEntity(int uniqueID, EntityType effectType, int atX, int atY
       break;
     case DAMAGE_EFFECT:
       m_health = DataReader::getInstance()->getIntFromFile("DAMAGE_EFFECT_HEALTH", "data/entity.txt");;
-      m_currentAnimFrame = rand()%5; // pick random frame
+      m_currentAnimFrame = SimRandom::cosmetic().nextInt(5); // cosmetic only: never read by sim logic
       break;
     default:
       break;

@@ -1,4 +1,5 @@
 #include "RobotEntity.h"
+#include "SimRandom.h"
 
 RobotEntity::RobotEntity(int uniqueID, int playerNumber, int atX, int atY, unsigned int flags)
   : SimpleMovingEntity(uniqueID, playerNumber, atX, atY)
@@ -31,7 +32,7 @@ RobotEntity::RobotEntity(int uniqueID, int playerNumber, int atX, int atY, unsig
 
   int range = m_maxActionCount - m_minActionCount;
 
-  m_actionCounter = m_minActionCount + (rand()%range);
+  m_actionCounter = m_minActionCount + (SimRandom::sim().nextInt(range));
 
   GameSound::playSound(GameSound::ROBOT_CREATE);
 
@@ -54,7 +55,7 @@ void RobotEntity::update()
   {
     performAction();
     int range = m_maxActionCount - m_minActionCount;
-    m_actionCounter = m_minActionCount + (rand()%range);
+    m_actionCounter = m_minActionCount + (SimRandom::sim().nextInt(range));
   }
 }
 
