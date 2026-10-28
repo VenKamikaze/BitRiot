@@ -8,6 +8,7 @@ set(TEST_SOURCES
   WinConditionTest.cpp
   RoundLifecycleTest.cpp
   FullRoundTest.cpp
+  RoundRosterTest.cpp
   GameSettingsTest.cpp
   SpawningPoolTest.cpp
   EntitySimTest.cpp
