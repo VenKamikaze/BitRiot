@@ -3,7 +3,7 @@
 - **Repo:** BitRiot
 - **Branch:** `netplay/03b-sim-lib-frame-loop`
 - **Depends on:** 03a
-- **Status:** todo
+- **Status:** done (play-test pending)
 
 ## Goal
 
@@ -77,4 +77,167 @@ Two structural changes that later briefs build on:
 
 ## Outcome
 
-*(fill in when done)*
+**Status: done, play-test pending.** The simulation is its own library, `bitriot_sim`, with **no SDL at all**, and the game runs on one `frame()` with a fixed-tick accumulator. Everything automated passes on GCC and on Clang, the per-tick state hashes of 03a's pinned rounds are **byte-identical** to before, and the rendered world and HUD are pixel-identical. The user should play it once (steps below), mostly for the frame loop's feel and the new controller-rumble path.
+
+**What landed**
+
+1. **The simulation runs with no bitmaps, surfaces or SDL.**
+   - **Animation frame counts** (`src/EntityAnim.{h,cpp}`): a table, one row per `EntityType`, read by `GameEntity::incAnimFrame()`. The `ANIM_STATE` enum (idle, up, down, left, right; hashed) moved there from `EntityRenderer`. The renderer still derives its own counts from bitmap widths; `RenderSideTest` checks the two agree for every type, team, and male/female player sheet, and `EntityAnimTest` pins the table to the shipped sheet widths. A bitmap whose width changes needs its table row changed too.
+   - **`Map`** is layout only: `init()` builds the border and pillars from `MAP_WIDTH` x `MAP_HEIGHT` and needs no surface; `resize(w, h)` sets the statics and rebuilds only if the size differs. The tile bitmaps and blits moved to `MapRenderer` (`src/MapRenderer.*`, core). **`Simulation::start()` now builds the Map at the config's size** (03a's follow-up), so nobody resizes it first and a config of any size just starts; the engine only resizes the *window* afterwards (`GameEngine::resizeWindowIfMapChanged()`, which also reloads the tile pictures against the new surface). The "Map must already be the config's size" refusal is gone.
+   - **Drawing moved out of the sim.** `GameEntity::render(SDL_Surface*)`, `getEntityRenderer()` and `EntityManager::renderEntities()` are gone; `WorldRenderer::renderWorld(EntityManager&, SDL_Surface*)` (core) draws the map, then static entities, then moving ones, reading the simulation through `pixelX()/pixelY()/animState()/animFrame()` and never writing. (It uses its own iterator, not the `DynamicMap` member iterator the old code shared.)
+   - **Every other SDL use in the sim** (found by compiling the sim with an include scan, then by the guards below): `Map.h`'s `<SDL2/SDL.h>` and `MickSDLAssets.h`; `GameEntity.h` including `EntityRendererFactory.h` (SDL via `EntityRenderer.h`/`SDLHelper.h`); `PlayerCharacterEntity.h` including `MickSDLUtil.h` for the rumble call; `EntityRenderer::IDLE...` used for the anim state. There was no `SDL_Rect` in an entity header, no `SDL_GetTicks` and no SDL logging in sim code.
+   - **Sound.** `MickBaseSound::getInstance()` returns the installed backend or a built-in silent one (never null), so the sim plays sounds without checking and without SDL_mixer; a backend that is destroyed now unregisters itself. `MickSDLSound` still registers itself; the harness's `NullSound` still records.
+   - **Rumble.** The one device call left in the sim (`onCollision` rumbling the attached controller) goes through `RumbleSink` (`src/RumbleSink.h`): `rumble(controllerId, strengthPermille, durationMs)`, integer strength, a discarding default. `main.cpp` installs `MickSDLRumbleSink` (`MickSDLUtil.h`), which converts to SDL's float. This also removed the last float literal from a sim file, so the guard's one excused line is gone. Brief 04b still replaces the call with a per-tick `hitThisTick` record; this is only the seam.
+2. **CMake targets.** `bitriot_sim` (the `SIM_SOURCES` list: entities, AI, `Map`, `Simulation`, `MatchConfig`, `GameSettings`, `DataReader`, RNG, state hash, `GameSound`, `MickBaseSound`, `RumbleSink`, `EntityAnim`, logging and a little utility code) with include dirs for the project only; `bitriot_core` (everything that draws, plays, reads a device or shows a menu, now including `FrameLoop`, `TickPacer`, `MapRenderer`, `WorldRenderer`) links it PUBLIC; `BitRiot` is `main.cpp` + core. C++17, extensions off, `-Wall -Wno-comment -Wfloat-conversion` for all of it. Tests: **`bitriot_sim_tests`** links `bitriot_sim` and GoogleTest only (no SDL, no RmlUi, no OpenGL) and **`bitriot_tests`** links the game; the simulation tests are one object library linked into both, so `bitriot_tests` still runs every test it ran before. CMake writes the `bitriot_sim` source list to `build/bitriot_sim_sources.txt` for the guards (`file(GENERATE)` from the target's `SOURCES`, so it cannot drift).
+3. **Frame loop** (design below): `FrameLoop`, `TickPacer`, `GameEngine`'s `pumpEvents` / `stepTick` / `renderFrame` / `simulating`, `InputHandler::pumpEvents` / `applyInput`, and `frame()` in `main.cpp`.
+4. **Guards that now point at the right thing** (02b's follow-ups). The no-float text guard reads the `bitriot_sim` target's sources plus every project header they include, with **no allowlist** (a file that needs a float belongs in core). New object-level check: `SimLibraryTest` runs `objdump -d` on `libbitriot_sim.a` and fails on any floating-point instruction (x86-64: scalar/packed SSE and AVX arithmetic, conversions, compares and x87; aarch64: the `f*` family and `scvtf`/`ucvtf`). A new source scan fails on any SDL, RmlUi or OpenGL `#include`, any of the project's own render/device/UI headers, or any SDL type or function in the sim. And a runtime check that `bitriot_sim_tests` has no SDL library loaded (Linux).
+5. **`Map::staticTileAt` bounds** (brief 01's follow-up): a read outside the built map is WALL, a write outside it is ignored, and the row stride is the *built* height rather than the `MAP_HEIGHT` static (so a static changed without a rebuild no longer misindexes).
+
+**What SDL use remains in `bitriot_sim`: none.** Not SDL core headers, not `SDL_Rect`, not types like `Uint32`. 05b and 09 therefore need **no Emscripten `sdl2` port and no `EMCC_LOCAL_PORTS`** for the simulation or the headless binary; only the game (09's local play) needs SDL. What the sim does still touch outside the process, for anyone building it somewhere new:
+- **Files, relative to the working directory:** `data/entity.txt`, `data/player.txt` and `data/audio.txt` (`DataReader`; a missing key silently returns 1). `GameSound` also checks that the `assets/audio/*.wav` names in `data/audio.txt` exist and prints to `cerr` if not (it does not throw, and nothing is read from them). It reads no bitmaps. A wasm or headless build needs `data/` (`--preload-file data`), and nothing from `assets/`.
+- **OS calls:** `MickUtil::CheckFileExists` uses POSIX `access()` (and `PathFileExists`/`shlwapi` on Windows, which `bitriot_sim` now links on MinGW); `std::cout`/`cerr` logging (`MickLogger`); `libstdc++` only otherwise.
+
+**Frame-loop design** (for 04a, 07, 09; the contract is the comment at the top of `src/FrameLoop.h`)
+
+- `FrameLoop(Hooks, tickMs = 33, maxTicksPerFrame = 5)`. Hooks (all `std::function`): `nowMs` (a free-running ms clock), `simulating()`, `step()`, `render()` (returns false to quit) are required; `canStep()` and `pumpEvents()` are optional. `frame()` returns a `FrameResult{keepRunning, ticksStepped}` and **never blocks or sleeps**.
+- A frame, in order: `pumpEvents()` -> advance the `TickPacer` by the time since the last frame (or restart it, if `simulating()` is false) -> `while (a whole tick is owed && budget left && simulating() && canStep()) step()` -> `render()` exactly once. Rendering never steps and stepping never renders.
+- **`TickPacer`** is pure arithmetic on a ms counter (`restart`, `advance`, `tickDue`, `consumeTick`, `msUntilTickDue`). Sub-tick time is kept. The backlog is capped at `maxBacklogTicks` ticks' worth, which is both the per-frame cap and the most a stall can owe: **a slow frame catches up, up to 5 ticks, instead of slowing the game; a longer stall (window drag, debugger, a netplay wait) is forgiven, not fast-forwarded.** The counter may wrap 2^32. Outside a round the pacer restarts every frame, so time in a menu is never owed afterwards.
+- **`canStep()` is the netplay veto.** False holds ticks back without blocking events or drawing; the owed time keeps building up to the cap and is paid back (at most the cap's worth) when it returns true. It is asked before *every* step, so 07 can allow exactly as many ticks as it holds inputs for. "Step up to two extra ticks to catch up" (07) is already what the accumulator does for any owed time within the cap; 07 only needs `canStep()` to say yes. `simulating()` is also re-checked after every step: a step that ends the round stops the frame's remaining steps.
+- **`sleepHintMs()`** is what the caller sleeps between frames: until the next tick is due, or 2 ms while a tick is owed but held (so a stall polls rather than spins). Native `main()` does `frame()`, present, then `SDL_Delay(sleepHintMs())`. The web build (09) calls `frame()` from `emscripten_set_main_loop` and drops the sleep; `frame()` is a plain `FrameResult frame()` in `main.cpp`, so 09 wraps it in a `void` callback.
+- **The clock** is `clockMs()` in `main.cpp`: SDL's performance counter scaled to ms. `SDL_GetTicks()` on Linux steps 1 ms back and forth at second boundaries (its seconds and nanoseconds are scaled separately), which showed up in the manual run as one frame in thirty arriving a millisecond early with no tick due (86 of 3,914 frames; 0 with the performance counter). An Emscripten build can pass `emscripten_get_now()`.
+- **`GameEngine`** (no more `runEngine()`): `pumpEvents()` (during a round: `InputHandler::pumpEvents()`, the SDL poll), `stepTick()` (`InputHandler::applyInput()`, `Simulation::step()`, notes the round end or ESC in `m_roundEnding`), `renderFrame()` (the menu, `GAME_INIT`'s `resetGame()`, or the world and HUD; on the round's last frame it loads the scoreboard first and then draws the final world, as before; the menu takes over next frame), `simulating()` (`GAME_RUNNING` and not ending). `frameHooks(clock)` wires them. ESC seen on a frame whose tick was held back by `canStep()` ends the round in `renderFrame()` without a step (so a stalled game can still be quit); when a tick does run, ESC lets that tick finish, as it always did.
+- **Input:** `processKeyboardInput()` was split into `pumpEvents()` (once per frame: reads devices, handles the join selector and hotplug) and `applyInput()` (once per *stepped* tick, throws on ESC). The held-key state persists, so a catch-up frame applies it on each of its ticks, and a sticky release is consumed by the first. Sampling is otherwise where it was; **04a** replaces `applyInput()` with a sampled bitmask handed to `step(inputs)`.
+- **Behaviour at 33 ms per tick is the same**, and **one change is intended**: a slow frame now catches up (up to 5 ticks) rather than slowing the game, and the tick rate no longer drifts slow by the sleep's overshoot (the old loop took 33 ms plus overshoot per tick; the pacer keeps the remainder).
+
+**Tests** (`bitriot_tests` 246 -> **296**, `bitriot_sim_tests` **257**; the same on GCC and Clang, Debug and Release)
+
+New (53; the suite also lost three, below):
+- `SimLibraryTest` (5 + `SimLibraryRoundTest` 1 + `SoundSeamTest` 1 + `RumbleSinkTest` 3 + `EntityAnimTest` 4, simulation executable too): the SDL/UI source scan and its own positives and negatives; the instruction scan's own cases (x86-64, aarch64, an unsupported architecture is refused) and the real `objdump` of `libbitriot_sim.a`; no SDL library loaded; a 13x11 round with blocks played to its end; sound with no backend, and a destroyed backend unregistering; rumble through the sink (sent for a human with a controller, not for a bot or a player with none, harmless with no sink installed); the anim table against the shipped sheet widths, a frame wrapping at its type's count for every type (a qualified call to the base `incAnimFrame`, the player override separately).
+- `MapTest` (6, both): layout, reads outside are WALL, writes outside change nothing, stride and bounds follow the built map, `resize()` rebuilds only on a size change, `clearBlocks()`.
+- `SimulationTest` (2 new, one changed): `StartBuildsTheMapAtTheConfigsSize` (a different size, back down, the same size twice) and `StartedOnAMapOfAnotherSizeTheRoundIsTheSameAsOnAPreparedOne` (same config, same 300 hashes whether the Map was pre-sized or `start()` resized it).
+- `FixedPointSourceGuardTest.TheGuardReadsTheSimulationAndNotTheRenderer` (simulation files in, renderer files out).
+- Core executable only: `TickPacerTest` (8) and `FrameLoopTest` (16) on a fake clock; `RenderSideTest` (5): table against every loaded bitmap, every frame drawn and the next not, drawing twice gives the same pixels and leaves the hash alone, and `TheWorldIsDrawnPixelForPixelAsItWasBeforeTheSplit` (3 pinned rounds x 5 ticks; **the digests were taken from the pre-03b code and the new path reproduces them**).
+
+**Changed tests, and why** (no assertion was loosened; two tests were removed, one moved)
+- **Harness** (`tests/support/HeadlessGame.*`, inherited by every `HeadlessGameTest`): no SDL, no surface, no bitmaps. `SetUp()` installs `NullSound` and builds the Map with `Map::init()`; `HeadlessEnvironment::surface()` is gone; `NullSound` gained `makeCurrent()`. Needed because the sim no longer has a surface to be given. `setMapSize()` is unchanged.
+- `RoundHygieneTest.GameOverTimerIgnoresWallClockTime`: `SDL_Delay(50)` became `std::this_thread::sleep_for(50ms)` (no SDL in a sim test). Same assertions.
+- `SimulationTest`: `startConfig()` and `playHashes()` no longer call `setMapSize()` first, so every test that starts a config now goes through `start()`'s own resize (stricter). `playHashes`'s `resizeMap` parameter went with it (its one `false` caller ran a same-size second start). `StartAppliesTheConfigIntoGameSettings`: only a comment changed. `ARefusedConfigLeavesTheRunningRoundAndTheSettingsAlone`: its refused config is now `makeConfig(5, 1, 21, 15, 30)` (invalid *and* a different size) and it also asserts the Map was not resized; the "wrong Map size" sub-case is gone because that refusal no longer exists.
+- **Removed:** `SimulationTest.StartRefusesAMapThatWasNotResizedFirst` (it pinned the contract this brief deliberately removed; `StartBuildsTheMapAtTheConfigsSize` replaces it) and `FixedPointSourceGuardTest.AnAllowlistedLineIsExcusedOnlyInItsOwnFile` (it tested the allowlist's per-line exception, which has no entries and no mechanism now).
+- **Moved:** `SimRoundTest.TheScoreboardWinTextDrawsOneCosmeticValueAndNoSimValue` is now `ScoreboardRandomTest.TheScoreboardWinTextDrawsOneCosmeticValueAndNoSimValue`, body unchanged, in the core executable: it calls `ScoreBoardBinder`, which is UI, and `SimRandomTest.cpp` is built into the simulation-only executable.
+- `FixedPointSourceGuardTest.NoFloatingPointInSimulationSources`: rewritten to read the `bitriot_sim` source list and header closure. It is **stricter on what it reads in sim code** (no allowlist at all) but **no longer default-deny for a file that is in neither library**: a new `.cpp` is held to the rule only once it is in `SIM_SOURCES`. The object-level check, the SDL scan and the link of `bitriot_sim_tests` cover a sim file mistakenly put in core only partly (a core file may use floats and SDL by design).
+- `RmlLayoutHarness.cpp`: `RmlEnvironment` now calls `SDL_Init(0)`/`SDL_Quit()` itself (the harness used to).
+- `test_main.cpp` is shared by both executables (`BITRIOT_TESTS_WITH_CORE` adds the RmlUi environment).
+
+**What was shown to fail without the change.** The new APIs do not exist before the change, so the new tests cannot be compiled against the old code; instead each piece was broken in turn on the committed code, the tests rebuilt and run, and the file restored (about 50 mutations).
+- **Frame loop** (all fail): backlog cap removed (3 tests), sub-tick time dropped on consume (8), a wrap-unsafe elapsed (2), restart keeping the backlog (1), `canStep` ignored (4), `simulating()` not re-checked after a step (1), the pacer not restarted outside a round (1), render called twice (6), events pumped after the steps (1), no held-tick poll in the sleep hint (1), a one-step budget (6).
+- **Anim table:** hard-coded wrap (`AnEntitysFrameWrapsAtItsTypesFrameCount`, and the pixel golden in the core executable), BOMB 4->3 and DRONE 16->8 and two swapped rows (the table tests in both executables, `RenderSideTest`'s three bitmap tests, and for DRONE and the swap the pixel golden). The pixel golden did not see BOMB (no bomb on screen at its sampled ticks); the table-against-bitmap test did.
+- **Map:** no bounds check on a write (`AWriteOutsideTheMapChangesNothingInsideIt`), none on a read (`AnythingOutsideTheMapReadsAsWall`, and a second test in the sim executable), `resize()` always rebuilding (2) or never rebuilding (4, including `PinnedRoundsKeepTheirHashes`), the stride taken from the static (1), `start()` not resizing (3, including the golden digests) or resizing before it validates (`ARefusedConfig...`).
+- **Seams:** no silent sound default, a destroyed backend left registered, rumble strength changed, rumbling a bot or a player with no controller, the rumble call removed, a null default sink (each fails its `SoundSeamTest`/`RumbleSinkTest`).
+- **Guards:** `<SDL2/SDL.h>` added to `Map.h` (`TheSimulationSourcesNameNoSdlRmlUiOrOpenGL`); an SDL type in a sim header (the build fails, since the sim has no SDL headers on its include path); a sim source calling `SDL_GetTicks` (**`bitriot_sim_tests` fails to link**, which is the "links no SDL" proof); a `float` function in a sim source (`NoFloatingPointInSimulationSources` **and** the instruction scan); **a float hidden from the text scan by token pasting (`BITRIOT_CAT(flo, at)`): only the object-level check fails, as it was meant to**; SDL linked into the sim-only executable and called (`TheSimulationOnlyExecutableHasNoSdlOrUiLibraryLoaded`); the scanners' own regexes broken (their unit tests); the include closure returning nothing (3).
+- **Render side:** entities drawn in the wrong order, drawing advancing the animation (the second test too: the picture changes between draws), the map not drawn, the player-slot colour instead of the team colour, a sprite one pixel off, the wall and empty tile pictures swapped (the pixel golden each time; the "draw twice" test only for the animation one).
+- `ScoreboardRandomTest`: the win text drawing from the sim stream fails it.
+- **Cannot fail by construction, or only by luck:**
+  - `TheInstructionScan...` and `TheSourceScan...` unit tests only check the scanners, which is their job; the *negative* half of `TheGuardReadsTheSimulationAndNotTheRenderer` (a core file leaking into the list) cannot fail without breaking the build, since core files need SDL headers the sim target does not have.
+  - `AnythingOutsideTheMapReadsAsWall`: without the check a read lands on whatever is in memory, which is usually 0 (WALL). It failed in both executables in practice, but the deterministic proof is the write test (a stray write aliases a border wall).
+  - Moving `Map::resize` ahead of `tearDown()` in `start()` fails nothing, and need not: brief 01's generation guard already makes the order harmless (an equivalent mutant).
+  - The `budget` bound in `FrameLoop::frame()` repeats what the pacer's cap already guarantees (belt and braces; removing it changes nothing).
+  - Nothing unit-tests `GameEngine`'s own hooks (the ESC-while-held path, `m_roundEnding`); they were checked by hand (below).
+
+**Golden digests and the sweep**
+- **03a's digests are unchanged.** `BITRIOT_HASH_DUMP=all` of the four pinned rounds (13,211 per-tick hashes) is byte-for-byte identical to the dump from `claude`, on GCC Debug, GCC Release, Clang Debug and Clang Release; `PinnedRoundsKeepTheirHashes` passes on all four, with the digests in `GOLDEN_ROUNDS` untouched. The real game reproduces them too (manual check).
+- **Sweep** (200 seeds, `BITRIOT_TEST_SEED=1..200`, from the build directory, each against a clean build of its own tree):
+  - before (`claude`, 246 tests): **0 failing seeds** (a clean build of `claude`)
+  - after, `bitriot_tests` (296): **0 failing seeds**
+  - after, `bitriot_sim_tests` (257): **0 failing seeds**
+  - The first after-sweep found seeds 41, 45 and 52 failing: my own `SimLibraryRoundTest` asserted more than 20 blocks on a 13x11 map at 55%, which those seeds do not give (19). It now asserts more than 5; the sweep above is from the fixed test. The known bot livelock (`AISeekEnergyTest.HealthyBotWithAnEggUnder...`, seed 4652 alone) is untouched and still in `TODO`: `BITRIOT_TEST_SEED=4652` fails it identically ("bot never got out, stuck at (1,1)") on `claude` and on this branch.
+- AddressSanitizer + UBSan build of both executables (the recipe in `tests/README.md` with `,undefined` added): clean, 296 and 257 pass, no reports.
+- GCC 13.3 and Clang 18.1, Debug and Release: 296 / 257 pass on all four (the object-level float scan passes on every build; the test binary was run from the source root).
+
+**Manual check of the real game** (`GameEngine` cannot run headlessly). A scratch copy of the tree (not committed) was built with an env-var hook in `GameEngine`/`main.cpp` (`BITRIOT_AUTOPLAY=<seeds>` starts all-AI 2-player 13x11 55%-block rounds from the menu state with the listed pinned seeds, logging every tick's state hash and the scoreboard length; `BITRIOT_ESC_AT`, and `BITRIOT_VETO` to make `canStep()` return false for a number of frames) and run under `xvfb-run` with `SDL_AUDIODRIVER=dummy`.
+- **Menu -> round -> scoreboard -> next round works.** Seeds `4242,4242,0`: rounds 1 and 2 each ended after exactly **1146 ticks**; **all 1,147 hashes of each (tick 0 to 1146) are identical to the harness's** for the same config (the `two bots, 13x11` golden round, which is also identical to `claude`'s), and to each other. The first round resized the window and the Map from 17x13 to 13x11 through the new path (`Simulation::start()` builds the Map, then the engine resizes the window). The scoreboard length passed to `loadScoreBoard` was 37 s (1146 x 33 / 1000). Round 3 (a fresh seed) ended after 1613 ticks (53 s). Exit status 0. A screenshot of the running world (map, blocks, players, HUD) and of the real RmlUi scoreboard looked right.
+- **The frame loop holds the tick rate.** 300 ticks took 9,900 ms in every 300-tick window (33.00 ms per tick, from `SDL_GetPerformanceCounter`); under Xvfb's software renderer a few frames ran 2 or 3 ticks to catch up. (With `SDL_GetTicks()` as the clock, 86 of 3,914 frames arrived a millisecond early with no tick due; with the performance counter, none: the reason for `clockMs()`.)
+- **ESC mid-round:** pushed after tick 200, seen on tick 201, the tick still ran, the scoreboard showed 6 s (201 x 33 / 1000), and the next round (the same seed) then ran its full 1146 ticks with the same hashes, so a quit round leaves nothing behind.
+- **A held tick:** with `canStep()` false for 40 frames (about 240 ms) at tick 300, the world kept drawing (40 frames with no step), then the loop ran **exactly 5 ticks** in one frame (the cap) and was back on pace; the round still ended at 1146 ticks with the same hashes and a 37 s scoreboard, so pacing never touches the simulation. ESC pushed while `canStep()` held the tick (veto never released): the round ended on that frame with the scoreboard at tick 300, no extra step.
+- Not exercised: clicking through the real menu (the hook starts rounds from the menu state), controller rumble and hotplug, the join selector, the Options map-size change by hand. Those are the play-test.
+
+**Deviations from the brief**
+- The simulation has **no SDL at all** (the brief's stretch goal), so there is no "SDL core headers only" fallback to record.
+- `FrameLoop` and `TickPacer` are in `bitriot_core`, not `bitriot_sim` (they are not simulation); they are SDL-free and unit-tested with a fake clock. The brief said "a `canStep()` hook (or similar)": it is a `std::function` in `FrameLoop::Hooks`.
+- `GameEngine::runEngine()` is gone rather than kept as a wrapper; `main.cpp` calls `frame()`, which is the shared entry point.
+- The frame loop uses SDL's performance counter, not `SDL_GetTicks()` (reason above).
+- The test executable was split in two (`bitriot_sim_tests`, `bitriot_tests`) rather than moving only some tests to `bitriot_sim`: the brief's "move sim-only tests where easy" turned out to be *all* of them, so both executables run them and the old binary name and sweep command keep working.
+- `Map::staticTileAt` bounds (brief 01's follow-up) and rumble through `RumbleSink` (the rumble line was the last SDL call in the sim) were done here though not listed in 03b's scope; each is a few lines. `InputHandler::processKeyboardInput()` was split into `pumpEvents()`/`applyInput()`, which the brief's "input sampling stays where it is" allows (the sampling is where it was; only the poll moved to once per frame).
+- `FixedPointSourceGuardTest` lost its allowlist (see changed tests) and two tests were removed or moved.
+- The README's D6 note, `tests/README.md` and code-facts were updated (§1 loop rewritten; §2, §4, §9, §10, §12 corrected). code-facts had no factual errors about the code that blocked this work; its statement that the harness "still needs EntityRendererFactory surfaces" is now history.
+
+**Follow-ups**
+- **04a (input sampling and `step(inputs)`):**
+  - `applyInput()` is the thing to replace: sample once per *stepped* tick from the held/released state `pumpEvents()` accumulates (that is already how a catch-up frame behaves). Keep `pumpEvents()` where it is, at the top of the frame.
+  - `GameEngine::stepTick()` is where `step(inputs)` goes, in place of `applyInput()` then `m_sim.step()`.
+  - The ESC path (`InputException(GOT_QUIT)` out of `applyInput()`) is local and should stay in the engine; `renderFrame()` also treats a seen ESC as a quit when no tick ran, so keep that in sync if the quit flag moves.
+  - Moving input into the sim changes the hash and the golden digests, as 03a said; the pixel golden digests are unaffected.
+- **04b (control events, rumble):**
+  - `onCollision` still calls `RumbleSink::getInstance()->rumble(attachedController, 500, 200)`. Replace it with the per-tick `hitThisTick[slot]` and rumble from the local layer after `stepTick()`; then `RumbleSink` and `MickSDLRumbleSink` can go (and `attachedController` out of the entity).
+  - The join selector and hotplug run inside `pumpEvents()` (once per frame, possibly with no tick), and mutate `m_controlledByAI`/`attachedController` directly; 04b's `ControlEvent`s must be applied at a tick, not at the pump.
+- **05 (replay, `bitriot_headless`):**
+  - The headless binary links `bitriot_sim` only, builds the `MatchConfig`, and loops `Simulation::step()`; it never needs `FrameLoop`. `bitriot_sim_tests` is its template (the harness's `NullSound` is optional: the default is silent).
+  - It needs a working directory with `data/` (see "What SDL use remains").
+  - `Simulation::start()` builds the Map itself, so no setup beyond the config.
+  - `bitriot_sim_sources.txt` lists the library's files if 05 wants to assert its own link line.
+- **05b (cross-platform gate):**
+  - `bitriot_sim` needs **no SDL and no Emscripten `sdl2` port**; build it with `-fexceptions` or `-fwasm-exceptions` (the sim throws `std::logic_error`/`invalid_argument`).
+  - `SimLibraryTest`'s object-level float check supports x86-64 and aarch64; on any other architecture it **fails, not skips**, with a message to add patterns. For wasm the check would have to read `wasm-objdump` output (f32/f64 opcodes); that gate is yours, or run the check on the x86-64 and aarch64 builds and trust the text guard for wasm. If you build only the library under qemu, `BITRIOT_SIM_LIBRARY`/`BITRIOT_COMPILER_TARGET_ARCH` come from CMake, so the test binary must be built for the same arch as the archive it reads (or the archive is read with a cross `objdump`; the test calls plain `objdump`).
+  - Run `BITRIOT_HASH_DUMP=all` on each target and compare with the dump from `claude` byte for byte; the four builds checked here (GCC and Clang, Debug and Release, x86-64) all match.
+- **07 (lockstep):** set `FrameLoop::Hooks::canStep` (via `GameEngine::frameHooks()`'s returned hooks, before constructing the `FrameLoop` in `main.cpp`) to "I hold the host's inputs for the next tick". It is asked before every step, so it may allow fewer ticks than are owed; owed time beyond 5 ticks is forgiven, so a long stall does not turn into a burst. Pump the network in `pumpEvents()` or in `canStep()` itself, not in `step()`. The scoreboard length is ticks x 33 ms, so it needs no change.
+- **09 (WASM):**
+  - `main.cpp`'s `frame()` is the function to hand to `emscripten_set_main_loop`, via a `void` wrapper that ignores `FrameResult` except `keepRunning`. Drop the `SDL_Delay(sleepHintMs())` in the loop.
+  - A clock from `emscripten_get_now()` replaces `clockMs()`.
+  - `MickSDLRumbleSink` and the SDL controller code are core, not sim, so the wasm build can leave them out.
+  - `bitriot_sim` builds as it is.
+  - `frame()` has no blocking call; `GameEngine::renderFrame()` calls `menuSystem->showMenu()`, which already returns each frame.
+- **Not done, found on the way:**
+  - A frame that arrives while no tick is due still draws the whole world and pushes the texture again. With the performance-counter clock that is rare locally (0 of 3,900 frames) and cheap, but a faster-than-tick render rate (vsync, 09's `requestAnimationFrame`) would re-blit the same state; skip the draw when nothing stepped if that shows up in a profile. It was left alone because "render once per frame" is the contract 07 and 09 build on.
+  - `EntityRendererFactory::initSurfaces()` does not check that the loaded bitmap widths agree with `EntityAnim`'s table (only the test does). A modder who changes a sheet's width gets a wrapped or hidden frame, not an error; a warning at load would be a one-liner.
+  - The scoreboard window on the Xvfb run is cropped at the right on a 13x11 map (the menu background is a fixed size); it looks the same before this change as far as the code goes, but it was not compared.
+
+**Play-test** (pending; needs a display, so it was not run in the cloud container). The frame loop, the Map/window resize path and the rumble path changed, so the user should play it. The commands are untested on Arch (the container is Ubuntu); they are 03a's with this branch. RmlUi 4.3 is not packaged for Arch, so it is built from source as `scripts/cloud-setup.sh` does, with the two flags Arch's newer tools need (CMake 4.x needs a policy minimum, GCC 15 no longer pulls in `<cstdint>`).
+
+```bash
+# one-time: dependencies
+sudo pacman -S --needed base-devel cmake git sdl2 sdl2_mixer sdl2_ttf sdl2_image freetype2 mesa
+git clone --depth 1 --branch 4.3 https://github.com/mikke89/RmlUi.git /tmp/RmlUi
+cmake -S /tmp/RmlUi -B /tmp/RmlUi/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local \
+  -DBUILD_SHARED_LIBS=ON -DBUILD_SAMPLES=OFF -DBUILD_TESTING=OFF -DBUILD_LUA_BINDINGS=OFF \
+  -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_CXX_FLAGS="-include cstdint"
+cmake --build /tmp/RmlUi/build -j"$(nproc)" && sudo cmake --install /tmp/RmlUi/build && sudo ldconfig
+
+# AFTER: this branch (it is on origin once pushed; use `claude` after the merge)
+git clone --branch netplay/03b-sim-lib-frame-loop https://github.com/VenKamikaze/BitRiot.git ~/bitriot-after
+cmake -S ~/bitriot-after -B ~/bitriot-after/build -DCMAKE_BUILD_TYPE=Release -DBITRIOT_BUILD_TESTS=OFF
+cmake --build ~/bitriot-after/build -j"$(nproc)" --target BitRiot
+(cd ~/bitriot-after/build && ./BitRiot)
+
+# BEFORE (for comparison): the commit before this branch, 2c2dc07 (03a merged)
+git clone https://github.com/VenKamikaze/BitRiot.git ~/bitriot-before
+git -C ~/bitriot-before checkout 2c2dc07
+cmake -S ~/bitriot-before -B ~/bitriot-before/build -DCMAKE_BUILD_TYPE=Release -DBITRIOT_BUILD_TESTS=OFF
+cmake --build ~/bitriot-before/build -j"$(nproc)" --target BitRiot
+(cd ~/bitriot-before/build && ./BitRiot)
+```
+
+`./BitRiot -b` plays on the big 25x19 map; `-f` asks for fullscreen. Play with at least one human and several bots, with the spawner on, and compare with the BEFORE build where useful. Nothing the player sees should change except the frame-loop point in item 2. Check 03a's seven, then the new ones:
+
+1. **Rounds start and end normally** (PvP and, if you use it, co-op).
+2. **The 2 s countdown.** After the last opponent dies the game keeps running for 2 s before the scoreboard.
+3. **The scoreboard.** Winner, rows, a plausible game length (about 30 ticks a second).
+4. **ESC mid-round** goes to the scoreboard; the menu works afterwards.
+5. **"Play again"**, twice in a row: a fresh round each time, nothing left over, the countdown the full 2 s.
+6. **A map-size change between rounds** (Options: change the map size and the player count; start; check the window, panel and walls; play again; change it back). This is the path that changed most: the Map is now built by the simulation and the window follows.
+7. **AI takeover via the join selector**, including during the countdown, on a controller and on the keyboard.
+8. **Speed.** The game should feel exactly as fast as before (about 4 tiles a second for a fresh player along a corridor). Count it against the BEFORE build if in doubt.
+9. **A stall.** During a round, drag the window by its title bar for a few seconds, or pause the process (`kill -STOP` then `-CONT`). BEFORE: the game just continues from where it was. AFTER: it should do the same, with at most a very brief extra rush (a handful of ticks) on release, never a long fast-forward.
+10. **Controller rumble** (if you have a pad): get hit by an explosion or a monster as the human player on the pad; it should rumble as before (it now goes through `RumbleSink`). Unplug the pad mid-round: the player reverts to a bot, as before.
+
+Record the result here when it comes back.
+
+**Play-test result:** *(pending)*

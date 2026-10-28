@@ -2,7 +2,7 @@
 //
 // WinConditionTest passes literal true/false for `moreHostilesPossible` and
 // SpawningPoolTest checks canSpawnMore() in isolation. Neither composes the
-// two, but GameEngine::runEngine() does:
+// two, but GameEngine (stepTick(), via Simulation::step()) does:
 //
 //     m_pEntityManager->oneOrZeroPlayersRemain(m_pSpawningPool->canSpawnMore())
 //

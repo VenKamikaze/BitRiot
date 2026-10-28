@@ -165,6 +165,11 @@ target_compile_options(bitriot_sim PRIVATE
   $<$<CONFIG:Release>:-O2>
 )
 
+if(MINGW)
+  # MickUtil::CheckFileExists uses PathFileExists on Windows.
+  target_link_libraries(bitriot_sim PUBLIC shlwapi)
+endif()
+
 # The tests read these at run time: which files make up the simulation (for the
 # floating-point and SDL source guards) and where its archive is (for the
 # object-level float check). Generated from the targets, so they cannot drift
