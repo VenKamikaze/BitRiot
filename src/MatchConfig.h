@@ -72,8 +72,8 @@ struct MatchConfig
   static MatchConfig fromSettings(std::GameSettings& settings);
 
   // Writes this config into GameSettings, the way Simulation::start() does.
-  // Does not touch the Map (that needs the primary SDL surface until brief 03b)
-  // and does not touch the seed pin.
+  // Does not touch the Map (Simulation::start() resizes it right after this) and
+  // does not touch the seed pin.
   void applyTo(std::GameSettings& settings) const;
 
   // "" when the config can be handed to Simulation::start(), otherwise what is

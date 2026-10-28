@@ -26,29 +26,29 @@ RocketFiredEntity::RocketFiredEntity(int uniqueID, int playerNumber, int atX, in
   m_velocity = fixedFromRatioCeil(m_health, DataReader::getInstance()->getIntFromFile("ROCKET_VELOCITY", "data/entity.txt"));
 
   m_dir = UP;
-  m_currentAnimState = EntityRenderer::IDLE;
+  m_currentAnimState = EntityAnim::IDLE;
   m_currentAnimFrame = 0;
 
   // set direction from flags
   if (flags & GameEntity::UP_FLAG)
   {
     m_dir = UP;
-    m_currentAnimState = EntityRenderer::MOVE_UP;
+    m_currentAnimState = EntityAnim::MOVE_UP;
   }
   else if (flags & GameEntity::DOWN_FLAG)
   {
     m_dir = DOWN;
-    m_currentAnimState = EntityRenderer::MOVE_DOWN;
+    m_currentAnimState = EntityAnim::MOVE_DOWN;
   }
   else if (flags & GameEntity::LEFT_FLAG)
   {
     m_dir = LEFT;
-    m_currentAnimState = EntityRenderer::MOVE_LEFT;
+    m_currentAnimState = EntityAnim::MOVE_LEFT;
   }
   else if (flags & GameEntity::RIGHT_FLAG)
   {
     m_dir = RIGHT;
-    m_currentAnimState = EntityRenderer::MOVE_RIGHT;
+    m_currentAnimState = EntityAnim::MOVE_RIGHT;
   }
   // set target tile
   m_toX = toX;

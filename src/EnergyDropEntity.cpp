@@ -17,7 +17,7 @@ EnergyDropEntity::EnergyDropEntity(int uniqueID, int playerNumber, int atX, int 
   m_offsetY = 0;
   m_health = 1;
   m_velocity = 0;
-  m_currentAnimState = EntityRenderer::IDLE;
+  m_currentAnimState = EntityAnim::IDLE;
   m_currentAnimFrame = 0;
 
   GameSound::playSound(GameSound::ENERGY_DROP);

@@ -1,5 +1,5 @@
 // EntityManager class
-// creates, destroys, updates and renders all
+// creates, destroys and updates all
 // entities in the game
 
 #ifndef _ENTITYMANAGER
@@ -23,7 +23,6 @@ class EntityManager
 
     // game loop functions
     void runFrame(); // performs all frame-specific processing, see private functions
-    void renderEntities(SDL_Surface*  destination); // renders frame to supplied surface
 
     void processMessageQueue(); // processes all messages in EntityMessageQueue (create, move and destroy entities)
     // The *live* player characters only: a dead player is erased from the entity

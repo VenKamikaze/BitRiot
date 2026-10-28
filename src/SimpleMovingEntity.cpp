@@ -20,7 +20,7 @@ SimpleMovingEntity::SimpleMovingEntity(int uniqueID, int playerNumber, int atX, 
   m_animCounter = m_initialAnimCount;
   m_decayCounter = m_initialDecayCount;
 
-  m_currentAnimState = EntityRenderer::IDLE;
+  m_currentAnimState = EntityAnim::IDLE;
   m_currentAnimFrame = 0;
 
   m_velocityModifier = DataReader::getInstance()->getIntFromFile("BASE_VELOCITY_MODIFIER", "data/entity.txt"); // can be changed

@@ -1,18 +1,15 @@
 // HeadlessGame.h
 //
 // Test harness for driving the real BitRiot simulation with no window, no
-// audio device and no menu system.
-//
-// The game's simulation code is entangled with SDL only through *surfaces*,
-// never through a window or a renderer: Map::init() and
-// EntityRendererFactory::initSurfaces() just load bitmaps and blit-convert them
-// against a "primary" surface. A plain SDL_CreateRGBSurface() satisfies that,
-// so tests get the genuine entity/collision/AI code with zero production-side
-// refactoring and zero stubbing.
+// audio device, no menu system - and, since brief 03b, no SDL at all: the
+// simulation (bitriot_sim) loads no bitmaps and includes no SDL header, so this
+// file and everything built on it compile and link against bitriot_sim alone
+// (the bitriot_sim_tests executable proves it by linking no SDL).
 //
 // Two things do need supplying:
-//   * a MickBaseSound backend, because entity constructors call
-//     GameSound::playSound() and MickBaseSound::getInstance() is otherwise null;
+//   * a recording sound backend (NullSound), so a test can assert that an action
+//     made a noise; without one the simulation's sound calls go to a built-in
+//     silent default;
 //   * a reset of the process-lifetime singletons between tests (see
 //     HeadlessGameTest::SetUp).
 //
@@ -30,8 +27,6 @@
 #define BITRIOT_TESTS_HEADLESSGAME_H_
 
 #include <gtest/gtest.h>
-
-#include <SDL2/SDL.h>
 
 #include <cstdint>
 #include <initializer_list>
@@ -76,9 +71,8 @@ struct RoundOutcome
 // reseeds. Test-only, for the seed plumbing tests.
 uint64_t beginRoundSeed(std::GameSettings* settings);
 
-// Silent MickBaseSound backend. Registering itself in the constructor mirrors
-// what MickSDLSound does, so GameSound::playSound() becomes a no-op instead of
-// dereferencing a null instance.
+// Silent MickBaseSound backend that remembers what it was asked to play.
+// Registering itself in the constructor mirrors what MickSDLSound does.
 class NullSound : public MickBaseSound
 {
   public:
@@ -91,23 +85,31 @@ class NullSound : public MickBaseSound
     const std::vector<std::string>& soundLog() const { return m_soundLog; }
     void clearSoundLog() { m_soundLog.clear(); }
 
+    // Makes this the registered backend again (a test that installs another one
+    // puts the harness's back with this).
+    void makeCurrent() { setBaseInstance(this); }
+
   private:
     std::vector<std::string> m_soundLog;
 };
 
-// One-time process setup: SDL, the backing surface, static map tiles, entity
-// renderer surfaces and the null sound backend. Registered from test_main.cpp.
+// True in the executable that links the whole game (bitriot_tests), false in the
+// one that links the simulation alone (bitriot_sim_tests). Defined in test_main.cpp.
+bool linkedWithCore();
+
+// One-time process setup: the recording sound backend and the static map.
+// Registered from test_main.cpp.
 //
-// Asset loading is relative ("data/renderer.txt", "assets/bitmaps/..."), so the
-// test binary must run with the repository root as its working directory. The
-// CMake add_test() call sets WORKING_DIRECTORY accordingly.
+// Data files are read relative ("data/entity.txt"), so the test binary must run
+// with the repository root as its working directory (or a directory that has a
+// data/ link, like the build directory). The CMake add_test() call sets
+// WORKING_DIRECTORY accordingly.
 class HeadlessEnvironment : public ::testing::Environment
 {
   public:
     void SetUp() override;
     void TearDown() override;
 
-    static SDL_Surface* surface();
     static NullSound* sound();
 
     // The process-wide base seed (BITRIOT_TEST_SEED, default 1). Every test

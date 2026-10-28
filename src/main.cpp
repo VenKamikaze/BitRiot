@@ -42,6 +42,9 @@
 #endif
 
 #include "MenuSDLRenderer.h"
+#include "EntityRendererFactory.h"
+#include "MapRenderer.h"
+#include "MickSDLUtil.h"
 
 // DEFINES ////////////////////////////////////////////////
 
@@ -60,6 +63,7 @@ bool consoleMain();
 
 // game object globals
 unique_ptr<GameEngine> engine = nullptr;
+MickSDLRumbleSink rumbleSink; // the simulation rumbles controllers through this
 
 // FUNCTIONS //////////////////////////////////////////////
 
@@ -100,9 +104,13 @@ int consoleInit()
     throw runtime_error(msg);
   }
 
+  RumbleSink::setInstance(&rumbleSink);
+
   MickSDLRenderer *renderer = MickSDLRenderer::getInstance();
-  Map * staticMap = Map::getInstance();
-  staticMap->init(renderer->getSurfaceBackBufferHandle());
+  // The simulation builds its own Map for every round (Simulation::start); this
+  // draws it.
+  Map::getInstance()->resize(Map::MAP_WIDTH, Map::MAP_HEIGHT);
+  MapRenderer::getInstance()->init(renderer->getSurfaceBackBufferHandle());
   EntityRendererFactory * erf = EntityRendererFactory::getInstance();
   erf->initSurfaces(renderer->getSurfaceBackBufferHandle());
   

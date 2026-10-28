@@ -56,39 +56,6 @@ void EntityManager::runFrame()
 
 }
 
-void EntityManager::renderEntities(SDL_Surface*  destination)
-{
-  // renders frame to supplied surface
-
-  // first render static map, then dynamic map
-  Map * staticMap = Map::getInstance();
-  staticMap->render(destination, 0, 0);
-
-
-  // just iterate through entity list
-  // first render static entities, then non-static ones
-  for (m_pDynamicMap->entityIterator = m_pDynamicMap->entityList.begin();
-       m_pDynamicMap->entityIterator != m_pDynamicMap->entityList.end();
-       m_pDynamicMap->entityIterator++)
-  {
-    if (m_pDynamicMap->entityIterator->second->getStaticFlag() == true)
-    {
-      m_pDynamicMap->entityIterator->second->render(destination);
-    }
-  }
-  for (m_pDynamicMap->entityIterator = m_pDynamicMap->entityList.begin();
-       m_pDynamicMap->entityIterator != m_pDynamicMap->entityList.end();
-       m_pDynamicMap->entityIterator++)
-  {
-    if (m_pDynamicMap->entityIterator->second->getStaticFlag() == false)
-    {
-      m_pDynamicMap->entityIterator->second->render(destination);
-    }
-  }
-
-}
-
-
 void EntityManager::runAI()
 {
   // runs AI and movement for every entity

@@ -66,7 +66,16 @@ endif()
 #file(GLOB SOURCES src/*.cpp)
 
 ## manual entries for now
-set(SOURCES ./src/AIGameView.cpp
+
+# bitriot_sim: the deterministic simulation and what it reads (settings, data files,
+# RNG, state hash). It links no SDL, SDL_image/ttf/mixer, RmlUi or OpenGL and
+# includes none of their headers - tests/SimLibraryTest.cpp checks both - so a
+# headless binary, a wasm-under-Node determinism gate and a hot-join fast-forward can
+# build it on its own. Its sources are also what FixedPointSourceGuardTest scans for
+# floating point and what the object-level check disassembles, so a file belongs
+# here if the sim needs it, and in bitriot_core if it draws, plays, reads a device
+# or shows a menu.
+set(SIM_SOURCES ./src/AIGameView.cpp
 ./src/BlockEntity.cpp
 ./src/BombEntity.cpp
 ./src/DataReader.cpp
@@ -77,11 +86,41 @@ set(SOURCES ./src/AIGameView.cpp
 ./src/EggThiefEntity.cpp
 ./src/EnPlusEntity.cpp
 ./src/EnergyDropEntity.cpp
+./src/EntityAnim.cpp
 ./src/EntityFactory.cpp
 ./src/EntityManager.cpp
 ./src/EntityMessage.cpp
 ./src/EntityMessageQueue.cpp
-./src/EntityRenderer.cpp
+./src/ExplosionEntity.cpp
+./src/GameEntity.cpp
+./src/GameOverTimer.cpp
+./src/GameSettings.cpp
+./src/GameSound.cpp
+./src/GameTimer.cpp
+./src/IQPowerupEntity.cpp
+./src/Map.cpp
+./src/MatchConfig.cpp
+./src/MickAssets.cpp
+./src/MickBaseSound.cpp
+./src/MickLogger.cpp
+./src/MickUtil.cpp
+./src/MineEntity.cpp
+./src/PlayerCharacterEntity.cpp
+./src/RobotEntity.cpp
+./src/RocketFiredEntity.cpp
+./src/RocketSpinEntity.cpp
+./src/RumbleSink.cpp
+./src/RuntimeException.cpp
+./src/SimRandom.cpp
+./src/SimpleBrain.cpp
+./src/SimpleMovingEntity.cpp
+./src/Simulation.cpp
+./src/SpawningPool.cpp
+./src/WallEaterEntity.cpp)
+
+# bitriot_core: everything that draws, plays sound, reads devices, runs the menus
+# and the game loop. It links bitriot_sim.
+set(SOURCES ./src/EntityRenderer.cpp
 ./src/EntityRendererFactory.cpp
 ./src/RmlUI/events/Event.cpp
 ./src/RmlUI/events/EventHandler.cpp
@@ -91,51 +130,51 @@ set(SOURCES ./src/AIGameView.cpp
 ./src/RmlUI/events/EventManager.cpp
 ./src/RmlUI/binders/ScoreBoardBinder.cpp
 ./src/RmlUI/binders/PlayersSelectBinder.cpp
-./src/ExplosionEntity.cpp
 ./src/GameEngine.cpp
-./src/GameEntity.cpp
-./src/GameSettings.cpp
-./src/GameSound.cpp
-./src/GameTimer.cpp
-./src/GameOverTimer.cpp
-./src/IQPowerupEntity.cpp
 ./src/InfoPanel.cpp
 ./src/InputHandler.cpp
-./src/Map.cpp
-./src/MatchConfig.cpp
+./src/MapRenderer.cpp
 ./src/MickSDLRenderer.cpp
 ./src/MenuSDLRenderer.cpp
-./src/MickAssets.cpp
 ./src/MickBaseInput.cpp
-./src/MickBaseSound.cpp
-./src/MickLogger.cpp
 ./src/RmlUI/MickRmlUIElementUtil.cpp
 ./src/MickSDLAssets.cpp
 ./src/MickSDLUtil.cpp
 ./src/GameRunningSDLInput.cpp
 ./src/MickSDLSound.cpp
-./src/MickUtil.cpp
-./src/MineEntity.cpp
-./src/PlayerCharacterEntity.cpp
 ./src/RmlUI/glue/RenderInterfaceSDL2.cpp
-./src/RobotEntity.cpp
-./src/RocketFiredEntity.cpp
-./src/RocketSpinEntity.cpp
-./src/RuntimeException.cpp
 ./src/SDLHelper.cpp
 ./src/RmlUI/glue/ShellFileInterface.cpp
-./src/SimRandom.cpp
-./src/Simulation.cpp
-./src/SimpleBrain.cpp
-./src/SimpleMovingEntity.cpp
-./src/SpawningPool.cpp
-./src/RmlUI/glue/SystemInterfaceSDL2.cpp
-./src/WallEaterEntity.cpp)
+./src/WorldRenderer.cpp
+./src/RmlUI/glue/SystemInterfaceSDL2.cpp)
 
+add_library(bitriot_sim STATIC ${SIM_SOURCES})
 
-# Everything except main.cpp lives in a static library so the test harness can
-# link the real game code (see tests/). BitRiot is then just main.cpp + this.
+# The sim sees only the project's own headers.
+target_include_directories(bitriot_sim PUBLIC
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/src
+)
+target_compile_options(bitriot_sim PRIVATE
+  -Wall
+  -Wno-comment
+  -Wfloat-conversion
+  $<$<CONFIG:Debug>:-ggdb -O0>
+  $<$<CONFIG:Release>:-O2>
+)
+
+# The tests read these at run time: which files make up the simulation (for the
+# floating-point and SDL source guards) and where its archive is (for the
+# object-level float check). Generated from the targets, so they cannot drift
+# from what is actually built.
+file(GENERATE OUTPUT ${CMAKE_BINARY_DIR}/bitriot_sim_sources.txt
+  CONTENT "$<JOIN:$<TARGET_PROPERTY:bitriot_sim,SOURCES>,\n>\n")
+
+# Everything except main.cpp and the simulation lives in a static library so the
+# test harness can link the real game code (see tests/). BitRiot is then just
+# main.cpp + this + bitriot_sim.
 add_library(bitriot_core STATIC ${SOURCES})
+target_link_libraries(bitriot_core PUBLIC bitriot_sim)
 
 # PUBLIC: the test target links bitriot_core and needs the same headers.
 target_include_directories(bitriot_core PUBLIC

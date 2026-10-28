@@ -5,6 +5,9 @@
 #include "GameRunningSDLInput.h"
 #include "MickSDLRenderer.h"
 #include "PlayerCharacterEntity.h"
+#include "EntityRendererFactory.h"
+#include "MapRenderer.h"
+#include "WorldRenderer.h"
 #include <cstddef>
 #include <string>
 
@@ -13,6 +16,9 @@ GameEngine::GameEngine(SDL_Surface* back, shared_ptr<InputHandler> inputHandler)
   m_pInputHandler = inputHandler;
 
   m_surface = back;
+  // The window was made from the Map's statics (main.cpp, including -b).
+  m_windowMapWidth = Map::MAP_WIDTH;
+  m_windowMapHeight = Map::MAP_HEIGHT;
 
   GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
 }
@@ -32,19 +38,20 @@ void GameEngine::uninitialise()
   m_pInputHandler = nullptr;
 }
 
-void GameEngine::applyMapDimensionsIfChanged()
+void GameEngine::resizeWindowIfMapChanged()
 {
-  int newWidth = GameSettings::getInstance()->getMapWidth();
-  int newHeight = GameSettings::getInstance()->getMapHeight();
+  // Simulation::start() has already rebuilt the Map at the round's size and set
+  // Map::MAP_WIDTH/HEIGHT; only the startup-once resources are left.
+  const int newWidth = Map::MAP_WIDTH;
+  const int newHeight = Map::MAP_HEIGHT;
 
-  if (Map::MAP_WIDTH == newWidth && Map::MAP_HEIGHT == newHeight)
+  if (m_windowMapWidth == newWidth && m_windowMapHeight == newHeight)
   {
     return; // nothing to do
   }
 
-  // GameSettings is canonical; the Map statics are derived from it.
-  Map::MAP_WIDTH = newWidth;
-  Map::MAP_HEIGHT = newHeight;
+  m_windowMapWidth = newWidth;
+  m_windowMapHeight = newHeight;
 
   // Resize the startup-once resources (window, back-buffer surface, texture) to the
   // new content size. InfoPanel::WIDTH is the fixed side-panel width.
@@ -57,8 +64,9 @@ void GameEngine::applyMapDimensionsIfChanged()
   // The old back buffer was freed in resize(); re-point our handle.
   m_surface = renderer->getSurfaceBackBufferHandle();
 
-  // Rebuild the static map (walls/pillars) at the new size against the new surface.
-  Map::getInstance()->init(m_surface);
+  // The tile pictures are converted to the primary surface's format; reload them
+  // against the new surface.
+  MapRenderer::getInstance()->init(m_surface);
 }
 
 void GameEngine::resetGame()
@@ -87,6 +95,9 @@ void GameEngine::resetGame()
   // (The game-over countdown is un-latched by the new EntityManager's constructor
   // inside; the tick count restarts at 0.)
   m_sim.start(config);
+
+  // The Map is now the round's size; make the window match (before the HUD is built).
+  resizeWindowIfMapChanged();
 
   // after setting initialisation parameters
   m_pPlayers.resize(numPlayers);
@@ -123,7 +134,6 @@ bool GameEngine::runEngine()
     case GameSettings::GAME_INIT:
     {
       menuSystem->clearScoreBoard(); // does nothing if scoreboard does not exist.
-      applyMapDimensionsIfChanged();
       resetGame();
       GameSettings::getInstance()->setGameState(GameSettings::GAME_RUNNING);
       break;
@@ -169,7 +179,7 @@ bool GameEngine::runEngine()
         menuSystem->loadScoreBoard(winnerAtQuit, m_sim.roster(), gameLengthSeconds());
       }
 
-      m_sim.entityManager().renderEntities(m_surface);
+      WorldRenderer::renderWorld(m_sim.entityManager(), m_surface);
 
       m_pPanel->renderSurfaceTo(m_surface, (GameSettings::getInstance()->getMapWidth() * Map::TILE_WIDTH), 0); 
       

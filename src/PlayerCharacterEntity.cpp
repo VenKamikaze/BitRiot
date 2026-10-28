@@ -1,6 +1,7 @@
 // implementation of player character entity class
 
 #include "PlayerCharacterEntity.h"
+#include "RumbleSink.h"
 #include "SimRandom.h"
 
 #include <algorithm>
@@ -47,7 +48,7 @@ PlayerCharacterEntity::PlayerCharacterEntity(int uniqueID, int playerNumber, int
   m_velocityModifier = DataReader::getInstance()->getIntFromFile("PLAYER_VELOCITY_MODIFIER", "data/player.txt");
   m_velocity = fixedFromRatio(m_health + 10, m_velocityModifier);
 
-  m_currentAnimState = EntityRenderer::IDLE;
+  m_currentAnimState = EntityAnim::IDLE;
   m_currentAnimFrame = 0;
   m_animDelay = DataReader::getInstance()->getIntFromFile("PLAYER_ANIM_DELAY", "data/player.txt");
   m_animCounter = m_animDelay;
@@ -148,7 +149,7 @@ void PlayerCharacterEntity::onCollision(EntityType typeCollidedWith,
     if(! isControlledByAI() && attachedController != -1 )
     {
       // Try to rumble the controller if possible
-      MickSDLUtil::rumbleController(attachedController, 0.5f, 200);
+      RumbleSink::getInstance()->rumble(attachedController, 500, 200);
     }
   }
 

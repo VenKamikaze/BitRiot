@@ -1,23 +1,25 @@
-// The simulation uses no floating point (brief 02b, README D6). This scans every
-// source file under src/ for float, double, floating-point literals and libm
-// calls, and fails on any that is not in the allowlist below.
+// The simulation uses no floating point (brief 02b, README D6). This scans the
+// text of the simulation for float, double, floating-point literals and libm
+// calls.
 //
-// New files are treated as simulation code until listed here, so the way to add
-// presentation code that needs a float is to put it in a file listed with a
-// reason, not to loosen the scan. Brief 03b creates the bitriot_sim library;
-// this check can then be pointed at that target's sources instead of at src/.
+// "The simulation" is the bitriot_sim target (brief 03b): its sources, read from
+// the list CMake generates from the target, plus every project header they
+// include. There is no allowlist any more - a file that needs a float belongs in
+// bitriot_core (rendering, the HUD, the menus), which this does not scan - and a
+// new file that is added to bitriot_sim is held to the rule by default.
+//
+// A text scan cannot see an `auto` carrying a double or an int converted to a
+// float parameter; SimLibraryTest's object-level check on the compiled archive
+// covers those.
 
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <filesystem>
-#include <fstream>
-#include <map>
 #include <set>
-#include <sstream>
 #include <string>
 #include <vector>
 
+#include "support/SimSources.h"
 #include "support/SourceScan.h"
 
 namespace bitriot_test
@@ -25,129 +27,54 @@ namespace bitriot_test
 namespace
 {
 
-// Whole files that are not simulation, keyed by path relative to src/.
-const std::map<std::string, std::string> & nonSimFiles()
-{
-  static const std::map<std::string, std::string> files =
-  {
-    { "InfoPanel.cpp", "HUD drawing: health-bar fill and portrait scaling" },
-    { "MickSDLRenderer.cpp", "window scaling and letterboxing" },
-    { "MickSDLUtil.h", "haptic rumble strength" },
-    { "MickSDLUtil.cpp", "haptic rumble strength" },
-    { "GameRunningSDLInput.h", "input layer: rumble strength passed through to SDL" },
-    { "GameRunningSDLInput.cpp", "input layer: rumble strength passed through to SDL" },
-  };
-  return files;
-}
-
-// Directories that are not simulation, keyed by path relative to src/.
-const std::map<std::string, std::string> & nonSimDirectories()
-{
-  static const std::map<std::string, std::string> dirs =
-  {
-    { "RmlUI/", "menus and the scoreboard: RmlUi's API is floats throughout" },
-  };
-  return dirs;
-}
-
-// Single lines allowed inside otherwise-simulation files (trimmed text, after
-// comments are removed), each with the brief that removes it.
-const std::map<std::string, std::map<std::string, std::string> > & allowedLines()
-{
-  static const std::map<std::string, std::map<std::string, std::string> > lines =
-  {
-    { "PlayerCharacterEntity.cpp", {
-        { "MickSDLUtil::rumbleController(attachedController, 0.5f, 200);",
-          "rumble strength from onCollision; brief 04b moves rumble out of the sim" },
-      } },
-  };
-  return lines;
-}
-
-bool isUnderNonSimDirectory(const std::string & relative)
-{
-  for (const auto & d : nonSimDirectories())
-  {
-    if (relative.compare(0, d.first.size(), d.first) == 0)
-    {
-      return true;
-    }
-  }
-  return false;
-}
-
-// Floating-point lines in `source` that the allowlist does not excuse.
-std::vector<std::string> unexcusedFloatingPoint(const std::string & relative, const std::string & source)
-{
-  std::vector<std::string> bad;
-  const auto lines = allowedLines().find(relative);
-  for (const std::string & line : floatingPointLines(source))
-  {
-    if (lines != allowedLines().end() && lines->second.count(line))
-    {
-      continue;
-    }
-    bad.push_back(line);
-  }
-  return bad;
-}
-
 TEST(FixedPointSourceGuardTest, NoFloatingPointInSimulationSources)
 {
   namespace fs = std::filesystem;
-  const fs::path srcDir = fs::path(BITRIOT_SOURCE_DIR) / "src";
-  ASSERT_TRUE(fs::exists(srcDir)) << srcDir;
+  const std::vector<fs::path> sources = simSourceFiles();
+  const std::set<fs::path> files = simFileClosure();
+  ASSERT_GT(sources.size(), 35u) << "the bitriot_sim source list is missing: " << BITRIOT_SIM_SOURCES_FILE;
+  EXPECT_GT(files.size(), sources.size()) << "no headers found; the include scan is broken";
 
-  int scanned = 0;
-  std::set<std::string> filesSeen;
+  const fs::path srcDir = fs::path(BITRIOT_SOURCE_DIR) / "src";
   std::vector<std::string> offenders;
-  for (const auto & entry : fs::recursive_directory_iterator(srcDir))
+  for (const fs::path& file : files)
   {
-    const std::string ext = entry.path().extension().string();
-    if (!entry.is_regular_file() || (ext != ".cpp" && ext != ".h" && ext != ".hpp"))
+    ASSERT_TRUE(fs::exists(file)) << file;
+    for (const std::string& line : floatingPointLines(readFile(file)))
     {
-      continue;
-    }
-    const std::string relative = fs::relative(entry.path(), srcDir).generic_string();
-    filesSeen.insert(relative);
-    if (isUnderNonSimDirectory(relative) || nonSimFiles().count(relative))
-    {
-      continue;
-    }
-    scanned++;
-    std::ifstream in(entry.path());
-    std::stringstream buf;
-    buf << in.rdbuf();
-    for (const std::string & line : unexcusedFloatingPoint(relative, buf.str()))
-    {
-      offenders.push_back(relative + ": " + line);
+      offenders.push_back(fs::relative(file, srcDir).generic_string() + ": " + line);
     }
   }
-  EXPECT_GT(scanned, 50);
-  for (const std::string & o : offenders)
+  for (const std::string& o : offenders)
   {
     ADD_FAILURE() << "floating point in a simulation file: " << o
-                  << "\n  Use fixed_t (src/Fixed.h). If this is presentation code, move it to a file "
-                     "listed in tests/FixedPointGuardTest.cpp with a reason.";
+                  << "\n  Use fixed_t (src/Fixed.h). If this is presentation code, it belongs in "
+                     "bitriot_core, not bitriot_sim (CMakeLists.txt).";
+  }
+}
+
+// The files the guard reads are the ones that are really the simulation: a
+// presentation file does not sneak in, and the entity headers do.
+TEST(FixedPointSourceGuardTest, TheGuardReadsTheSimulationAndNotTheRenderer)
+{
+  namespace fs = std::filesystem;
+  const fs::path srcDir = fs::path(BITRIOT_SOURCE_DIR) / "src";
+  std::set<std::string> names;
+  for (const fs::path& file : simFileClosure())
+  {
+    names.insert(fs::relative(file, srcDir).generic_string());
   }
 
-  // An allowlist entry for a file or line that no longer exists is stale.
-  for (const auto & f : nonSimFiles())
+  for (const char* sim : { "Simulation.cpp", "Simulation.h", "GameEntity.h", "PlayerCharacterEntity.cpp",
+                           "Fixed.h", "Map.h", "SimRandom.cpp", "GameSettings.cpp", "EntityAnim.cpp" })
   {
-    EXPECT_TRUE(filesSeen.count(f.first)) << "allowlisted file is gone: " << f.first;
+    EXPECT_TRUE(names.count(sim)) << sim << " is simulation code but the guard does not read it";
   }
-  for (const auto & f : allowedLines())
+  for (const char* notSim : { "InfoPanel.cpp", "EntityRenderer.cpp", "MickSDLRenderer.cpp", "WorldRenderer.cpp",
+                              "MapRenderer.cpp", "GameEngine.cpp", "FrameLoop.cpp", "MickSDLUtil.h",
+                              "RmlUI/binders/ScoreBoardBinder.cpp" })
   {
-    ASSERT_TRUE(filesSeen.count(f.first)) << "allowlisted file is gone: " << f.first;
-    std::ifstream in(srcDir / f.first);
-    std::stringstream buf;
-    buf << in.rdbuf();
-    const std::vector<std::string> present = floatingPointLines(buf.str());
-    for (const auto & line : f.second)
-    {
-      EXPECT_NE(std::find(present.begin(), present.end(), line.first), present.end())
-          << "allowlisted line is gone from " << f.first << ": " << line.first;
-    }
+    EXPECT_FALSE(names.count(notSim)) << notSim << " is not simulation code but the guard reads it";
   }
 }
 
@@ -221,16 +148,6 @@ TEST(FixedPointSourceGuardTest, TheScanCatchesFloatingPointAndIgnoresLookalikes)
   EXPECT_EQ(floatingPointLines("int logged = 1; int expected = 2;").size(), 0u);
   EXPECT_EQ(floatingPointLines("char q = '\"'; int x = 1;").size(), 0u);
   EXPECT_EQ(floatingPointLines("int big = 1'000'000;").size(), 0u);
-}
-
-TEST(FixedPointSourceGuardTest, AnAllowlistedLineIsExcusedOnlyInItsOwnFile)
-{
-  const std::string rumble = "MickSDLUtil::rumbleController(attachedController, 0.5f, 200);";
-  EXPECT_TRUE(unexcusedFloatingPoint("PlayerCharacterEntity.cpp", rumble).empty());
-  EXPECT_EQ(unexcusedFloatingPoint("RobotEntity.cpp", rumble).size(), 1u);
-  EXPECT_EQ(unexcusedFloatingPoint("PlayerCharacterEntity.cpp", "float x;").size(), 1u);
-  EXPECT_EQ(unexcusedFloatingPoint("PlayerCharacterEntity.cpp",
-                                   "MickSDLUtil::rumbleController(attachedController, 0.9f, 200);").size(), 1u);
 }
 
 } // namespace

@@ -7,7 +7,6 @@
 
 #include "AIGameView.h"
 #include "EntityMessageQueue.h"
-#include "EntityRendererFactory.h"
 #include "GameOverTimer.h"
 #include "GameSettings.h"
 #include "Map.h"
@@ -20,7 +19,6 @@ namespace bitriot_test
 
 namespace
 {
-SDL_Surface* g_surface = nullptr;
 NullSound* g_sound = nullptr;
 } // namespace
 
@@ -51,45 +49,18 @@ void NullSound::playSound(std::string fileName)
 
 void HeadlessEnvironment::SetUp()
 {
-  // SDL_Init(0) initialises no subsystem at all: surfaces are pure CPU memory
-  // and need neither video nor a window. This is what makes the harness usable
-  // on a headless CI box.
-  if (SDL_Init(0) != 0)
-  {
-    throw std::runtime_error(std::string("SDL_Init failed: ") + SDL_GetError());
-  }
-
-  // Dimensions are irrelevant - this surface is only ever used as a *format*
-  // reference for SDL_MapRGB and blit conversion, never rendered to.
-  g_surface = SDL_CreateRGBSurface(0, 640, 480, 32, 0, 0, 0, 0);
-  if (g_surface == nullptr)
-  {
-    throw std::runtime_error(std::string("SDL_CreateRGBSurface failed: ") + SDL_GetError());
-  }
-
-  // Must exist before any entity is constructed: entity ctors call
-  // GameSound::playSound(), which dereferences MickBaseSound::getInstance().
+  // Must exist before any entity is constructed so the sounds they make are
+  // recorded. (Without one the simulation plays into a built-in silent default.)
   g_sound = new NullSound();
 
-  Map::getInstance()->init(g_surface);
-
-  // Loads every entity bitmap. Throws if an asset is missing, which is the
-  // clearest possible signal that the working directory is wrong.
-  EntityRendererFactory::getInstance()->initSurfaces(g_surface);
+  // The static map (walls and pillars); a round resizes it itself.
+  Map::getInstance()->init();
 }
 
 void HeadlessEnvironment::TearDown()
 {
   // Deliberately leaks g_sound: the game's singletons (EntityFactory, GameSound)
-  // may still hold references and are themselves never torn down. Freeing the
-  // surface is likewise skipped - Map and every EntityRenderer hold surfaces
-  // derived from it and outlive this call.
-  SDL_Quit();
-}
-
-SDL_Surface* HeadlessEnvironment::surface()
-{
-  return g_surface;
+  // may still hold references and are themselves never torn down.
 }
 
 NullSound* HeadlessEnvironment::sound()
@@ -218,7 +189,7 @@ void HeadlessGameTest::resetSingletons()
 
   // Rebuilds the static wall/pillar layout at the current size and clears any
   // blocks a previous test seeded.
-  Map::getInstance()->init(HeadlessEnvironment::surface());
+  Map::getInstance()->init();
 
   // Drops EntityInfo left over from a previous test. DynamicMap's constructor
   // does this too, but a test that never calls startRound() would otherwise
@@ -270,7 +241,7 @@ void HeadlessGameTest::setMapSize(int width, int height)
   std::GameSettings::getInstance()->setMapHeight(height);
   Map::MAP_WIDTH = width;
   Map::MAP_HEIGHT = height;
-  Map::getInstance()->init(HeadlessEnvironment::surface());
+  Map::getInstance()->init();
   AIGameView::getInstance()->setMapSize(width, height);
 }
 

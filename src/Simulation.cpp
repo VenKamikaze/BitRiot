@@ -28,8 +28,8 @@ static_assert(Map::WALL == 0 && Map::EMPTY == 1 && Map::BLOCK == 2,
               "Map::StaticTile numbering is part of the state hash");
 static_assert(UP == 0 && DOWN == 1 && LEFT == 2 && RIGHT == 3,
               "DIRECTION numbering is part of the state hash");
-static_assert(EntityRenderer::IDLE == 0 && EntityRenderer::MOVE_UP == 1 && EntityRenderer::MOVE_DOWN == 2
-              && EntityRenderer::MOVE_LEFT == 3 && EntityRenderer::MOVE_RIGHT == 4
+static_assert(EntityAnim::IDLE == 0 && EntityAnim::MOVE_UP == 1 && EntityAnim::MOVE_DOWN == 2
+              && EntityAnim::MOVE_LEFT == 3 && EntityAnim::MOVE_RIGHT == 4
               && SimpleBrain::IDLE == 0 && SimpleBrain::MOVE_RIGHT == 4,
               "the anim state numbering is part of the state hash");
 static_assert(EntityMessage::DESTROY_ENTITY == 0 && EntityMessage::CREATE_ENTITY == 1
@@ -134,16 +134,9 @@ void Simulation::start(const MatchConfig& config)
   {
     throw std::invalid_argument("Simulation::start: " + problem);
   }
-  if (Map::MAP_WIDTH != config.mapWidth || Map::MAP_HEIGHT != config.mapHeight)
-  {
-    throw std::runtime_error("Simulation::start: the Map is " + std::to_string(Map::MAP_WIDTH) + "x"
-                             + std::to_string(Map::MAP_HEIGHT) + " but the config wants "
-                             + std::to_string(config.mapWidth) + "x" + std::to_string(config.mapHeight)
-                             + "; resize the Map before starting");
-  }
 
-  // 1. The previous round goes first. (A map resize may already have happened:
-  // BlockEntity's destructor skips its Map write when the map was rebuilt.)
+  // 1. The previous round goes first, while the Map is still the size it was built
+  // at: the blocks it placed clear their own tiles as they are destroyed.
   tearDown();
   m_tick = 0;
   m_roundOver = false;
@@ -153,6 +146,12 @@ void Simulation::start(const MatchConfig& config)
   std::GameSettings* settings = std::GameSettings::getInstance();
   config.applyTo(*settings);
   m_config = config;
+
+  // 2b. The round brings its own map: the layout is rebuilt if the config's size
+  // differs from the Map's (the walls and pillars only; no bitmaps are involved,
+  // so nothing outside the simulation needs to know). The window, the HUD and the
+  // tile pictures are the caller's, and follow the size separately.
+  Map::getInstance()->resize(config.mapWidth, config.mapHeight);
 
   // 3. Seed. This must stay ahead of everything below that constructs something
   // which draws (the SpawningPool, the players, block seeding). The settings keep
