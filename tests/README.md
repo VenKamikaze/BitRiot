@@ -346,7 +346,7 @@ files, run, swap back.
 
 ## Coverage today
 
-240 tests across fifteen files:
+246 tests across fifteen files:
 
 - `WinConditionTest.cpp` — free-for-all, team and co-op round-end rules,
   including the co-op "board cleared and pool exhausted" win and the
@@ -433,7 +433,10 @@ files, run, swap back.
   `Simulation` per process; the world `start()` builds (start tiles, blocks per
   the config, a real round to its natural end); the round-end semantics (the
   60-tick countdown, the whole final tick, the winner fixed at the top of it);
-  the same config giving the same hash on every tick; round A, round B, round A
+  the same config giving the same hash on every tick; the hash's field list
+  pinned apart from how the sim plays; a 4-player local roster surviving a
+  2-player host match (`GameSettings::snapshot()`/`restore()`); strict versus
+  loose `MatchConfig` validation; round A, round B, round A
   with each singleton left stale in turn; what the hash does and does not
   notice (health, offsets as raw bits, tile-list order, pending messages,
   per-type counters; not `m_currentAnimFrame`, the cosmetic RNG or local

@@ -278,7 +278,7 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
 
 **Missing**
 
-- ~~A per-round seed or PRNG object.~~ Done by brief 02: `GameSettings::setRoundSeed()` / `beginRoundSeed()`, harness `setRoundSeed()`, `BITRIOT_TEST_SEED` as the base seed.
+- ~~A per-round seed or PRNG object.~~ Done by brief 02: `GameSettings::setRoundSeed()` / `pickRoundSeed()` (03a: the reseed itself moved into `Simulation::start()`), harness `setRoundSeed()`, `BITRIOT_TEST_SEED` as the base seed.
 - ~~A state-hash function.~~ Done by 03a: `Simulation::stateHash()`.
 - An input-injection path. `processKeyboardInput` hard-wires the `GameRunningSDLInput` singleton. (Brief 04a.)
 - ~~A headless `GameEngine` tick; the harness duplicated the spawn positions and seeded no blocks.~~ Done by 03a: the harness starts rounds with `Simulation::start()` and steps `Simulation::step()`, the code `GameEngine` runs. It defaults to 0% blocks so older scenario tests keep open ground. `GameEngine` itself still cannot run headlessly (renderer, `InfoPanel`, menu), but it is now only glue around `Simulation`.
