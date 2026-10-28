@@ -5,7 +5,7 @@
 - **Depends on:**
   - brief 01
   - open question Q2 (D6 confirmed)
-  - `fix/ai-seek-energy` already merged, since it changes the bot AI's `rand()` calls
+  - `fix/ai-seek-energy`, which changed the bot AI's `rand()` calls (merged into `claude` in 7d6cf6a)
 - **Status:** todo
 
 ## Goal

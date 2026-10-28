@@ -37,7 +37,7 @@ Then read the brief(s) you are about to start, plus the **Outcome** sections of 
    Later briefs follow the dependency table.
 3. **Check the prerequisites.** Some briefs depend on **open questions** (`Qn` in the table). If the user hasn't answered one, **ask the user before starting that brief**. Implementer subagents cannot ask.
    - At the time of writing, Q1 (round-end countdown length, before 01), Q2 (floats + gate vs fixed-point, before 02) and Q4 (online player cap, before 07) are open. Q3 (vnet licence and visibility) is answered: MIT, public.
-4. **Check the in-flight branch.** Before brief 02, `fix/ai-seek-energy` must be merged into BitRiot's `claude`. If it isn't, tell the user and don't start 02.
+4. **In-flight work:** none at the time of writing. `fix/ai-seek-energy`, which brief 02 depends on, is merged into `claude` (7d6cf6a).
 5. **Confirm the plan** with the user in a few lines: which brief(s) you'll run and in what order. Then proceed.
 
 ## 4. Run each brief
