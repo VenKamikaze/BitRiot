@@ -23,12 +23,3 @@ GameTimer* GameOverTimer::getInstance()
   }
   return s_instance;
 }
-
-GameOverTimer::~GameOverTimer()
-{
-  if(s_instance != NULL)
-  {
-    delete s_instance;
-    s_instance = NULL;
-  }
-}

@@ -28,7 +28,7 @@ class GameOverTimer: public std::GameTimer
     static GameTimer* getInstance();
 
   private:
-    virtual ~GameOverTimer();
+    ~GameOverTimer() {} // singleton: never deleted
 };
 
 } /* namespace std */

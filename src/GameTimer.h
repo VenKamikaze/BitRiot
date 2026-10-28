@@ -28,7 +28,6 @@ class GameTimer
 {
   public:
     GameTimer(std::string name, int timeoutTicks);
-    virtual ~GameTimer() {}
 
     // Advance the timer's clock by one simulation tick. Call once per sim tick.
     inline void tick()
@@ -83,6 +82,11 @@ class GameTimer
     {
       return timeoutTicks;
     }
+
+  protected:
+    // Not public and not virtual: timers are singletons that live for the whole
+    // process, and nothing may delete one through a GameTimer*.
+    ~GameTimer() {}
 
   private:
     std::string name;

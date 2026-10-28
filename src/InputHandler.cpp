@@ -58,8 +58,9 @@ void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerC
 
   for(const auto& player: playerCharacters)
   {
-    // getID() is an entity id from EntityFactory's counter (restarted each round by
-    // EntityManager's constructor), NOT a player slot. It is only safe here as an opaque key for the
+    // getID() is an entity id from EntityFactory's counter (restarted each round
+    // by EntityManager's constructor), NOT a player slot.
+    // It is only safe here as an opaque key for the
     // m_keyMap / m_action* maps (consistent with processKeyboardInput). The
     // canonical model is indexed by player slot, which is getPlayerNumber() (1-based).
     const int id = player->getID();                   // opaque unique entity id (map key)

@@ -221,7 +221,7 @@ files, run, swap back.
 
 ## Coverage today
 
-137 tests across ten files:
+138 tests across ten files:
 
 - `WinConditionTest.cpp` — free-for-all, team and co-op round-end rules,
   including the co-op "board cleared and pool exhausted" win and the
@@ -254,7 +254,7 @@ files, run, swap back.
   ticks (2 s), ends exactly that many ticks after the end condition first holds,
   ignores wall-clock time and is the same length in every round; entity ids
   restart each round; shrinking or growing the map between rounds with blocks
-  present leaves the new walls intact; `GameEntity` scalars are initialised;
+  present (including a wider-but-shorter one) leaves the new walls intact; `GameEntity` scalars are initialised;
   `runCollisions` tolerates a stale id.
 
 - `AISeekEnergyTest.cpp` — bot energy-seeking on a 9x9 board with one bot (the

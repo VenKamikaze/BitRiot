@@ -212,7 +212,8 @@ TEST_F(RoundHygieneTest, ShrinkingTheMapNeverWritesOutsideIt)
   // Blocks at coordinates that do not exist in the new map at all. Without the
   // fix their destructors write past the end of the new (smaller) tile array;
   // run under AddressSanitizer this is a heap-buffer-overflow. Without ASan it is
-  // silent heap corruption, so also check the tiles the stray index lands on.
+  // silent heap corruption that this test cannot observe (the indices are past
+  // the array), so it only fails under ASan; the walls check is a sanity check.
   startRound();
   spawnEntity(BLOCK, 0, 15, 11); // 15*7+11 = 116: well past a 9x7 map's 63 tiles
   spawnEntity(BLOCK, 0, 13, 9);
@@ -223,8 +224,33 @@ TEST_F(RoundHygieneTest, ShrinkingTheMapNeverWritesOutsideIt)
   EXPECT_EQ(firstBrokenWall(), "");
 }
 
-TEST_F(RoundHygieneTest, GrowingTheMapWithBlocksPresentLeavesTheNewMapIntact)
+TEST_F(RoundHygieneTest, ResizingWiderButShorterWithBlocksPresentLeavesTheNewWallsIntact)
 {
+  // A resize where one dimension grows and the other shrinks. The stale write
+  // goes to index x*newHeight+y of the new array, which is in bounds here but
+  // lands on a different tile than (x,y).
+  //
+  // Old map 17x13, new map 21x11. A block at (3,11) (interior in the old map:
+  // y = 11 is its last row before the south wall) gives index 3*11+11 = 44, which
+  // in the new map is tile (44/11, 44%11) = (4,0): part of the new top wall.
+  // The array has 231 tiles, so nothing is out of bounds and ASan sees nothing;
+  // only the wall check can catch it.
+  startRound();
+  spawnEntity(BLOCK, 0, 3, 11);
+  ASSERT_EQ(Map::getInstance()->staticTileAt(3, 11), Map::BLOCK);
+
+  setMapSize(21, 11);
+  ASSERT_EQ(Map::getInstance()->staticTileAt(4, 0), Map::WALL);
+  startRound();
+
+  EXPECT_EQ(firstBrokenWall(), "");
+}
+
+TEST_F(RoundHygieneTest, GrowingTheMapWithBlocksPresentKeepsTheNewMapIntact)
+{
+  // Regression guard only: when both dimensions grow, an old interior block
+  // lands on an interior tile of the bigger map, so this passes even without
+  // the generation guard. The mixed resize above is the one that can fail.
   setMapSize(9, 7);
   startRound();
   spawnEntity(BLOCK, 0, 3, 3);

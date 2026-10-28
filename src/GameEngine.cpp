@@ -4,7 +4,6 @@
 #include "GameRunningSDLInput.h"
 #include "MickSDLRenderer.h"
 #include "PlayerCharacterEntity.h"
-#include "SDL_timer.h"
 #include <cstddef>
 #include <string>
 
