@@ -2,7 +2,7 @@
 
 - **Repo:** BitRiot
 - **Branch:** `netplay/03a-simulation`
-- **Depends on:** 01, 02
+- **Depends on:** 01, 02, 02b
 - **Status:** todo
 
 ## Goal
@@ -70,9 +70,7 @@ Decoupling the simulation from bitmaps and SDL surfaces, and the frame loop, are
    It **excludes** `m_currentAnimFrame`, `m_animCounter`, the cosmetic RNG and absolute entity ids (use position in the walk instead).
 
    Document exactly what goes in, as the desync detector everything later relies on. Brief 04a adds the per-slot input state to it.
-6. **Float sanity.**
-   - `static_assert(std::numeric_limits<float>::is_iec559)`.
-   - In Debug builds, assert that offsets and velocities are never NaN. NaN payloads aren't deterministic on wasm.
+6. **Integers only.** After 02b the sim has no floats (D6). The hash covers only integer and fixed-point fields, and must not convert anything through `float` or `double`.
 
 ## Out of scope
 

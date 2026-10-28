@@ -114,6 +114,8 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 
 ## 4. Floats
 
+> **Decision (Q2, Oct 2026):** the sim converts to fixed-point in brief 02b, so this section describes the code *before* 02b. See 02b's Outcome for what landed.
+
 **Where floats appear**
 
 - `m_offsetX/Y` and `m_velocity` (GameEntity.h:144, :146).

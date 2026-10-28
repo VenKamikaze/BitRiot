@@ -3,9 +3,9 @@
 - **Repo:** BitRiot. The vnet repo must also be attached to the session: it is consumed here.
 - **Branch:** `netplay/07-lockstep`
 - **Depends on:**
-  - 05b: D6 confirmed; `bitriot_headless`, the record format, the data hash and the build id (all from 05)
+  - 05b: the determinism gate passed; `bitriot_headless`, the record format, the data hash and the build id (all from 05)
   - 06: vnet with native UDP, loopback and impairment
-  - open question Q4 (player cap)
+  - Q4 is answered: the online player cap stays at 6, the same as local play
 - **Status:** todo
 
 ## Goal

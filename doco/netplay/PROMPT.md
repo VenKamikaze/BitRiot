@@ -31,12 +31,12 @@ Then read the brief(s) you are about to start, plus the **Outcome** sections of 
 
 1. **Find ready briefs.** From the status tables in both repos, list every brief whose dependencies are all done.
 2. **Two tracks can run in parallel:**
-   - BitRiot's determinism track: 01 → 02 → 03a → 03b → 04a → 04b → 05 → 05b.
+   - BitRiot's determinism track: 01 → 02 → 02b → 03a → 03b → 04a → 04b → 05 → 05b.
    - vnet 06.
 
    Later briefs follow the dependency table.
 3. **Check the prerequisites.** Some briefs depend on **open questions** (`Qn` in the table). If the user hasn't answered one, **ask the user before starting that brief**. Implementer subagents cannot ask.
-   - At the time of writing, Q2 (floats + gate vs fixed-point, before 02) and Q4 (online player cap, before 07) are open. Q1 (round-end countdown: 2 s / 60 ticks) and Q3 (vnet licence and visibility: MIT, public) are answered.
+   - All four are answered: Q1 (countdown 2 s / 60 ticks), Q2 (fixed-point up front, brief 02b), Q3 (vnet: MIT, public) and Q4 (online cap stays 6). Check the README in case new questions have been added.
 4. **In-flight work:** none at the time of writing. `fix/ai-seek-energy`, which brief 02 depends on, is merged into `claude` (7d6cf6a).
 5. **Confirm the plan** with the user in a few lines: which brief(s) you'll run and in what order. Then proceed.
 
@@ -74,7 +74,7 @@ While a long subagent runs, you can review or plan the parallel track. Don't do 
 
 ## 5. Rules of the road
 
-- **Settled decisions (D1–D9) are not to be reopened** inside a brief. If one proves wrong, or brief 05b's determinism gate fails, stop and ask the user. A failed gate would trigger the fixed-point contingency.
+- **Settled decisions (D1–D9) are not to be reopened** inside a brief. If one proves wrong, stop and ask the user. If brief 05b's determinism gate fails, find and fix the cause; if that can't be done within 05b, stop and ask.
 - **Tests are never skipped, loosened or quarantined** to get to green.
 - **Network denials:** if a host is blocked, tell the user which one. Don't work around a denial.
 - **Ambiguity:** if a brief is ambiguous or wrong about the code, fix the brief (and code-facts) in the same branch, and say so. If the scope would grow a lot, ask first.
