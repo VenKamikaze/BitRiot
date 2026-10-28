@@ -35,6 +35,7 @@ set(CORE_TEST_SOURCES
   support/RmlLayoutHarness.cpp
   ScoreboardLayoutTest.cpp
   ScoreboardRandomTest.cpp
+  FrameLoopTest.cpp
   RenderSideTest.cpp
 )
 

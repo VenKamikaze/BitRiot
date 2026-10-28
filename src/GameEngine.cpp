@@ -114,7 +114,77 @@ int GameEngine::gameLengthSeconds() const
   return (int) ((m_sim.tick() * GameSettings::NORMAL_TICKS_SPEED) / 1000);
 }
 
-bool GameEngine::runEngine()
+FrameLoop::Hooks GameEngine::frameHooks(std::function<uint32_t()> clockMs)
+{
+  FrameLoop::Hooks hooks;
+  hooks.nowMs = std::move(clockMs);
+  hooks.simulating = [this] { return simulating(); };
+  hooks.pumpEvents = [this] { pumpEvents(); };
+  hooks.step = [this] { stepTick(); };
+  hooks.render = [this] { return renderFrame(); };
+  // hooks.canStep stays empty: locally a tick is always allowed. Netplay (brief 07)
+  // sets it to hold a tick until the host's inputs for it have arrived.
+  return hooks;
+}
+
+bool GameEngine::simulating() const
+{
+  return GameSettings::getInstance()->getGameState() == GameSettings::GAME_RUNNING && !m_roundEnding;
+}
+
+void GameEngine::pumpEvents()
+{
+  m_ticksThisFrame = 0;
+  if (simulating())
+  {
+    m_pInputHandler->pumpEvents();
+  }
+}
+
+void GameEngine::stepTick()
+{
+  // One sim tick. Both the game-over countdown and the scoreboard's game
+  // length count ticks, never wall-clock time.
+
+  // Human input is applied to the player entities before the step. (Brief
+  // 04a turns this into step(inputs).) ESC ends the round on this machine
+  // only: the rest of the tick still runs, as it always has.
+  bool quitRequested = false;
+  std::shared_ptr<PlayerCharacterEntity> winnerAtQuit;
+  try
+  {
+    m_pInputHandler->applyInput();
+  }
+  catch(const InputException &e)
+  {
+    if(e.gotQuit())
+    {
+      quitRequested = true;
+      winnerAtQuit = m_sim.currentWinner();
+    }
+  }
+
+  // The win check and game-over countdown (a timed delay during which we
+  // continue to update and runFrame for a few seconds; useful when all
+  // human players are dead but AI is still alive, in case a human player
+  // wants to take over the AI), the spawning pool and runFrame. The round
+  // is over only once this whole step has run.
+  m_sim.step();
+  m_ticksThisFrame++;
+
+  if (m_sim.roundOver())
+  {
+    m_roundEnding = true;
+    m_scoreboardWinner = m_sim.winner();
+  }
+  else if (quitRequested)
+  {
+    m_roundEnding = true;
+    m_scoreboardWinner = winnerAtQuit;
+  }
+}
+
+bool GameEngine::renderFrame()
 {
   switch (GameSettings::getInstance()->getGameState())
   {
@@ -140,43 +210,23 @@ bool GameEngine::runEngine()
     }
     case GameSettings::GAME_RUNNING:
     {
-      // One sim tick. Both the game-over countdown and the scoreboard's game
-      // length count ticks, never wall-clock time.
-
-      // Human input is applied to the player entities before the step. (Brief
-      // 04a turns this into step(inputs).) ESC ends the round on this machine
-      // only: the rest of the tick still runs, as it always has.
-      bool quitRequested = false;
-      std::shared_ptr<PlayerCharacterEntity> winnerAtQuit;
-      try
+      // ESC (or closing the window) seen on a frame that ran no tick, because the
+      // frame loop held it back: the round must still be quittable. When a tick did
+      // run, stepTick() has already taken the quit.
+      if (!m_roundEnding && m_ticksThisFrame == 0 && GameRunningSDLInput::getInstance()->doQuit())
       {
-        m_pInputHandler->processKeyboardInput();
-      }
-      catch(const InputException &e)
-      {
-        if(e.gotQuit())
-        {
-          quitRequested = true;
-          winnerAtQuit = m_sim.currentWinner();
-        }
+        m_roundEnding = true;
+        m_scoreboardWinner = m_sim.currentWinner();
       }
 
-      // The win check and game-over countdown (a timed delay during which we
-      // continue to update and runFrame for a few seconds; useful when all
-      // human players are dead but AI is still alive, in case a human player
-      // wants to take over the AI), the spawning pool and runFrame. The round
-      // is over only once this whole step has run.
-      m_sim.step();
-
-      if (m_sim.roundOver())
+      if (m_roundEnding)
       {
+        // The round's last frame: go to the scoreboard (the menu takes over on the
+        // next frame, after this one draws the final world below, as it always did).
+        m_roundEnding = false;
         GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
-        menuSystem->loadScoreBoard(m_sim.winner(), m_sim.roster(), gameLengthSeconds());
-      }
-      else if (quitRequested)
-      {
-        GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
-        menuSystem->loadScoreBoard(winnerAtQuit, m_sim.roster(), gameLengthSeconds());
+        menuSystem->loadScoreBoard(m_scoreboardWinner, m_sim.roster(), gameLengthSeconds());
+        m_scoreboardWinner = nullptr;
       }
 
       WorldRenderer::renderWorld(m_sim.entityManager(), m_surface);

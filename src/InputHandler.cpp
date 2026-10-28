@@ -61,7 +61,7 @@ void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerC
     // getID() is an entity id from EntityFactory's counter (restarted each round
     // by EntityManager's constructor), NOT a player slot.
     // It is only safe here as an opaque key for the
-    // m_keyMap / m_action* maps (consistent with processKeyboardInput). The
+    // m_keyMap / m_action* maps (consistent with applyInput). The
     // canonical model is indexed by player slot, which is getPlayerNumber() (1-based).
     const int id = player->getID();                   // opaque unique entity id (map key)
     const int canonicalIndex = player->getPlayerNumber() - 1; // 0-based player slot -> model index
@@ -206,7 +206,7 @@ void InputHandler::takeOverSlotWithController(int team, int controllerId)
 
 // Take over the chosen 1-based slot with a keyboard set (Phase 2.7). Giving the
 // (ex-AI) entity a keyMap entry is what makes it respond to that keyboard set;
-// processKeyboardInput then drives it like any other human keyboard player. The
+// applyInput then drives it like any other human keyboard player. The
 // action1/action2/spawn maps already hold an entry for every entity (seeded for
 // all players, AI included, in setPointers). Live entity only - see above.
 void InputHandler::takeOverSlotWithKeyboard(int team, int keyboardSetIndex)
@@ -471,7 +471,7 @@ void InputHandler::detachController(int controllerId)
       // Phase 2.6: on unplug, only a player WITHOUT a keymap should revert to CPU.
       // A controller take-over (now via the Phase 2.7 selector, AI-only) leaves
       // the entity with no m_keyMap entry, so on unplug it would be
-      // attachedController==-1 AND non-AI -> not skipped by processKeyboardInput
+      // attachedController==-1 AND non-AI -> not skipped by applyInput
       // but has no keys -> frozen. Reverting it to AI lets
       // PlayerCharacterEntity::update() resume the bot (self-heals empty
       // goal/instruction lists; keys off the flag at PlayerCharacterEntity.cpp:68).
@@ -639,10 +639,14 @@ bool InputHandler::consumeControllerReleased(int playerId, ButtonName button)
   return true;
 }
 
-void InputHandler::processKeyboardInput(/*SDL_Event event*/)
+void InputHandler::pumpEvents()
+{
+  GameRunningSDLInput::getInstance()->updateEventQueue();
+}
+
+void InputHandler::applyInput()
 {
   shared_ptr<MickBaseInput> input = GameRunningSDLInput::getInstance();
-  input->updateEventQueue();
 
   if(input->doQuit())
   {

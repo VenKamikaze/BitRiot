@@ -130,6 +130,7 @@ set(SOURCES ./src/EntityRenderer.cpp
 ./src/RmlUI/events/EventManager.cpp
 ./src/RmlUI/binders/ScoreBoardBinder.cpp
 ./src/RmlUI/binders/PlayersSelectBinder.cpp
+./src/FrameLoop.cpp
 ./src/GameEngine.cpp
 ./src/InfoPanel.cpp
 ./src/InputHandler.cpp
@@ -145,6 +146,7 @@ set(SOURCES ./src/EntityRenderer.cpp
 ./src/RmlUI/glue/RenderInterfaceSDL2.cpp
 ./src/SDLHelper.cpp
 ./src/RmlUI/glue/ShellFileInterface.cpp
+./src/TickPacer.cpp
 ./src/WorldRenderer.cpp
 ./src/RmlUI/glue/SystemInterfaceSDL2.cpp)
 

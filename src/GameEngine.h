@@ -16,6 +16,7 @@
 #include "Map.h"
 #include <SDL2/SDL.h>
 
+#include "FrameLoop.h"
 #include "MenuSDLRenderer.h"
 #include "GameSettings.h"
 #include "GameOverTimer.h"
@@ -31,7 +32,22 @@ class GameEngine
     }
     ~GameEngine();
 
-    bool runEngine();
+    // The pieces of a frame, for FrameLoop (see FrameLoop.h for the order they run
+    // in). GameEngine no longer has a one-call-does-everything entry point: a frame
+    // is steps (zero or more) followed by one render.
+    FrameLoop::Hooks frameHooks(std::function<uint32_t()> clockMs);
+
+    // True while ticks may run: a round is in progress and has not just ended.
+    bool simulating() const;
+    // Reads device and window events (only during a round).
+    void pumpEvents();
+    // One tick: applies human input, then Simulation::step(), and notes when that
+    // tick ended the round (or ESC was seen). Does not draw.
+    void stepTick();
+    // Everything that is not a tick, once per frame: the menu, round set-up, or the
+    // world and HUD. Switches to the scoreboard when stepTick() ended the round.
+    // Returns false when the game should quit.
+    bool renderFrame();
 
 
   private:
@@ -40,6 +56,11 @@ class GameEngine
     // size follows each round's MatchConfig; the window follows it here).
     int m_windowMapWidth = 0;
     int m_windowMapHeight = 0;
+    // Set by stepTick() when the round is over (or ESC was seen): the scoreboard
+    // is loaded by the next renderFrame(), after that frame's last draw of the world.
+    bool m_roundEnding = false;
+    std::shared_ptr<PlayerCharacterEntity> m_scoreboardWinner;
+    int m_ticksThisFrame = 0;
     unique_ptr<MenuSDLRenderer> menuSystem = nullptr;
     // The deterministic world: setup (start) and the per-tick step. Everything the
     // sim needs lives in there; this class keeps rendering, the InfoPanel, sound,

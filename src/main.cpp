@@ -42,6 +42,7 @@
 #endif
 
 #include "MenuSDLRenderer.h"
+#include "FrameLoop.h"
 #include "EntityRendererFactory.h"
 #include "MapRenderer.h"
 #include "MickSDLUtil.h"
@@ -57,15 +58,27 @@ unsigned int initFlags = 0; // start with all turned off
 
 
 // PROTOTYPES /////////////////////////////////////////////
-bool consoleMain();
+FrameResult frame();
 
 // GLOBALS ////////////////////////////////////////////////
 
 // game object globals
 unique_ptr<GameEngine> engine = nullptr;
+unique_ptr<FrameLoop> frameLoop = nullptr;
 MickSDLRumbleSink rumbleSink; // the simulation rumbles controllers through this
 
 // FUNCTIONS //////////////////////////////////////////////
+
+// The frame loop's clock: a free-running millisecond counter. It reads SDL's
+// monotonic performance counter, not SDL_GetTicks(), because SDL_GetTicks() on
+// Linux can step 1 ms backwards and forwards at second boundaries (its seconds and
+// nanoseconds are scaled separately), which showed up as a frame that came a
+// millisecond early and so had no tick due.
+static uint32_t clockMs()
+{
+  const Uint64 perMs = SDL_GetPerformanceFrequency() / 1000;
+  return (uint32_t) (SDL_GetPerformanceCounter() / (perMs ? perMs : 1));
+}
 
 #if !(SDL_VIDEO_OPENGL)
 #error "Only the opengl sdl backend is supported. To add support for others, see http://mdqinc.com/blog/2013/01/integrating-librocket-with-sdl-2/"
@@ -119,21 +132,13 @@ int consoleInit()
   return 0;
 } // end Game_Init
 
-bool consoleMain()
+// One frame of the game: events, however many whole ticks are owed (usually one),
+// then one render. Does not block or sleep; the caller sleeps for
+// frameLoop->sleepHintMs() afterwards. This is the function a web build hands to
+// emscripten_set_main_loop (see FrameLoop.h).
+FrameResult frame()
 {
-  Uint32 startTime = SDL_GetTicks();
-
-  bool keepRunning = engine->runEngine();
-
-  while ((SDL_GetTicks() - startTime) < GameSettings::NORMAL_TICKS_SPEED)
-  {
-    //wait a bit to sync to 30fps
-    //Sleep(1);
-    SDL_Delay(1);
-  }
-
-  return keepRunning;
-
+  return frameLoop->frame();
 } // end Game_Main
 
 static void show_opts(std::string exec)
@@ -191,6 +196,9 @@ int main(int argc, char* argv[])
 
     engine->setMenuSystem(make_unique<MenuSDLRenderer>(MickSDLRenderer::getInstance()->getRendererHandle(), 
       MickSDLRenderer::getInstance()->getWindowHandle(), GameRunningSDLInput::getInstance()->getInputHandler()));
+
+    frameLoop = make_unique<FrameLoop>(engine->frameHooks(clockMs),
+                                       (uint32_t) GameSettings::NORMAL_TICKS_SPEED);
   }
   catch(const exception &e)
   {
@@ -217,7 +225,7 @@ int main(int argc, char* argv[])
       try
       {
         // main game processing goes here
-        if(! consoleMain())
+        if(! frame().keepRunning)
         {
           quitkey = 1;
         }
@@ -251,6 +259,17 @@ int main(int argc, char* argv[])
         SDL_UnlockSurface(renderer->getSurfaceBackBufferHandle());
       }
 
+      // Hold the tick rate: sleep until the next tick falls due (about 33 ms after
+      // the last one). frame() itself never waits, so a slow frame is not followed
+      // by a sleep, and the ticks it owes are run by the next frame.
+      if(!quitkey)
+      {
+        const uint32_t sleepMs = frameLoop->sleepHintMs();
+        if(sleepMs > 0)
+        {
+          SDL_Delay(sleepMs);
+        }
+      }
     }
 
   }
