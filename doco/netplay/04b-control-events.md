@@ -196,4 +196,4 @@ Start a round with **two or three bots and one human on the keyboard** (a pad as
 
 Record the result here when it comes back.
 
-**Play-test result:** *(pending)*
+**Play-test result (29 Oct 2026, user, Arch Linux):** went fine. Two rounds, one keyboard player against three CPU players, on `claude` at or after f430398 (02b–05 and vnet 14 merged). That covers no 04b flow. **Still pending:** a pad join, a keyboard takeover of a CPU player, unplugging a pad mid-round, and rumble on a hit.

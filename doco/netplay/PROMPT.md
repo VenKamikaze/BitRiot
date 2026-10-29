@@ -11,7 +11,7 @@ The goal is deterministic lockstep online multiplayer for Bit Riot, a browser (W
 
 **Done and merged into `claude`:**
 
-- **BitRiot:** 01, 02, 02b, 03a, 03b, 04a, 04b and 05. 02b, 03a, 03b, 04a and 04b are `done (play-test pending)`; 05 is `done`.
+- **BitRiot:** 01, 02, 02b, 03a, 03b, 04a, 04b and 05. 02b, 03a and 05 are `done`; 03b, 04a and 04b are `done (play-test pending)` (controller parts).
   - 04a (merge d899b57) and 04b (84f19b1) were merged unreviewed, then reviewed together. The review found one blocking bug, `InputHandler::setJoinIndicator` calling itself (a crash or hang at round start with a keyboard player, or on any join). It was fixed with a test on `netplay/04-review-fixes` (merge 0557976).
   - 05 (merge 0c5c956) had one review and one fix round. That round bounded what a hostile record can make a reader allocate and range-checked the `--config` spec.
   - Test counts on `claude`: `bitriot_tests` 513 and `bitriot_sim_tests` 408. Both pass on GCC Release, GCC Debug and Clang. The 200-seed sweep has 0 failures on both binaries.
@@ -37,7 +37,7 @@ They touch different areas, but both may touch `CMakeLists.txt`. Give each its o
 
 **Waiting on the user** (ask about these; don't block on them):
 
-1. **Play-test** of 02b (fixed-point movement feel), 03a (round flow, scoreboard), 03b (frame loop, catch-up, rumble), 04a (keyboard and controller feel, the same-tick tap fix) and 04b (join, keyboard takeover, controller unplug, rumble). One session on `claude` covers all five; the Arch commands are in the Outcomes of 02b, 03b, 04a and 04b. Record the result in each Outcome.
+1. **Play-test.** 02b and 03a passed (29 Oct 2026: two rounds, one keyboard player against three CPU players). Still pending, all needing a controller: 03b (rumble, hotplug, join selector, Options map size), 04a (pad feel, the same-tick tap fix) and 04b (pad join, keyboard takeover, pad unplug, rumble). One session with a pad and a keyboard covers all three; the Arch commands are in their Outcomes. Record the result in each Outcome.
 2. **vnet tags.** The cloud session can't push tags (HTTP 403), so the user tags from a PC. `v0.1.0` (5847e44) and `v0.2.0` (c8be4df) are pushed. `v0.3.0` is meant for b302029. Check with `git ls-remote --tags https://github.com/VenKamikaze/vnet`, and ask the user if it's missing. vnet's README already pins `v0.3.0`.
 3. **vnet `claude` → `main`** merge: the user's call.
 4. **Brief 09's blocked Emscripten ports are solved.** The user pushed the six GitHub archives to branch `emscripten-ports`. They are verified against Emscripten 6.0.13's hashes, and brief 09 ("Ports") explains how to install them into the Emscripten cache.

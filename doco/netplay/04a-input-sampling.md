@@ -245,4 +245,4 @@ Play with at least one human on the keyboard (and a second keyboard set or a pad
 
 Record the result here when it comes back.
 
-**Play-test result:** *(pending)*
+**Play-test result (29 Oct 2026, user, Arch Linux):** went fine. Two rounds, one keyboard player against three CPU players, on `claude` at or after f430398 (02b–05 and vnet 14 merged). Keyboard input felt the same. **Still pending:** a controller (feel and the same-tick tap fix on a pad); the keyboard tap fix was not specifically checked.
