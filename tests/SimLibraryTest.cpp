@@ -20,10 +20,12 @@
 #include "support/SimSources.h"
 #include "support/SourceScan.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <map>
 #include <regex>
+#include <unistd.h>
 #include <set>
 #include <string>
 #include <vector>
@@ -34,6 +36,7 @@
 
 #include "EntityAnim.h"
 #include "GameSound.h"
+#include "MickAssets.h"
 #include "MatchConfig.h"
 #include "MickBaseSound.h"
 #include "RumbleSink.h"
@@ -150,13 +153,15 @@ TEST(SimLibraryTest, TheSourceScanCatchesSdlAndLeavesLookalikesAlone)
 // and x87. Each hit is "function: mnemonic". Plain 128-bit moves (movaps, movups,
 // movdqa: used to copy structs) and pxor (zeroing) are integer-safe and ignored.
 //
-// Written for x86-64 and aarch64, the two architectures this project builds on;
+// Written for x86-64 and aarch64 (see the aarch64 note below), the two architectures
+// this project builds on;
 // `arch` is CMAKE_SYSTEM_PROCESSOR. Anything else is refused rather than waved
 // through, because a check that cannot read the machine code proves nothing.
 std::vector<std::string> floatInstructions(const std::string& disassembly, const std::string& arch, bool& supported)
 {
   supported = true;
   std::regex mnemonicOfInterest;
+  bool fmovImmediateIsFloat = false;
   if (arch == "x86_64" || arch == "AMD64" || arch == "amd64")
   {
     // SSE/AVX: addss, mulpd, divsd, sqrtss, ucomisd, cvtsi2sd, cvttss2si, movss,
@@ -167,7 +172,22 @@ std::vector<std::string> floatInstructions(const std::string& disassembly, const
   }
   else if (arch == "aarch64" || arch == "arm64" || arch == "ARM64")
   {
-    mnemonicOfInterest = std::regex(R"(^(f[a-z0-9]+|scvtf|ucvtf)$)");
+    // AArch64 floating-point arithmetic, compares, conversions and rounding. The bare
+    // pattern "any mnemonic starting with f" is too wide: `fmov` is also how GCC moves
+    // a 32/64-bit integer between a general register and a SIMD register for integer
+    // vector code (`fmov d0, x1`, `fmov x2, d0`, `fmov s0, wzr`), which is not float
+    // arithmetic. So the f-family is listed, and `fmov` is flagged only when its
+    // operand is an immediate (`fmov d0, #1.0`: loading a float constant), the one
+    // form that is a float and nothing else. A float that is only ever moved between
+    // registers (never computed on) is invisible here, but it needs a load or a
+    // conversion to get there, which this catches.
+    // Untested against real GCC aarch64 output (this container is x86-64); the
+    // mnemonics are from the Arm A64 floating-point instruction list.
+    mnemonicOfInterest = std::regex(
+      R"(^(fadd|fsub|fmul|fnmul|fdiv|fsqrt|fabs|fneg|fmax|fmin|fmaxnm|fminnm|fmadd|fmsub|fnmadd|fnmsub|)"
+      R"(fmla|fmls|fmulx|fabd|facge|facgt|faddp|fmaxp|fminp|fmaxnmp|fminnmp|faddv|fmaxv|fminv|fmaxnmv|fminnmv|)"
+      R"(fcm[a-z]*|fccmpe?|fcsel|fcvt[a-z]*|fjcvtzs|frint[a-z0-9]*|frecp[a-z]|frsqrt[a-z]|scvtf|ucvtf)$)");
+    fmovImmediateIsFloat = true;
   }
   else
   {
@@ -215,7 +235,10 @@ std::vector<std::string> floatInstructions(const std::string& disassembly, const
     {
       continue;
     }
-    if (std::regex_match(mnemonic, mnemonicOfInterest))
+    std::string operands;
+    std::getline(words, operands);
+    const bool floatMove = fmovImmediateIsFloat && mnemonic == "fmov" && operands.find('#') != std::string::npos;
+    if (floatMove || std::regex_match(mnemonic, mnemonicOfInterest))
     {
       hits.push_back(function + ": " + mnemonic);
     }
@@ -259,10 +282,37 @@ TEST(SimLibraryTest, TheInstructionScanFlagsFloatingPointAndLeavesIntegerCodeAlo
     "   0:\tldr\tw0, [x0]\n"
     "   4:\tfadd\ts0, s0, s0\n"
     "   8:\tscvtf\ts0, w1\n"
-    "   c:\tadd\tw0, w0, w1\n";
+    "   c:\tadd\tw0, w0, w1\n"
+    "  10:\tfmul\td0, d0, d1\n"
+    "  14:\tfdiv\ts0, s0, s1\n"
+    "  18:\tfcvtzs\tw0, s0\n"
+    "  1c:\tfcvt\td0, s0\n"
+    "  20:\tfmov\td0, #1.00000000\n"
+    "  24:\tfmov\ts1, #0.50000000\n"
+    "  28:\tfcmp\ts0, s1\n"
+    "  2c:\tfsqrt\td0, d1\n"
+    "  30:\tucvtf\td2, x3\n"
+    // integer register moves that GCC uses for integer vector code: not float
+    "  34:\tfmov\td0, x1\n"
+    "  38:\tfmov\tx2, d0\n"
+    "  3c:\tfmov\ts0, wzr\n"
+    "  40:\tfmov\tv0.d[1], x4\n"
+    "  44:\tfmov\td1, d2\n"
+    "  48:\tldp\tq0, q1, [x0]\n"
+    "  4c:\tmovi\tv0.2d, #0\n"
+    "  50:\tcmeq\tv0.4s, v0.4s, v1.4s\n";
   const std::vector<std::string> armHits = floatInstructions(arm, "aarch64", supported);
   ASSERT_TRUE(supported);
-  EXPECT_EQ(armHits.size(), 2u);
+  const std::set<std::string> armGot(armHits.begin(), armHits.end());
+  const std::set<std::string> armWant =
+  {
+    "foo: fadd", "foo: scvtf", "foo: fmul", "foo: fdiv", "foo: fcvtzs", "foo: fcvt", "foo: fmov", "foo: fcmp",
+    "foo: fsqrt", "foo: ucvtf"
+  };
+  EXPECT_EQ(armGot, armWant) << "fmov with an immediate is a float; fmov between registers is not";
+  // both immediate fmovs are reported (they share a name, so the set above holds one)
+  EXPECT_EQ(std::count(armHits.begin(), armHits.end(), std::string("foo: fmov")), 2);
+  EXPECT_EQ(armHits.size(), 11u);
 
   floatInstructions(x86, "riscv64", supported);
   EXPECT_FALSE(supported) << "an architecture the scan cannot read must be refused, not passed";
@@ -394,6 +444,57 @@ struct SoundBackendRestorer
 {
   ~SoundBackendRestorer() { HeadlessEnvironment::sound()->makeCurrent(); }
 };
+
+// A directory that holds only a data/ link, like a headless or cross-compiled build
+// that does not ship assets/. The simulation asks GameSettings for portrait file
+// names before any window exists; with assets/ missing that used to be an assert
+// (a Debug build aborted the process).
+class NoAssetsTest : public HeadlessGameTest
+{
+};
+
+TEST_F(NoAssetsTest, TheSimulationRunsInADirectoryWithNoAssets)
+{
+  namespace fs = std::filesystem;
+  const fs::path original = fs::current_path();
+  const fs::path dir = fs::temp_directory_path() / ("bitriot_noassets_" + std::to_string((long) getpid()));
+  fs::remove_all(dir);
+  fs::create_directories(dir);
+  fs::create_directory_symlink(original / "data", dir / "data");
+
+  struct Restore
+  {
+    fs::path original, dir;
+    ~Restore()
+    {
+      fs::current_path(original);
+      std::error_code ignored;
+      fs::remove_all(dir, ignored);
+    }
+  } restore{original, dir};
+  fs::current_path(dir);
+  ASSERT_FALSE(fs::exists("assets"));
+
+  for (int slot = 0; slot < 6; slot++)
+  {
+    for (auto type : { std::MickAssets::PlayerType::MALE, std::MickAssets::PlayerType::FEMALE })
+    {
+      const bool male = type == std::MickAssets::PlayerType::MALE;
+      EXPECT_EQ(std::MickAssets::getPortraitBitmapFilename(slot, type),
+                "assets/bitmaps/player" + std::to_string(slot + 1) + (male ? "male" : "female") + "face.bmp");
+    }
+  }
+
+  configurePlayers(2);
+  setMapSize(13, 11);
+  setBlockPercentage(55);
+  startRound();
+  for (int i = 0; i < 100; i++)
+  {
+    sim().step();
+  }
+  EXPECT_EQ(sim().tick(), 100u);
+}
 
 class SoundSeamTest : public HeadlessGameTest
 {

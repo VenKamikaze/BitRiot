@@ -35,9 +35,13 @@ TEST(FixedPointSourceGuardTest, NoFloatingPointInSimulationSources)
   ASSERT_GT(sources.size(), 35u) << "the bitriot_sim source list is missing: " << BITRIOT_SIM_SOURCES_FILE;
   EXPECT_GT(files.size(), sources.size()) << "no headers found; the include scan is broken";
 
+  // The files read: the simulation plus the core files that still mutate it until 04a.
+  const std::set<fs::path> scanned = floatGuardedFiles();
+  EXPECT_GT(scanned.size(), files.size());
+
   const fs::path srcDir = fs::path(BITRIOT_SOURCE_DIR) / "src";
   std::vector<std::string> offenders;
-  for (const fs::path& file : files)
+  for (const fs::path& file : scanned)
   {
     ASSERT_TRUE(fs::exists(file)) << file;
     for (const std::string& line : floatingPointLines(readFile(file)))
@@ -53,8 +57,9 @@ TEST(FixedPointSourceGuardTest, NoFloatingPointInSimulationSources)
   }
 }
 
-// The files the guard reads are the ones that are really the simulation: a
-// presentation file does not sneak in, and the entity headers do.
+// The files the guard reads are the ones that are really the simulation (plus the
+// input layer and the tick driver until 04a): a presentation file does not sneak
+// in, and the entity headers do.
 TEST(FixedPointSourceGuardTest, TheGuardReadsTheSimulationAndNotTheRenderer)
 {
   namespace fs = std::filesystem;
@@ -64,6 +69,18 @@ TEST(FixedPointSourceGuardTest, TheGuardReadsTheSimulationAndNotTheRenderer)
   {
     names.insert(fs::relative(file, srcDir).generic_string());
   }
+  // The files the float guard really scans: the simulation plus the core files that
+  // still change simulation state until 04a (the input layer and the tick driver).
+  std::set<std::string> guarded;
+  for (const fs::path& file : floatGuardedFiles())
+  {
+    guarded.insert(fs::relative(file, srcDir).generic_string());
+  }
+  for (const char* mutating : { "InputHandler.cpp", "InputHandler.h", "GameEngine.cpp", "GameEngine.h" })
+  {
+    EXPECT_TRUE(guarded.count(mutating)) << mutating << " still mutates the simulation but the guard does not read it";
+    EXPECT_FALSE(names.count(mutating)) << mutating << " is core code: it is in the simulation's own file list";
+  }
 
   for (const char* sim : { "Simulation.cpp", "Simulation.h", "GameEntity.h", "PlayerCharacterEntity.cpp",
                            "Fixed.h", "Map.h", "SimRandom.cpp", "GameSettings.cpp", "EntityAnim.cpp" })
@@ -71,10 +88,10 @@ TEST(FixedPointSourceGuardTest, TheGuardReadsTheSimulationAndNotTheRenderer)
     EXPECT_TRUE(names.count(sim)) << sim << " is simulation code but the guard does not read it";
   }
   for (const char* notSim : { "InfoPanel.cpp", "EntityRenderer.cpp", "MickSDLRenderer.cpp", "WorldRenderer.cpp",
-                              "MapRenderer.cpp", "GameEngine.cpp", "FrameLoop.cpp", "MickSDLUtil.h",
+                              "MapRenderer.cpp", "FrameLoop.cpp", "MickSDLUtil.h",
                               "RmlUI/binders/ScoreBoardBinder.cpp" })
   {
-    EXPECT_FALSE(names.count(notSim)) << notSim << " is not simulation code but the guard reads it";
+    EXPECT_FALSE(guarded.count(notSim)) << notSim << " is not simulation code but the guard reads it";
   }
 }
 

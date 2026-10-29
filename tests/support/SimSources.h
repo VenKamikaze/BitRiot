@@ -104,6 +104,30 @@ inline std::set<std::filesystem::path> simFileClosure()
   return seen;
 }
 
+// Files in bitriot_core that still change simulation state, so the floating-point
+// text guard reads them as well as the simulation proper. Until brief 04a moves
+// input into Simulation::step(inputs), InputHandler moves players and takes bots
+// over directly, and GameEngine::stepTick() drives the tick. Brief 04a removes
+// this list (the input layer then only samples).
+inline std::vector<std::filesystem::path> coreFilesThatStillMutateTheSimulation()
+{
+  namespace fs = std::filesystem;
+  const fs::path src = fs::path(BITRIOT_SOURCE_DIR) / "src";
+  return { src / "InputHandler.h", src / "InputHandler.cpp", src / "GameEngine.h", src / "GameEngine.cpp" };
+}
+
+// Every file the floating-point text guard reads: the simulation (the bitriot_sim
+// sources and the project headers they include) plus the core files above.
+inline std::set<std::filesystem::path> floatGuardedFiles()
+{
+  std::set<std::filesystem::path> files = simFileClosure();
+  for (const std::filesystem::path& extra : coreFilesThatStillMutateTheSimulation())
+  {
+    files.insert(extra);
+  }
+  return files;
+}
+
 } // namespace bitriot_test
 
 #endif // BITRIOT_TESTS_SIMSOURCES_H_
