@@ -31,12 +31,18 @@ class MickSDLSound : MickBaseSound
 
     static MickSDLSound* getInstance();
 
+    // How many sounds Mix_PlayChannel has accepted so far (a sound that failed to
+    // load or found no free channel is not counted). Lets the web smoke test check
+    // that audio reaches the mixer.
+    unsigned long soundsPlayed() const { return m_soundsPlayed; }
+
   protected:
     void loadSound(std::string fileName, MickSoundFile* sound);
     void destructAudio();
 
   private:
     std::map<std::string, MickSoundFile> cachedSounds;
+    unsigned long m_soundsPlayed = 0;
 
 };
 

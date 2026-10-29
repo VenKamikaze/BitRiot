@@ -8,6 +8,8 @@ A fact check of the current code, made for the briefs in `doco/netplay/`. File:l
 
 *Brief 04b (Oct 2026) made who controls a slot an explicit `ControlEvent` that `Simulation::step` applies at the start of a tick, replaced the sim's rumble call with `Simulation::hitThisTick(slot)` (the local layer rumbles), and made `InfoPanel` a read-only view of the sim's per-slot selection. §1, §4, §6, §7, §10 and §12 are updated.*
 
+*Brief 09 (Oct 2026) ported the game to Emscripten: both `#error` guards, `find_package(OpenGL)` and the RmlUi glue's clipping bugs are gone, `main()`'s loop body and teardown are functions the browser's main loop also calls, and `MickSDLRenderer` throws by value. §1, §9, §11 and §12 are updated.*
+
 *Brief 04a (Oct 2026) split input into a local sampler and a deterministic apply: `Simulation::step(const TickInputs&)` moves players, and the per-slot input state lives in the sim and in the state hash (version 2). §1, §5, §6, §10, §11 and §12 are updated; refs marked "(before 04a)" no longer exist.*
 
 *Brief 05 (Oct 2026) added the match record (`src/MatchRecord.*`), the replayer (`src/MatchReplay.*`), `Simulation::dataHash()` and eager loading of the data files (`src/DataHash.*`), a build id generated at build time (`src/BuildId.h`, `cmake/GenerateBuildId.cmake`), `Simulation::dumpState()`, the `bitriot_headless` binary (`src/headless/`) and `--record <dir>` with `getopt_long` (`src/GameOptions.*`). §7, §10 and §12 are updated; the format is specified in [`match-record-format.md`](../match-record-format.md).*
@@ -56,7 +58,7 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 - **Exceptions.**
   - ESC no longer throws (brief 04a): it is the flag `InputHandler::quitRequested()` (`GameRunningSDLInput::doQuit()`), checked by `GameEngine::stepTick` and `renderFrame`. `InputException.h` is gone.
   - There are still 17 `throw` sites in src (the renderer-init failures, the menu, the sound and asset loaders, and `Simulation`'s `logic_error`/`invalid_argument`/`out_of_range` checks). WASM builds therefore need `-fexceptions` or `-fwasm-exceptions`.
-- **What a WASM main-loop inversion touches:** main.cpp's loop locals, the per-frame try/catch and teardown (they move to a quit path), and `frame()` itself is already the callback; the `SDL_Delay(sleepHintMs())` goes (the browser paces).
+- **The WASM main loop (brief 09, done).** `main()`'s loop body is `loopIteration()` (lock, `frame()`, present, unlock) and the un-init section is `shutdownGame()`; the native `while` calls them and sleeps `sleepHintMs()`, and on Emscripten `emscripten_set_main_loop(webLoopIteration, 0, 1)` calls `loopIteration()` once per animation frame (no sleep: the browser paces, and `frame()` runs however many whole ticks are owed). `webLoopIteration()` catches anything the frame throws, and on quit or error calls `emscripten_cancel_main_loop()`, `shutdownGame()` and tells the page. `frame()` itself is unchanged.
 
 ## 2. Randomness and other nondeterminism
 
@@ -270,14 +272,14 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
 
 ## 9. Rendering, menus, audio, threads, filesystem
 
-**`#error` guards.** main.cpp:67-69 and RenderInterfaceSDL2.h:35-37 test `SDL_VIDEO_OPENGL`. Emscripten's SDL is believed to define only the GLES2/EGL macros, so both guards would fire there. This is unverified.
+**`#error` guards** *(removed by brief 09)*. main.cpp and RenderInterfaceSDL2.h tested `SDL_VIDEO_OPENGL`. Verified: Emscripten's `SDL_config_emscripten.h` has `/* #undef SDL_VIDEO_OPENGL */` and defines only `SDL_VIDEO_OPENGL_ES2` and `SDL_VIDEO_OPENGL_EGL`, so both would have fired. `find_package(OpenGL)` and `OPENGL_LIBRARIES` are gone from the native build too (nothing links GL: SDL loads it itself).
 
 **RmlUi glue**
 
 - It uses only `SDL_Renderer`: `SDL_RenderGeometryRaw` (needs SDL ≥ 2.0.18), `SDL_RenderSetClipRect`, and SDL textures (RenderInterfaceSDL2.cpp:53-183).
 - There are no `gl*` calls in the compiled sources. src/RmlUI/shell/* and events/Shell.h are dead code (not in SOURCES).
-- It should work on Emscripten's GLES2 `SDL_Renderer` once the guards and `find_package(OpenGL)` are dropped.
-- Minor: `SetScissorRegion` flips Y the way GL does (:102), which is probably wrong for SDL.
+- It works on Emscripten's GLES2 `SDL_Renderer` (and on SDL's software renderer) once the guards and `find_package(OpenGL)` are dropped (brief 09; the smoke test plays through both). It needs SDL_image's **BMP** loader as well as PNG: the player-select page's faces are BMP files, loaded through `IMG_LoadTyped_RW`.
+- **Its clipping was wrong, in three ways, and is fixed (brief 09).** (1) `SetScissorRegion` flipped Y the way GL's `glScissor` needs; RmlUi's origin is the top left and so is SDL's, so the flip was wrong. (2) The rectangle was only stored by `SetScissorRegion` and applied by `EnableScissorRegion`, but RmlUi calls Enable first and Set second, so each clipped element was drawn with the previous element's rectangle. (3) `RenderGeometry` translated by setting the renderer's viewport to the element's origin, and SDL takes a clip rectangle relative to the viewport (its GL and GLES2 renderers also do not re-apply the clip when only the viewport changes), so the clip moved with each draw. The shipped menus never showed it because every clipped `.strip` was big enough to contain its content wherever the clip landed; giving `.strip` a fixed `height` makes the content vanish. Now the vertices are translated on the CPU (whole pixels, as before), the rectangle is applied when set, and there is no flip.
 
 **Game renderer**
 
@@ -291,18 +293,21 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
 - Sounds are triggered from sim code: entity constructors, `explode`, collisions.
 - `MickBaseSound::getInstance()` returns the installed backend (`setBaseInstance`, called by `MickSDLSound` and the test `NullSound`) or, since brief 03b, a built-in silent one, so it is never null and `bitriot_sim` does not link SDL_mixer. A backend that is destroyed unregisters itself.
 
+- **On the web (brief 09):** the page starts the game from its "Click to start" button (`Module.callMain` inside the click handler), so `Mix_OpenAudio` runs while the page may make sound and the `AudioContext` is created running; SDL's own Emscripten audio would also resume a suspended context on the first gesture. If `Mix_OpenAudio` fails there, the game logs a warning and plays on silently (natively it still throws). `MickSDLSound::soundsPlayed()` counts accepted `Mix_PlayChannel` calls, for the smoke test. SDL_mixer is built with no formats (`-sSDL2_MIXER_FORMATS=[]`): WAV only, no ogg or vorbis.
+
 **Threads:** none.
 
 **Filesystem**
 
 - All paths are relative to the cwd: `data/*.txt`, `assets/...`, and the RmlUi root `assets/menu/`.
-- Nothing is ever written, so the WASM build needs no IDBFS. `--preload-file data --preload-file assets` should suffice.
+- Nothing is ever written, so the WASM build needs no IDBFS. The web build preloads `data@/data` and `assets@/assets` (about 4.2 MB packed) and runs with the working directory at `/`; that is all it needs (brief 09, checked).
 
 **RmlUi version**
 
 - 4.3 (the submodule, and `scripts/cloud-setup.sh`). The 4.3 tree has no `Backends/`.
 - RmlUi 5.x is believed to ship SDL backends; unverified. The TODO lists "bump RmlUi" as its top item.
 - FindRmlUi requires RmlDebugger, which is used when `!NDEBUG`.
+- **The web build compiles RmlUi from the submodule** (`cmake/EmscriptenGame.cmake`, from RmlUi's own `CMake/FileList.cmake`, with the FreeType port), not through RmlUi's CMakeLists: that file declares `cmake_minimum_required(VERSION 3.1)`, which CMake 4 refuses. Both libraries are built; the linker drops RmlDebugger in a Release build.
 
 ## 10. Harness capabilities for determinism testing
 
@@ -333,7 +338,7 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
   - *Fixed by brief 01:* `Map` has a generation counter bumped by every `init()`. `BlockEntity` remembers the generation it was placed in and its destructor skips the write if the map has since been rebuilt.
 - **ESC/quit** is local: a flag (`InputHandler::quitRequested()`, set by `GameRunningSDLInput`), no longer an exception. `GameEngine::stepTick` reads it, still runs the tick (with that tick's input applied, which the old exception skipped) and flips this machine to the scoreboard; `renderFrame()` also checks it on a frame that ran no tick.
 - **`GameSettings::setNumberOfPlayers`** keeps existing slots. `InputHandler::setPointers` writes keyboard assignments back into `GameSettings` (InputHandler.cpp:106).
-- **Debug logging** is compiled in by default (the default build type is Debug), and `MickLogger` writes debug output to `cout` every frame.
+- **Debug logging** is compiled in by default (the default build type is Debug), and `MickLogger` writes debug output to `cout` every frame. The Release web build (the default for `emcmake`) has `NDEBUG`, so it prints info and above, which is the brief's "default to info level on web"; a Debug web build still logs debug lines.
 - **`Map::~Map`** uses `delete` rather than `delete[]` (Map.cpp:122).
 
 ## 12. Further facts (from the brief review)
@@ -364,7 +369,7 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
 
 **`InputHandler::setPointers`** (~:21-129) gives keyboard sets to every human slot (by `attachedKeyboardId`, seeding the lowest free set), and writes those assignments back into `GameSettings`. It also clears the sampler. Brief 07 must exclude remote humans from this assignment.
 
-**`MickSDLRenderer` throws pointers.** It does `throw new runtime_error(msg)` (MickSDLRenderer.cpp:35-143), so `catch (const exception&)` never catches them, and a renderer-init failure aborts without a useful message.
+**`MickSDLRenderer` threw pointers** *(fixed by brief 09)*. It did `throw new runtime_error(msg)`, so `catch (const exception&)` never caught them and a renderer-init failure aborted without a message. It throws by value now (`main()` logs the message, and on the web shows it on the page), falls back to `SDL_HINT_RENDER_DRIVER=software` if no accelerated renderer can be made, and `MickSDLRenderer::getInstanceIfCreated()` lets the teardown cope with a renderer that was never made. (A browser with no WebGL needs no fallback from us: `SDL_CreateRenderer(-1)` already ends at the software driver, which the smoke test checks.)
 
 **The scoreboard's "Play Again"** (assets/menu/scoreboard.rml ~:34) sets `GAME_INIT` locally (EventManager.cpp ~:114).
 

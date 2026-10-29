@@ -31,10 +31,7 @@
 #include <RmlUi/Core/RenderInterface.h>
 
 #include <SDL.h>
-
-#if !(SDL_VIDEO_OPENGL)
-    #error "Only the opengl sdl backend is supported."
-#endif
+#include <vector>
 
 
 class RmlUiSDL2Renderer : public Rml::RenderInterface
@@ -63,6 +60,10 @@ private:
     int mRenderer_h;
     SDL_Window* mScreen;
     SDL_Rect mRectScisor;
+    bool mScissorEnabled = false;
+    void ApplyScissor();
+    // RenderGeometry's copy of the vertices with the translation added (reused).
+    std::vector<Rml::Vertex> m_translated;
 };
 
 #endif

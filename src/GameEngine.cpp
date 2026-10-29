@@ -175,6 +175,33 @@ void GameEngine::finishRecording()
   m_recorder.reset();
 }
 
+bool GameEngine::startAllAiMatch(int numPlayers)
+{
+  GameSettings* settings = GameSettings::getInstance();
+  if (numPlayers < GameSettings::MIN_PLAYERS || numPlayers > GameSettings::MAX_PLAYERS || !menuSystem
+      || settings->getGameState() != GameSettings::MENU_RUNNING)
+  {
+    return false;
+  }
+  // Everything is checked above, so nothing has been changed if we returned false.
+  // Five or six players need a taller map than the default 13 tiles to show all
+  // their portraits (the player-select page refuses to start otherwise); raise the
+  // height rather than refuse. With every slot a CPU player nothing else can stop
+  // the game starting.
+  settings->setNumberOfPlayers(numPlayers);
+  for (int i = 0; i < numPlayers; i++)
+  {
+    settings->setPlayerAI(i, true);
+  }
+  if (settings->getMapHeight() < settings->requiredMapHeightFor(numPlayers))
+  {
+    settings->setMapHeight(settings->requiredMapHeightFor(numPlayers));
+  }
+  menuSystem->closeAllMenus();
+  settings->setGameState(GameSettings::GAME_INIT);
+  return true;
+}
+
 int GameEngine::gameLengthSeconds() const
 {
   return (int) ((m_sim.tick() * GameSettings::NORMAL_TICKS_SPEED) / 1000);

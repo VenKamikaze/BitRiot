@@ -68,6 +68,4 @@ Screenshot_*.png
 # NOTE: ext/RmlUi is a submodule and is deliberately NOT ignored. Its pointer is
 # kept out of commits by staging paths explicitly, so it stays visible in
 # `git status` rather than being silently hidden.
-
-# --- Emscripten SDK (scripts/setup-emsdk.sh) ---
-.emsdk/
+.emsdk
