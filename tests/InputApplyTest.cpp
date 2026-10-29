@@ -544,16 +544,6 @@ TEST_F(InputApplyTest, ASlotOutsideTheRangeIsRefused)
   EXPECT_NO_THROW(sim().inputState(std::GameSettings::MAX_PLAYERS - 1));
 }
 
-TEST_F(InputApplyTest, ControlEventsAreNotSupportedYetAndAreNotSilentlyDropped)
-{
-  startHumans();
-  TickInputs inputs;
-  inputs.control.push_back(ControlEvent());
-  const uint64_t tickBefore = sim().tick();
-  EXPECT_THROW(sim().step(inputs), std::logic_error);
-  EXPECT_EQ(sim().tick(), tickBefore) << "a refused step does nothing";
-}
-
 TEST_F(InputApplyTest, SteppingWithoutInputsIsSteppingWithEmptyInputs)
 {
   MatchConfig config;

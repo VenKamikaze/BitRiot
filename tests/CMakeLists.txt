@@ -31,6 +31,7 @@ set(SIM_TEST_SOURCES
   SimLibraryTest.cpp
   MapTest.cpp
   InputApplyTest.cpp
+  ControlEventTest.cpp
 )
 
 set(CORE_TEST_SOURCES

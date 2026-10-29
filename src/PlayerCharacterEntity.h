@@ -64,9 +64,6 @@ class PlayerCharacterEntity : public GameEntity
       this->alive = alive;
     }
 
-    int attachedController=-1;
-    bool m_controlledByAI;
-
   protected:
     virtual void hashExtraState(StateHasher& h) const;
 
@@ -159,6 +156,28 @@ class PlayerCharacterEntity : public GameEntity
     void clearGoalsAndInstructions(); // wipes m_insList and m_goalList
 
   private:
+    // The Simulation applies control events (TickInputs.h) and reads the hit flag;
+    // nothing else changes who controls a player or sees the flag.
+    friend class Simulation;
+
+    // Brief 04b: whether a bot or a human controls this player. Written by the
+    // constructor and by applyControl(), which only Simulation::step() calls, when it
+    // applies a ControlEvent. (Which device drives a human is not here: it is the
+    // input layer's, and does not exist in bitriot_sim.)
+    bool m_controlledByAI = false;
+
+    // Hands the player to a human (toAI false) or back to the AI (toAI true) and
+    // clears the AI's plans: its goal and instruction lists go on both transitions, so
+    // a bot never resumes a plan made before it was a human, and a taken-over bot does
+    // not keep a stale one. Does nothing, and returns false, if it would not change
+    // who controls the player.
+    bool applyControl(bool toAI);
+
+    // Set when onCollision damages this player; the Simulation collects it after each
+    // step (hitThisTick) and clears it before the next. Not hashed: it is an output of
+    // the tick, derived from health, which is.
+    bool m_hitThisTick = false;
+
     bool alive;
 };
 

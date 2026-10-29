@@ -103,6 +103,7 @@ void GameEngine::resetGame()
   m_pPlayers.resize(numPlayers);
 
   m_pPanel = new InfoPanel(m_surface, numPlayers, genders);
+  m_pPanel->setSimulation(&m_sim); // the HUD reads each slot's selection from the sim
   GameRunningSDLInput::getInstance()->resetInputEvents();
   initPlayerCharacters(numPlayers, genders);
   m_pInputHandler->setPointers(m_pPlayers, m_pPanel);
@@ -168,7 +169,8 @@ void GameEngine::stepTick()
   // pool and runFrame. The round is over only once this whole step has run.
   m_sim.step(m_pInputHandler->sampleTick());
   m_ticksThisFrame++;
-  presentSelections();
+  // The sim only records who was hit this tick; the local layer buzzes the pads.
+  m_pInputHandler->rumbleForHits(m_sim);
 
   if (m_sim.roundOver())
   {
@@ -179,24 +181,6 @@ void GameEngine::stepTick()
   {
     m_roundEnding = true;
     m_scoreboardWinner = winnerAtQuit;
-  }
-}
-
-void GameEngine::presentSelections()
-{
-  // The HUD shows the item a held action has selected, taken from the sim's per-slot
-  // state (the InputHandler no longer holds it). Nothing is shown while no action is
-  // held (PLAYER_CHARACTER is the "no selection" marker).
-  if (!m_pPanel)
-  {
-    return;
-  }
-  const int slots = (int) m_pPlayers.size() < std::GameSettings::MAX_PLAYERS ? (int) m_pPlayers.size()
-                                                                              : std::GameSettings::MAX_PLAYERS;
-  for (int slot = 0; slot < slots; slot++)
-  {
-    const Simulation::SlotInputState& st = m_sim.inputState(slot);
-    m_pPanel->setSelection((st.action1Down || st.action2Down) ? st.spawnSelection : PLAYER_CHARACTER, slot + 1);
   }
 }
 
@@ -311,16 +295,8 @@ void GameEngine::initPlayerCharacters(unsigned int numPlayers, std::vector<bool>
     }
     m_pPlayers.at(i - 1) = m_sim.entityManager().getPlayerPointer(i);
 
-    // Phase 2.3: seed the live entity from the canonical menu-intent model.
-    // Entities are 1-based (uniqueID == i); the canonical model is 0-based, so
-    // player i maps to getPlayer(i - 1). For keyboard-only play this writes the
-    // default -1 (no-op); the menu controller-join choice only becomes visible
-    // here once a gamepad is attached. NOTE: until 2.4 switches InputHandler to
-    // keyboard-by-id, a controller player is still non-AI so setPointers also
-    // pops a keyset for them -> they respond to both pad and keyboard. Benign
-    // (distinct key sets, no collision); 2.4 closes it.
-    Player* setup = GameSettings::getInstance()->getPlayer(i - 1);
-    m_pPlayers.at(i - 1)->attachedController = setup->attachedControllerId;
+    // Which pad or keyboard set drives each slot is seeded from the canonical menu
+    // model by InputHandler::setPointers (it is the input layer's, not the entity's).
 
     // set image filename with "extension"
     stringstream ss;

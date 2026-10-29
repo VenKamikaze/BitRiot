@@ -337,11 +337,12 @@ class InputHandlerRoutingTest : public HeadlessGameTest
 {
   protected:
     // Three players: slots 0 and 1 human on keyboard sets (WASD and arrows), slot 2 a bot.
-    void startRoundWithTwoKeyboardPlayers()
+    void startRoundWithTwoKeyboardPlayers(int padOnSlot1 = -1)
     {
       configurePlayers(3);
       std::GameSettings::getInstance()->setPlayerAI(0, false);
       std::GameSettings::getInstance()->setPlayerAI(1, false);
+      std::GameSettings::getInstance()->setPlayerController(1, padOnSlot1);
       std::GameSettings::getInstance()->setNpcSpawnerEnabled(false);
       startRound();
       std::vector<std::shared_ptr<PlayerCharacterEntity>> players = {player(1), player(2), player(3)};
@@ -413,8 +414,7 @@ TEST_F(InputHandlerRoutingTest, ABotsSlotIsNotSampledEvenIfSomethingPressesItsBu
 
 TEST_F(InputHandlerRoutingTest, APadDrivesTheSlotItIsAttachedToAndTheKeyboardStopsDrivingIt)
 {
-  startRoundWithTwoKeyboardPlayers();
-  player(2)->attachedController = 4; // slot 1 now has a pad
+  startRoundWithTwoKeyboardPlayers(/*padOnSlot1=*/4); // slot 1 has a pad
   m_handler->keyboardEvent(KEY_UP, true);
   EXPECT_EQ(m_handler->sampleTick().slot[1].bits, 0) << "a player with a pad does not answer to the keyboard set";
   m_handler->keyboardEvent(KEY_UP, false);

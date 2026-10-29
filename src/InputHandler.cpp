@@ -2,14 +2,35 @@
 #include "EntityEnum.h"
 #include "GameSettings.h"
 #include "MickBaseInput.h"
+#include "MickSDLUtil.h"
 #include "PlayerCharacterEntity.h"
+#include "Simulation.h"
 #include <memory>
 #include <set>
 #include <utility>
 
 
+namespace
+{
+// The game's rumble: SDL haptics. (A hit rumbles at half strength for 200 ms.)
+class SdlControllerRumble : public ControllerRumble
+{
+  public:
+    void rumble(int controllerId, float strength, unsigned durationMs) override
+    {
+      MickSDLUtil::rumbleController(controllerId, strength, durationMs);
+    }
+};
+SdlControllerRumble s_sdlRumble;
+
+const float HIT_RUMBLE_STRENGTH = 0.5f;
+const unsigned HIT_RUMBLE_MS = 200;
+} // namespace
+
 InputHandler::InputHandler()
 {
+  m_slotController.fill(-1);
+  m_rumble = &s_sdlRumble;
   setAvailableKeys();
 }
 
@@ -27,6 +48,9 @@ void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerC
 
   m_keyMap.clear();
   m_sampler.clear(); // a new round starts with every button up and no edge pending
+  m_pendingControl.clear();
+  m_slotController.fill(-1);
+  m_localSlots = 0;
   // Phase 2.7: each game starts with no in-progress join selectors. The
   // InfoPanel is recreated per game so its indicators reset alongside.
   m_pendingJoins.clear();
@@ -58,17 +82,29 @@ void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerC
     // here). The canonical model in GameSettings is indexed by the same slot.
     const int slot = player->getPlayerNumber() - 1;
     const int canonicalIndex = slot;
+    if (slot < 0 || slot >= std::GameSettings::MAX_PLAYERS)
+    {
+      continue;
+    }
+
+    // Which pad drives the slot is the menu's choice (the canonical model); from here
+    // on it is this class's own mapping (brief 04b), changed by takeovers and unplugs.
+    Player * setup = settings->getPlayer(canonicalIndex);
+    m_slotController[slot] = setup->attachedControllerId;
+    if (!player->isControlledByAI())
+    {
+      m_localSlots |= (1u << slot); // every human is local today
+    }
 
     // Keyboard sets go only to human players without a controller: AI players
     // are never driven by the keyboard, and controller players use the pad.
-    if(player->isControlledByAI() || player->attachedController != -1)
+    if(player->isControlledByAI() || m_slotController[slot] != -1)
     {
       continue;
     }
 
     // Phase 2.4: assign the keyboard set by the stored attachedKeyboardId
     // (0-based index into the four fixed sets) instead of popping a pool.
-    Player * setup = settings->getPlayer(canonicalIndex);
     int keyboardSetIndex = setup->attachedKeyboardId;
 
     // Mandatory default seeding: a human keyboard player with no stored set
@@ -103,11 +139,7 @@ void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerC
       // keyboard player. Show a persistent (player-coloured) keyboard badge so
       // the InfoPanel indicates who is on keyboard - same JOIN_READY state a
       // mid-game keyboard takeover ends in.
-      if (p_infoPanel)
-      {
-        p_infoPanel->setJoinIndicator(player->getPlayerNumber(), InfoPanel::JOIN_READY,
-          InfoPanel::JOIN_DEVICE_KEYBOARD);
-      }
+      setJoinIndicator(player->getPlayerNumber(), InfoPanel::JOIN_READY, InfoPanel::JOIN_DEVICE_KEYBOARD);
     }
     else
     {
@@ -157,14 +189,53 @@ void InputHandler::setAvailableKeys()
 
 shared_ptr<PlayerCharacterEntity> InputHandler::getPlayerAttachedToController(int controllerId)
 {
-  for(const auto& player : p_players)
+  if (controllerId < 0)
   {
-    if(player && player->attachedController == controllerId)
+    return nullptr;
+  }
+  for (int slot = 0; slot < (int) p_players.size() && slot < std::GameSettings::MAX_PLAYERS; slot++)
+  {
+    if (p_players.at(slot) && m_slotController[slot] == controllerId)
     {
-      return player;
+      return p_players.at(slot);
     }
   }
   return nullptr;
+}
+
+int InputHandler::controllerForSlot(int slot) const
+{
+  return (slot >= 0 && slot < std::GameSettings::MAX_PLAYERS) ? m_slotController[slot] : -1;
+}
+
+bool InputHandler::isLocalSlot(int slot) const
+{
+  return slot >= 0 && slot < std::GameSettings::MAX_PLAYERS && (m_localSlots & (1u << slot)) != 0;
+}
+
+void InputHandler::setJoinIndicator(int team, InfoPanel::JoinState state, InfoPanel::JoinDevice device)
+{
+  if (p_infoPanel)
+  {
+    setJoinIndicator(team, state, device);
+  }
+}
+
+void InputHandler::setRumble(ControllerRumble* rumble)
+{
+  m_rumble = rumble ? rumble : &s_sdlRumble;
+}
+
+void InputHandler::rumbleForHits(const Simulation& sim)
+{
+  for (int slot = 0; slot < (int) p_players.size() && slot < std::GameSettings::MAX_PLAYERS; slot++)
+  {
+    const shared_ptr<PlayerCharacterEntity>& player = p_players.at(slot);
+    if (player && !player->isControlledByAI() && m_slotController[slot] != -1 && sim.hitThisTick(slot))
+    {
+      m_rumble->rumble(m_slotController[slot], HIT_RUMBLE_STRENGTH, HIT_RUMBLE_MS);
+    }
+  }
 }
 
 shared_ptr<PlayerCharacterEntity> InputHandler::findPlayerByTeam(int team)
@@ -178,17 +249,21 @@ shared_ptr<PlayerCharacterEntity> InputHandler::findPlayerByTeam(int team)
   return nullptr;
 }
 
-// Take over the chosen 1-based slot with a controller (Phase 2.7). Live entity
-// only - NOT the canonical model (GameSettings), which is the menu seed the next
-// round re-seeds from, so a mid-game hot-join must not persist into "Play again".
+// Take over the chosen 1-based slot with a controller (Phase 2.7). This layer's
+// own mapping only - NOT the canonical model (GameSettings), which is the menu seed
+// the next round re-seeds from, so a mid-game hot-join must not persist into "Play
+// again". Whether the slot is a human or a bot is the simulation's, and changes only
+// when it applies the HUMAN_TAKES_OVER event this queues (brief 04b).
 void InputHandler::takeOverSlotWithController(int team, int controllerId)
 {
   shared_ptr<PlayerCharacterEntity> player = findPlayerByTeam(team);
   if (player)
   {
-    player->attachedController = controllerId;
-    player->m_controlledByAI = false; // FIXME duplication as we already have a playerAI flag in gamesettings...
-    m_sampler.clearSlot(player->getPlayerNumber() - 1); // nothing the slot's last device left behind
+    const int slot = player->getPlayerNumber() - 1;
+    m_slotController[slot] = controllerId;
+    m_localSlots |= (1u << slot);
+    m_sampler.clearSlot(slot); // nothing the slot's last device left behind
+    m_pendingControl.push_back(ControlEvent(slot, ControlEvent::HUMAN_TAKES_OVER));
     MickLogger::getInstance()->debug(this, string("Controller ").append(to_string(controllerId))
       .append(" took over player slot: ").append(to_string(team)));
   }
@@ -196,18 +271,19 @@ void InputHandler::takeOverSlotWithController(int team, int controllerId)
 
 // Take over the chosen 1-based slot with a keyboard set (Phase 2.7). Giving the
 // (ex-AI) entity a keyMap entry is what makes it respond to that keyboard set;
-// the sampler then reads it like any other human keyboard player. (The simulation
-// keeps the per-slot action state for every slot, AI included.) Live entity only -
-// see above.
+// the sampler then reads it like any other human keyboard player. Local mapping
+// only, and a HUMAN_TAKES_OVER event for the simulation - see above.
 void InputHandler::takeOverSlotWithKeyboard(int team, int keyboardSetIndex)
 {
   shared_ptr<PlayerCharacterEntity> player = findPlayerByTeam(team);
   if (player && keyboardSetIndex >= 0 && keyboardSetIndex < (int) m_availableKeySets.size())
   {
-    player->attachedController = -1;
-    player->m_controlledByAI = false;
-    m_keyMap[player->getPlayerNumber() - 1] = m_availableKeySets.at(keyboardSetIndex);
-    m_sampler.clearSlot(player->getPlayerNumber() - 1);
+    const int slot = player->getPlayerNumber() - 1;
+    m_slotController[slot] = -1;
+    m_keyMap[slot] = m_availableKeySets.at(keyboardSetIndex);
+    m_localSlots |= (1u << slot);
+    m_sampler.clearSlot(slot);
+    m_pendingControl.push_back(ControlEvent(slot, ControlEvent::HUMAN_TAKES_OVER));
     MickLogger::getInstance()->debug(this, string("Keyboard set ").append(to_string(keyboardSetIndex))
       .append(" took over player slot: ").append(to_string(team)));
   }
@@ -226,18 +302,23 @@ int InputHandler::findPendingJoinIndex(bool isController, int deviceId)
 }
 
 // 1-based slots of players that can still be taken over: alive, AI-controlled,
-// no controller attached, and not already highlighted by a different joiner.
+// no controller attached, not already claimed by a takeover that the simulation has
+// not applied yet, and not already highlighted by a different joiner.
 // The joiner at excludePendingIndex keeps its own current target in the list.
 vector<int> InputHandler::getTakeableSlots(int excludePendingIndex)
 {
   vector<int> slots;
   for (const auto& player : p_players)
   {
-    if (!player || !player->isAlive() || !player->isControlledByAI() || player->attachedController != -1)
+    if (!player || !player->isAlive() || !player->isControlledByAI())
     {
       continue;
     }
     int team = player->getPlayerNumber();
+    if (isLocalSlot(team - 1) || controllerForSlot(team - 1) != -1)
+    {
+      continue;
+    }
 
     bool targetedByOther = false;
     for (int i = 0; i < (int) m_pendingJoins.size(); i++)
@@ -272,7 +353,7 @@ bool InputHandler::openJoin(bool isController, int deviceId)
   pj.targetSlot = slots.front();
   m_pendingJoins.push_back(pj);
 
-  p_infoPanel->setJoinIndicator(pj.targetSlot, InfoPanel::JOIN_NOTREADY,
+  setJoinIndicator(pj.targetSlot, InfoPanel::JOIN_NOTREADY,
     pj.isController ? InfoPanel::JOIN_DEVICE_CONTROLLER : InfoPanel::JOIN_DEVICE_KEYBOARD);
   MickLogger::getInstance()->debug(this, string("Join selector opened on slot ").append(to_string(pj.targetSlot)));
   return true;
@@ -306,9 +387,9 @@ void InputHandler::navigateJoin(int pendingIndex, int direction)
   int newSlot = slots.at(next);
   if (newSlot != pj.targetSlot)
   {
-    p_infoPanel->setJoinIndicator(pj.targetSlot, InfoPanel::JOIN_NONE);
+    setJoinIndicator(pj.targetSlot, InfoPanel::JOIN_NONE);
     pj.targetSlot = newSlot;
-    p_infoPanel->setJoinIndicator(pj.targetSlot, InfoPanel::JOIN_NOTREADY,
+    setJoinIndicator(pj.targetSlot, InfoPanel::JOIN_NOTREADY,
       pj.isController ? InfoPanel::JOIN_DEVICE_CONTROLLER : InfoPanel::JOIN_DEVICE_KEYBOARD);
   }
 }
@@ -341,13 +422,13 @@ void InputHandler::confirmJoin(int pendingIndex)
     {
       takeOverSlotWithKeyboard(pj.targetSlot, pj.deviceId);
     }
-    p_infoPanel->setJoinIndicator(pj.targetSlot, InfoPanel::JOIN_READY,
+    setJoinIndicator(pj.targetSlot, InfoPanel::JOIN_READY,
       pj.isController ? InfoPanel::JOIN_DEVICE_CONTROLLER : InfoPanel::JOIN_DEVICE_KEYBOARD);
   }
   else
   {
     // target no longer valid - drop the indicator, no takeover
-    p_infoPanel->setJoinIndicator(pj.targetSlot, InfoPanel::JOIN_NONE);
+    setJoinIndicator(pj.targetSlot, InfoPanel::JOIN_NONE);
   }
 
   m_pendingJoins.erase(m_pendingJoins.begin() + pendingIndex);
@@ -359,7 +440,7 @@ void InputHandler::cancelJoin(int pendingIndex)
   {
     return;
   }
-  p_infoPanel->setJoinIndicator(m_pendingJoins.at(pendingIndex).targetSlot, InfoPanel::JOIN_NONE);
+  setJoinIndicator(m_pendingJoins.at(pendingIndex).targetSlot, InfoPanel::JOIN_NONE);
   m_pendingJoins.erase(m_pendingJoins.begin() + pendingIndex);
 }
 
@@ -453,19 +534,22 @@ bool InputHandler::processJoinControllerEvent(int controllerId, Uint8 button)
 
 void InputHandler::detachController(int controllerId)
 {
-  for(const auto& player : p_players)
+  if (controllerId < 0)
   {
-    if(player && player->isAlive() && player->attachedController == controllerId)
+    return;
+  }
+  for (int slot = 0; slot < (int) p_players.size() && slot < std::GameSettings::MAX_PLAYERS; slot++)
+  {
+    const shared_ptr<PlayerCharacterEntity>& player = p_players.at(slot);
+    if (player && player->isAlive() && m_slotController[slot] == controllerId)
     {
       MickLogger::getInstance()->debug(this, string("Detached controller from player: ").append(to_string(player->getPlayerNumber())));
-      player->attachedController = -1;
+      m_slotController[slot] = -1;
       // Phase 2.6: on unplug, only a player WITHOUT a keymap should revert to CPU.
       // A controller take-over (now via the Phase 2.7 selector, AI-only) leaves
-      // the entity with no m_keyMap entry, so on unplug it would be
-      // attachedController==-1 AND non-AI -> not skipped by the sampler
-      // but has no keys -> frozen. Reverting it to AI lets
-      // PlayerCharacterEntity::update() resume the bot (self-heals empty
-      // goal/instruction lists; keys off the flag at PlayerCharacterEntity.cpp:68).
+      // the entity with no m_keyMap entry, so on unplug it would be a human with
+      // no pad and no keys -> frozen. Reverting it to AI lets
+      // PlayerCharacterEntity::update() resume the bot.
       // The m_keyMap-presence guard is kept as defensive code: 2.7 takes over AI
       // slots only (getTakeableSlots filters isControlledByAI), so a controller can
       // no longer hijack a human keyboard player - but should that ever change, a
@@ -473,11 +557,15 @@ void InputHandler::detachController(int controllerId)
       // We deliberately do NOT write the canonical model (GameSettings): it is the
       // menu seed the next round re-seeds from, so a mid-game hot-join must not
       // persist into the next "Play again".
-      if (m_keyMap.find(player->getPlayerNumber() - 1) == m_keyMap.end())
+      //
+      // Brief 04b: the slot stops being local here and now, and the simulation is told
+      // with a RETURN_TO_AI event, which it applies at the start of the next tick.
+      if (m_keyMap.find(slot) == m_keyMap.end())
       {
-        player->m_controlledByAI = true;
+        m_localSlots &= ~(1u << slot);
+        m_pendingControl.push_back(ControlEvent(slot, ControlEvent::RETURN_TO_AI));
       }
-      m_sampler.clearSlot(player->getPlayerNumber() - 1); // a pad that is gone holds no button down
+      m_sampler.clearSlot(slot); // a pad that is gone holds no button down
     }
   }
 }
@@ -490,18 +578,14 @@ void InputHandler::setControllerButtonState(int slot, ButtonName button, bool do
 
 void InputHandler::keyboardEvent(KEY k, bool down)
 {
-  // A key of a keyboard set that drives a live human keyboard player. The old
-  // per-tick pass skipped AI players and players with a pad attached (the pad
-  // drives those), and so does this.
+  // A key of a keyboard set that drives a human keyboard player. The old per-tick
+  // pass skipped AI players and players with a pad attached (the pad drives those),
+  // and so does this - by this layer's own view, not the simulation's, so a takeover
+  // is routed from the moment it is produced.
   for (const auto& entry : m_keyMap)
   {
     const int slot = entry.first;
-    if (slot < 0 || slot >= (int) p_players.size())
-    {
-      continue;
-    }
-    const shared_ptr<PlayerCharacterEntity>& player = p_players.at(slot);
-    if (!player || player->isControlledByAI() || player->attachedController != -1)
+    if (!isLocalSlot(slot) || m_slotController[slot] != -1)
     {
       continue;
     }
@@ -529,18 +613,13 @@ bool InputHandler::quitRequested() const
 
 TickInputs InputHandler::sampleTick()
 {
-  // Every human slot is local today. (A pad or keyboard bound to nobody produces no
-  // events here at all, so a slot that is not driven samples as no buttons.)
-  uint32_t localSlots = 0;
-  for (int slot = 0; slot < (int) p_players.size() && slot < std::GameSettings::MAX_PLAYERS; slot++)
-  {
-    const shared_ptr<PlayerCharacterEntity>& player = p_players.at(slot);
-    if (player && !player->isControlledByAI())
-    {
-      localSlots |= (1u << slot);
-    }
-  }
-  return m_sampler.sampleTick(localSlots);
+  // The local slot mask is this layer's own: every slot a device here drives, the
+  // pending takeovers and unplugs included. (A pad or keyboard bound to nobody
+  // produces no events at all, so a slot that is not driven samples as no buttons.)
+  TickInputs inputs = m_sampler.sampleTick(m_localSlots & InputSampler::ALL_SLOTS);
+  inputs.control.swap(m_pendingControl);
+  m_pendingControl.clear();
+  return inputs;
 }
 
 

@@ -44,11 +44,14 @@
  * step(inputs) RUNS EXACTLY THIS, once per tick (tick n is the n-th step since start):
  *
  *   1. the tick counter becomes n;
- *   1b. the tick's control events (none until brief 04b; step() throws if given any)
- *      and then its human input: for each slot in order, that slot's PlayerInput is
- *      applied to its player (movement, item selection, placement), using the
- *      per-slot input state the sim keeps. The rules are the table at the top of
- *      TickInputs.h. Bits for a slot whose player is an AI, dead or missing are ignored;
+ *   1a. the hit flags of the last step are forgotten (hitThisTick);
+ *   1b. the tick's control events, in order (ControlEvent, TickInputs.h): a slot's
+ *      player becomes a human or a bot, its AI goals and instructions are cleared
+ *      and its per-slot input state is reset - and then its human input: for each
+ *      slot in order, that slot's PlayerInput is applied to its player (movement,
+ *      item selection, placement), using the per-slot input state the sim keeps. The
+ *      rules are the table at the top of TickInputs.h. Bits for a slot whose player
+ *      is an AI (as of after the events), dead or missing are ignored;
  *   2. TOP OF THE TICK: end = EntityManager::oneOrZeroPlayersRemain(pool can spawn
  *      more); over = GameOverTimer::advance(n, end). The first tick `end` holds
  *      starts a countdown of GameOverTimer::GAME_OVER_COUNTDOWN_TICKS (60) ticks;
@@ -58,7 +61,8 @@
  *   4. SpawningPool::update();
  *   5. EntityManager::runFrame() (bot/monster AI and movement, then the message
  *      queue, then collisions);
- *   6. if `over`: roundOver() becomes true.
+ *   6. if `over`: roundOver() becomes true;
+ *   7. the players damaged during the step are recorded: hitThisTick(slot).
  *
  * ROUND-END SEMANTICS. A round is over after the step on which step 2 said `over`
  * - after the whole step, not part-way through it: pool and runFrame still run on
@@ -173,7 +177,9 @@
  *   - the cosmetic RNG, absolute entity ids, the entity group and static/solid
  *     flags (all fixed by the type), data-file constants (velocity modifiers,
  *     hatch times, min/max delays) once they are in a hashed counter;
- *   - local-only choices: a player's attachedController, genders, portraits;
+ *   - local-only choices: genders, portraits (which device drives a slot is not in the
+ *     simulation at all since brief 04b);
+ *   - hitThisTick: an output of the step, derived from health, which is hashed;
  *   - derived or recorded results: the round roster, winner(), the block
  *     percentage after start() (its effect is in the map and entities);
  *   - the sampled input itself (PlayerInput bits): a tick's input is not state, it is
@@ -220,7 +226,9 @@ class Simulation
     void start(const MatchConfig& config);
 
     // One tick (see the top of this file). Throws std::logic_error if start() has
-    // not been called, or if `inputs` carries control events (brief 04b).
+    // not been called, and std::out_of_range / std::invalid_argument, before anything
+    // of the tick has happened, if `inputs.control` names a slot outside the round's
+    // players or an unknown kind.
     void step(const TickInputs& inputs);
     // A tick in which no human pressed anything.
     void step() { step(TickInputs()); }
@@ -279,6 +287,20 @@ class Simulation
     };
     const SlotInputState& inputState(int slot) const;
 
+    // The item slot's held action has selected, or PLAYER_CHARACTER (the "no
+    // selection" marker) while neither action is held. This is what the HUD shows:
+    // the InfoPanel reads it and nothing writes the HUD from the sim.
+    EntityType heldSelection(int slot) const;
+
+    // Whether the player of `slot` (playerNumber - 1) was damaged during the step that
+    // has just run: set by that step, cleared at the start of the next (so it is
+    // meaningful between two steps) and false after start(). The local layer
+    // rumbles the controller of every slot for which it is true; the simulation
+    // itself touches no device. Any player can be hit, bots included: whether a slot
+    // has a controller is not the simulation's business. Not part of the state hash
+    // (it follows from health, which is). Slot out of range: std::out_of_range.
+    bool hitThisTick(int slot) const;
+
     // Number of Simulation objects alive in this process (0 or 1).
     static int instancesAlive();
 
@@ -288,8 +310,13 @@ class Simulation
     void checkSingletonsAreFresh() const;
     void spawnPlayers();
     void seedBlocks();
+    void validateControlEvents(const std::vector<ControlEvent>& events) const;
+    void applyControlEvents(const std::vector<ControlEvent>& events);
     void applyInputs(const TickInputs& inputs);
     void applySlotInput(int slot, PlayerInput input);
+    std::shared_ptr<PlayerCharacterEntity> playerForSlot(int slot) const;
+    void clearHits();
+    void collectHits();
 
     std::unique_ptr<EntityManager> m_entityManager;
     std::unique_ptr<SpawningPool> m_spawningPool;
@@ -299,6 +326,7 @@ class Simulation
     uint64_t m_roundEndedAtTick = 0;
     std::shared_ptr<PlayerCharacterEntity> m_winner;
     std::array<SlotInputState, std::GameSettings::MAX_PLAYERS> m_slotInput;
+    std::array<bool, std::GameSettings::MAX_PLAYERS> m_hitThisTick{};
 };
 
 #endif /* _SIMULATION_H */

@@ -745,10 +745,10 @@ TEST_F(FixedPointSimTest, ARocketFiredByASpinnerExplodesInTheEnemyTileEvenIfTheE
 {
   configurePlayers(2);
   setMapSize(9, 9);
+  std::GameSettings::getInstance()->setPlayerAI(1, false); // a human nobody is steering: it stays put
   startRound();
   destroyPlayer(1);
   clearBlocks();
-  player(2)->m_controlledByAI = false; // a human nobody is steering: it stays put
   // stand it in the middle of the bottom row, with open floor beyond it, so a
   // rocket that missed its target would visibly fly on past
   const int targetX = 5, targetY = 7;
