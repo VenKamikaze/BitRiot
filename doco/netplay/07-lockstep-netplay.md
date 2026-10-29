@@ -4,7 +4,7 @@
 - **Branch:** `netplay/07-lockstep`
 - **Depends on:**
   - 05b: the determinism gate passed; `bitriot_headless`, the record format, the data hash and the build id (all from 05)
-  - 06: vnet with native UDP, loopback and impairment
+  - 06: vnet with native UDP, loopback and impairment; 14 (vnet 0.4.0): `vnet_set_impair`, burst loss, `vnet_wait`, `vnet_resolve_host` and the integration guide
   - Q4 is answered: the online player cap stays at 6, the same as local play
 - **Status:** todo
 
@@ -22,6 +22,7 @@ This brief is native-only and driven from the command line. The lobby UI is brie
 - [`README.md`](README.md): decisions D1, D2, D5, D7 and D8.
 - The Outcome sections of briefs 03a–06. Use the APIs as they actually landed, especially `frame()`/`canStep()` (03b), the local slot mask (04a) and `ControlEvent`s (04b).
 - [`research/code-facts.md`](research/code-facts.md): §7 (settings to share) and §12 (scoreboard "Play Again", `setPointers`, `getopt`).
+- vnet's [`doco/integration.md`](https://github.com/VenKamikaze/vnet/blob/claude/doco/integration.md) (per-frame sequence, status states, what to do on `FAILED`, `VNET_EAGAIN` from `vnet_sendto` is a drop) and the follow-ups for 07 in vnet brief 14's Outcome.
 
 ## Design (settled; refine the details)
 
@@ -107,8 +108,8 @@ This brief is native-only and driven from the command line. The lobby UI is brie
 **Dependency.**
 
 - Pull in vnet as a submodule at `ext/vnet` or through `FetchContent` with `GIT_REPOSITORY`. Justify the choice.
-  - **vnet's state (Oct 2026):** briefs 06, 10 and 11 are merged on vnet's `claude` branch (version 0.3.0, merge 26f4b0f). vnet is released as tags `v0.1.0` (06), `v0.2.0` (10) and `v0.3.0` (11, commit b302029). Pin **`v0.3.0`**; check it exists with `git ls-remote --tags https://github.com/VenKamikaze/vnet`, and fall back to the commit hash if it doesn't.
-  - vnet APIs worth using: `vnet_time()` (one backend-independent clock: virtual on loopback, so `LockstepSession` tests never sleep), the loopback backend with seeded impairment, and `VNET_IMPAIR` with a distinct `seed=` per process. `vnet_resolve` takes `host:port` numerically (no DNS).
+  - **vnet's state (Oct 2026):** briefs 06, 10, 11 and 14 are merged on vnet's `claude` branch. Release tags: `v0.1.0` (06), `v0.2.0` (10), `v0.3.0` (11) and `v0.4.0` (14, commit eb1feeb). Pin **`v0.4.0`**; check it exists with `git ls-remote --tags https://github.com/VenKamikaze/vnet`. 0.4 is source-compatible with 0.3, not binary-compatible: build vnet with the game.
+  - vnet APIs worth using: `vnet_time()` (one backend-independent clock: virtual on loopback, so `LockstepSession` tests never sleep); the loopback backend with seeded impairment; `VNET_IMPAIR` with a distinct `seed=` per process, including burst loss (`burst=`, `blen=`) for blackout tests; `vnet_set_impair()` to change conditions mid-test (stall and catch-up, leave and timeout, host loss); `vnet_wait()` so `bitriot_headless` peers don't spin; and `vnet_resolve_host()` for `--join host:port` with a host name (it blocks: call it before the loop or on a worker). `vnet_resolve` itself takes `host:port` numerically (no DNS).
   - 03b's `FrameLoop` gives you `canStep()` (veto a tick) and `extraTicks()` (up to 2 extra ticks a frame, to catch up after a stall). Wrap `GameEngine`'s hooks, don't replace them; read 03b's Outcome follow-ups for 07.
 - Update `scripts/cloud-setup.sh` as needed. vnet is public, so no credentials are needed to fetch it.
 - Add a `BITRIOT_NETPLAY` CMake option: ON by default, and OFF on MinGW unless brief 06 verified that vnet builds there.
