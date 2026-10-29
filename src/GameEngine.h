@@ -44,6 +44,12 @@ class GameEngine
     // what lets renderFrame() skip a redraw when nothing happened and what lets a
     // held-back round still be quit with ESC.
     void pumpEvents();
+    // Forces the next renderFrame() to redraw the world and HUD even if no tick ran
+    // and no event was read. Call it when something drawn onto the CPU surface
+    // changes outside a tick (netplay's "waiting for <name>" overlay appearing,
+    // changing or going away); otherwise the overlay would be composited over the
+    // previous frame's text, or left behind.
+    void requestRedraw() { m_drawNeeded = true; }
     // One tick: applies human input, then Simulation::step(), and notes when that
     // tick ended the round (or ESC was seen). Does not draw.
     void stepTick();

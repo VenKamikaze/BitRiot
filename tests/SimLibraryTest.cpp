@@ -26,6 +26,7 @@
 #include <map>
 #include <regex>
 #include <unistd.h>
+#include <chrono>
 #include <set>
 #include <string>
 #include <vector>
@@ -451,28 +452,49 @@ struct SoundBackendRestorer
 // (a Debug build aborted the process).
 class NoAssetsTest : public HeadlessGameTest
 {
+  protected:
+    // The test changes the working directory and makes a directory under the system
+    // temp dir. TearDown() undoes both, so a failed ASSERT cannot leave the rest of
+    // the run in the wrong place. (An abort - the old portrait assert - cannot be
+    // cleaned up after; it leaves its bitriot_noassets_* directory behind.)
+    void TearDown() override
+    {
+      namespace fs = std::filesystem;
+      std::error_code ignored;
+      if (!m_original.empty())
+      {
+        fs::current_path(m_original, ignored);
+      }
+      if (!m_dir.empty())
+      {
+        fs::remove_all(m_dir, ignored);
+      }
+      HeadlessGameTest::TearDown();
+    }
+
+    // A directory holding a copy of data/ and nothing else, entered. A copy, not a
+    // symlink: creating a symlink needs privileges on Windows. The name is unique per
+    // process and per call (getpid() is a constant under Emscripten, so the clock
+    // goes in too).
+    void enterADirectoryWithOnlyData()
+    {
+      namespace fs = std::filesystem;
+      m_original = fs::current_path();
+      const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+      m_dir = fs::temp_directory_path() / ("bitriot_noassets_" + std::to_string((long) getpid()) + "_" + std::to_string((long long) stamp));
+      fs::create_directories(m_dir);
+      fs::copy(m_original / "data", m_dir / "data", fs::copy_options::recursive);
+      fs::current_path(m_dir);
+    }
+
+    std::filesystem::path m_original;
+    std::filesystem::path m_dir;
 };
 
 TEST_F(NoAssetsTest, TheSimulationRunsInADirectoryWithNoAssets)
 {
   namespace fs = std::filesystem;
-  const fs::path original = fs::current_path();
-  const fs::path dir = fs::temp_directory_path() / ("bitriot_noassets_" + std::to_string((long) getpid()));
-  fs::remove_all(dir);
-  fs::create_directories(dir);
-  fs::create_directory_symlink(original / "data", dir / "data");
-
-  struct Restore
-  {
-    fs::path original, dir;
-    ~Restore()
-    {
-      fs::current_path(original);
-      std::error_code ignored;
-      fs::remove_all(dir, ignored);
-    }
-  } restore{original, dir};
-  fs::current_path(dir);
+  enterADirectoryWithOnlyData();
   ASSERT_FALSE(fs::exists("assets"));
 
   for (int slot = 0; slot < 6; slot++)

@@ -40,7 +40,9 @@ working directory. Building any test target (or `BitRiot`) creates `data` and
 `data/entity.txt`, `player.txt` or `audio.txt` cannot be read, and **fails any test
 during which a `DataReader` lookup failed** (a missing constant or file answers `1`
 or `""` in the game, which used to make a wrong working directory look like a few
-odd failures).
+odd failures). The check lives in `HeadlessGameTest`, so a plain `TEST` (no fixture) is not covered by it.
+
+`NoAssetsTest` changes the working directory and makes a directory under the system temp dir holding a *copy* of `data/` (not a symlink, which needs privileges on Windows); its name includes the process id and the clock, because `getpid()` is constant under Emscripten. `TearDown()` restores the directory and removes the copy even if an assertion failed; only an abort (the old portrait `assert`) can leave a `bitriot_noassets_*` directory behind.
 
 ## How it works
 

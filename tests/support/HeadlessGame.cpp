@@ -7,6 +7,7 @@
 
 #include "AIGameView.h"
 #include "DataReader.h"
+#include <filesystem>
 #include <fstream>
 #include "EntityMessageQueue.h"
 #include "GameOverTimer.h"
@@ -60,7 +61,7 @@ void HeadlessEnvironment::SetUp()
     std::ifstream in(file);
     if (!in.good())
     {
-      std::cerr << "[bitriot] cannot read " << file << " from " << std::getenv("PWD")
+      std::cerr << "[bitriot] cannot read " << file << " from " << std::filesystem::current_path().string()
                 << ".\n[bitriot] Run the tests from the repository root, or from a build directory "
                    "that has the data/ link (building any test target creates it)." << std::endl;
       std::exit(2);
