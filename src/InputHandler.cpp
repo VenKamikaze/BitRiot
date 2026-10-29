@@ -40,7 +40,7 @@ InputHandler::~InputHandler()
 }
 
 void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerCharacters,
-                               InfoPanel * panel)
+                               JoinIndicatorView * panel)
 {
   //m_numPlayers = playerCharacters.size();
   p_players = playerCharacters;
@@ -213,11 +213,11 @@ bool InputHandler::isLocalSlot(int slot) const
   return slot >= 0 && slot < std::GameSettings::MAX_PLAYERS && (m_localSlots & (1u << slot)) != 0;
 }
 
-void InputHandler::setJoinIndicator(int team, InfoPanel::JoinState state, InfoPanel::JoinDevice device)
+void InputHandler::setJoinIndicator(int team, JoinIndicatorView::JoinState state, JoinIndicatorView::JoinDevice device)
 {
   if (p_infoPanel)
   {
-    setJoinIndicator(team, state, device);
+    p_infoPanel->setJoinIndicator(team, state, device);
   }
 }
 

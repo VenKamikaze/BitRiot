@@ -33,7 +33,8 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
     InputHandler();
     ~InputHandler();
 
-    void setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerCharacters, InfoPanel * panel);
+    // `panel` shows the join indicators (the InfoPanel in the game; nullptr or a recorder in tests).
+    void setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerCharacters, JoinIndicatorView * panel);
 
     // Reads pending device and window events into the sampler (every key and pad
     // button change of a driven slot, the quit key, a controller plug and the join
@@ -115,7 +116,7 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
 
   protected:
     vector<shared_ptr<PlayerCharacterEntity>> p_players; // pointers to player character entities
-    InfoPanel * p_infoPanel = nullptr;
+    JoinIndicatorView * p_infoPanel = nullptr;
     // The local half of input: what the devices did since the last tick. No game
     // state lives here any more (the held action and the selected item are the
     // simulation's, per slot; see Simulation::inputState).
@@ -131,8 +132,8 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
     ControllerRumble* m_rumble = nullptr;
 
   private:
-    void setJoinIndicator(int team, InfoPanel::JoinState state,
-                          InfoPanel::JoinDevice device = InfoPanel::JOIN_DEVICE_CONTROLLER); // no-op without a panel
+    void setJoinIndicator(int team, JoinIndicatorView::JoinState state,
+                          JoinIndicatorView::JoinDevice device = JoinIndicatorView::JOIN_DEVICE_CONTROLLER); // no-op without a panel
     void setAvailableKeys();
     vector<array<KEY, NUM_ACTION_BUTTONS>> m_availableKeySets; // fixed table of key sets, indexed by attachedKeyboardId (rebuilt each game).
 

@@ -228,7 +228,12 @@ void GameRunningSDLInput::updateEventQueue()
     {
       MickEvent myevent;
       myevent.type = A_KEY_IS_UP;
-      myevent.key  = reverseTranslateMap->find(event.key.keysym.sym)->second;
+      auto upIt = reverseTranslateMap->find(event.key.keysym.sym);
+      if (upIt == reverseTranslateMap->end())
+      {
+        continue; // unmapped key - nothing to do (as for a key down)
+      }
+      myevent.key  = upIt->second;
       //newEvents.push(myevent);
 
       setKeyState(myevent.key, false);

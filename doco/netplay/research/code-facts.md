@@ -194,6 +194,7 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 - **What changed from the old behaviour** (every other rule is the same, see TickInputs.h):
   1. *The same-tick tap.* A press and release inside one tick used to be lost; its release stayed pending and ended the next hold of that action on its first tick (the "stale release"). Now the tap places the default and releases are per tick.
   2. On a catch-up frame (several ticks owed) a release is reported on the first tick's sample only and not repeated, and a press-and-release between two samples is not lost (rule 1); the old code applied a release seen anywhere in the window on the first tick and lost a press-and-release entirely.
+  3. *Application order.* Humans are applied in slot order 0..n-1; the old `applyInput()` did keyboard humans first, then pad humans, so same-tick placements by a lower-slot pad human and a higher-slot keyboard human get their entity ids in the opposite order to before.
 - `GameRunningSDLInput`'s key sets (`keysCurrentlyDown` / `keysRecentlyReleased`, `isKeyDown`, `isKeyReleased`) are still maintained for the `MickBaseInput` interface, but nothing in gameplay reads them any more.
 
 **Sim state formerly in InputHandler** *(moved by 04a)*: `m_action1Down`, `m_action2Down` and `m_spawnSelection` were keyed by entity id; they are now `Simulation::SlotInputState` per slot, reset by `start()`, hashed.
