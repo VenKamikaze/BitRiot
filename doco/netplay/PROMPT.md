@@ -7,25 +7,37 @@ You are the **coordinator** for a multi-brief project across two repos:
 
 The goal is deterministic lockstep online multiplayer for Bit Riot, a browser (WASM) build, and vnet underneath both.
 
-## 0. Where things stand (hand-off, 29 Oct 2026)
+## 0. Where things stand (hand-off, 29 Oct 2026, second session)
 
 **Done and merged into `claude`:**
 
-- **BitRiot:** 01, 02, 02b, 03a and 03b. 02b, 03a and 03b are `done (play-test pending)`.
+- **BitRiot:** 01, 02, 02b, 03a, 03b, 04a, 04b and 05. 02b, 03a, 03b, 04a and 04b are `done (play-test pending)`; 05 is `done`.
+  - 04a (merge d899b57) and 04b (84f19b1) were merged unreviewed, then reviewed together. The review found one blocking bug, `InputHandler::setJoinIndicator` calling itself (a crash or hang at round start with a keyboard player, or on any join). It was fixed with a test on `netplay/04-review-fixes` (merge 0557976).
+  - 05 (merge 0c5c956) had one review and one fix round. That round bounded what a hostile record can make a reader allocate and range-checked the `--config` spec.
+  - Test counts on `claude`: `bitriot_tests` 513 and `bitriot_sim_tests` 408. Both pass on GCC Release, GCC Debug and Clang. The 200-seed sweep has 0 failures on both binaries.
 - **vnet:** 06, 10 and 11. The whole vnet track is complete: code merged at 26f4b0f, version 0.3.0, released as tag `v0.3.0` on b302029 (later commits are docs only).
+  - A design review is on vnet branch `docs/design-review` (5fea984), in `doco/design-review.md`. It makes 15 recommendations, none breaking. **R1 (high, before 12):** the relay client times out after a gap in `vnet_poll()` (a hidden tab or a sleeping laptop). It is not merged or acted on yet; that is the user's call.
 
 **Next ready, in parallel:**
 
-- **04a** (input sampling): starts the 04a → 04b → 05 → 05b → 07 → 08 chain. 04a, 04b and 05 use the **reduced review** policy (README, "Reduced review").
-- **09** (WASM port): needs only 03b.
+- **05b** (cross-platform determinism gate): normal review flow. It uses `bitriot_headless` and the golden record from 05.
+- **09** (WASM port): needs only 03b. Archive downloads from github.com still return 403 in the cloud session, so use the user's `emscripten-ports` branch (brief 09, "Ports").
 
-They touch different areas (input/sim vs `main.cpp`, CMake and renderers) but both may touch `CMakeLists.txt` and `GameEngine`. Give each its own worktree, merge one, then merge `claude` into the other before review. After those: 04b → 05 → 05b → 07 → 08, then 12 and 13.
+They touch different areas, but both may touch `CMakeLists.txt`. Give each its own worktree, merge one, then merge `claude` into the other before review. After those: 07 → 08, then 12 and 13.
 
-**In flight:** nothing. No branch has unmerged work.
+**In flight:** nothing. No branch has unmerged work, except vnet `docs/design-review` (docs only, awaiting the user).
+
+**Decisions taken while the user was away** (the coordinator's recommendations; the user may revisit them):
+
+- **`hitThisTick` is not in `stateHash()`.** The 04b brief asks for new per-slot state to be hashed. This flag is cleared each step and nothing in the sim reads it, so it cannot affect later ticks. The joint review agreed. Hashing it would move every digest for no gain.
+- **`Simulation::step()` throws on a malformed control event** (an out-of-range slot or an unknown kind). The netplay host must validate peers' events before it rebroadcasts them; this is in 04b's 07 follow-ups.
+- **The 05 build id is a hash of the sim source, not the git commit.** It is reproducible across checkout paths and line endings. `replay` enforces the data hash but only notes a build-id mismatch, so the golden record survives source edits that don't change behaviour. 07 should reject a build-id mismatch in `HELLO`.
+- **The record format's `MAX_TICKS` was lowered** from 4,194,304 to 1,048,576 ticks (about 9.6 hours at 33 ms per tick). A record also holds at most 24 control events per tick and 65,536 in total. This bounds the worst legal record at about 33 MB.
+- **05 ran in parallel with the 04 fix round,** then merged `claude` in before its review, to save wall time.
 
 **Waiting on the user** (ask about these; don't block on them):
 
-1. **Play-test** of 02b (fixed-point movement feel), 03a (round flow, scoreboard) and 03b (frame loop, catch-up, rumble). One session on `claude` covers all three; the Arch commands are in 02b's and 03b's Outcomes. Record the result in each Outcome.
+1. **Play-test** of 02b (fixed-point movement feel), 03a (round flow, scoreboard), 03b (frame loop, catch-up, rumble), 04a (keyboard and controller feel, the same-tick tap fix) and 04b (join, keyboard takeover, controller unplug, rumble). One session on `claude` covers all five; the Arch commands are in the Outcomes of 02b, 03b, 04a and 04b. Record the result in each Outcome.
 2. **vnet tags.** The cloud session can't push tags (HTTP 403), so the user tags from a PC. `v0.1.0` (5847e44) and `v0.2.0` (c8be4df) are pushed. `v0.3.0` is meant for b302029. Check with `git ls-remote --tags https://github.com/VenKamikaze/vnet`, and ask the user if it's missing. vnet's README already pins `v0.3.0`.
 3. **vnet `claude` → `main`** merge: the user's call.
 4. **Brief 09's blocked Emscripten ports are solved.** The user pushed the six GitHub archives to branch `emscripten-ports`. They are verified against Emscripten 6.0.13's hashes, and brief 09 ("Ports") explains how to install them into the Emscripten cache.
@@ -41,7 +53,7 @@ They touch different areas (input/sim vs `main.cpp`, CMake and renderers) but bo
 
 - **The container can restart mid-run** and kill background work. Push feature branches as soon as an implementer reports, not only at merge. If a reviewer was interrupted, resume it (it keeps its context) rather than starting a new one.
 - **Sweeps:** run them from the build dir *after* building the `BitRiot` target (or `bitriot_runtime_links`), which creates the `data/` and `assets/` links. Also sweep `bitriot_sim_tests`, and build with Clang too.
-- **Golden digests:** the four pinned rounds in `SimulationTest` must stay byte-identical across refactors. A legitimate sim change moves them, and the commit must say so (see `tests/README.md`).
+- **Golden digests:** the six pinned rounds in `SimulationTest`, and the golden match record `tests/data/golden-round.brmr` (brief 05), must stay byte-identical across refactors. A legitimate sim change moves them, and the commit must say so (see `tests/README.md`).
 
 ## 1. Set up
 
@@ -67,7 +79,7 @@ Then read the brief(s) you are about to start, plus the **Outcome** sections of 
 
 1. **Find ready briefs.** From the status tables in both repos, list every brief whose dependencies are all done.
 2. **Tracks that can run in parallel now:**
-   - BitRiot's determinism track: 04a → 04b → 05 → 05b (01–03b are done).
+   - BitRiot's determinism track: 05b (01–05 are done).
    - BitRiot WASM: 09.
    - vnet is complete (06, 10, 11).
 
