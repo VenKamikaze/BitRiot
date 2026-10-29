@@ -43,6 +43,25 @@ add_link_options(${BITRIOT_WASM_PORT_FLAGS} -fwasm-exceptions
   # AI's search; 2 MB is well under the native 8 MB and costs nothing until used.
   -sSTACK_SIZE=2097152)
 
+# The plain FreeType port library must be in the cache before the first compile.
+# -fwasm-exceptions makes the build use the legacysjlj variant of FreeType, but the
+# SDL2_ttf port has no such variant: Emscripten builds it in a child emcc without our
+# flags, which wants plain libfreetype.a and, if it is missing, tries to build it
+# while the parent holds the cache lock ("attempt to lock the cache while a parent
+# process is holding the lock (…libfreetype.a)"). Building it here, in a process of
+# its own, avoids that. Once cached this takes a fraction of a second.
+if(CMAKE_HOST_WIN32)
+  set(_bitriot_embuilder "${EMSCRIPTEN_ROOT_PATH}/embuilder.bat")
+else()
+  set(_bitriot_embuilder "${EMSCRIPTEN_ROOT_PATH}/embuilder")
+endif()
+execute_process(COMMAND "${_bitriot_embuilder}" build freetype
+                RESULT_VARIABLE _bitriot_embuilder_result)
+if(NOT _bitriot_embuilder_result EQUAL 0)
+  message(FATAL_ERROR "embuilder build freetype failed (${_bitriot_embuilder_result}); "
+                      "the SDL2_ttf port needs the plain FreeType library in the Emscripten cache")
+endif()
+
 # ---------------------------------------------------------------------------
 # What the native branch gets from find_package
 # ---------------------------------------------------------------------------

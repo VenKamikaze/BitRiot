@@ -204,6 +204,12 @@ Default to info level on web.
 - The ScriptProcessorNode deprecation warning in the console is SDL's (its Emscripten audio uses ScriptProcessor; an AudioWorklet backend is newer SDL than 2.32.10 and not in this Emscripten's port).
 - After `claude` moves (05b adds its own `scripts/setup-emsdk.sh`), merge `claude` into this branch and keep this branch's version of that file: it is the same base plus the `--with-ports` block, option parsing and header text.
 
+**Fixed after merge: the first build on a fresh emsdk failed** with `AssertionError: attempt to lock the cache while a parent process is holding the lock (…libfreetype.a)`. It was reported by the user on Arch.
+- **Cause:** `-fwasm-exceptions` makes the build use FreeType's `legacysjlj` variant. The SDL2_ttf port has no such variant, so Emscripten compiles `SDL_ttf.c` in a child `emcc` without the game's flags. That child wants the plain `libfreetype.a`, and when it is missing it tries to build it while the parent holds the cache lock.
+- **Why the checks missed it:** the container's cache already held a plain `libfreetype.a` from an earlier test compile.
+- **Fix:** `cmake/EmscriptenGame.cmake` runs `embuilder build freetype` at configure time. That takes about 7 s the first time and 0.15 s once cached.
+- **Checked:** reproduced on a cache with the port libraries removed, then fixed on the same cache. That build passes the smoke test, 41 of 41.
+
 **Test results.** Native, GCC 13 Release: `bitriot_tests` 513 passed, `bitriot_sim_tests` 408 passed; Clang 18 Release: 513 and 408; 200-seed sweep (`BITRIOT_TEST_SEED=1..200`, both binaries, GCC Release): all 200 seeds pass on both binaries (400 runs, no failures); a native Debug build also passes 513 tests. Web smoke test: Release 38 of 38 and Debug 38 of 38 before the review; after the fix round, Release 41 of 41 (the coordinator re-ran it on the merged branch). The golden digests did not change: nothing the simulation computes was touched (`GoldenRecordTest` and the pinned `SimulationTest` rounds pass). No file of `bitriot_sim` changed, so the build id is the same as `claude`'s (`bitriot_headless version` prints 0x6767612d056ba8af).
 
 **Play-test (pending): Arch Linux, desktop browser**
