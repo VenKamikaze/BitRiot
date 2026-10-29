@@ -270,7 +270,7 @@ Brief 05 added the record of a round (`src/MatchRecord.*`, the byte format in
 | `GoldenRecordTest.cpp` | the golden record (below) |
 | `DataHashTest.cpp` | the data hash is the documented FNV over the sorted items; the sim's named constants are in it; comments, blank lines, line order, spacing, leading zeros and CRLF do not move it, and any changed value, name, added or removed constant does; an unreadable file is an error; **eager loading**: `start()` refuses unreadable data and leaves the running round alone, and after `start()` the files are not read again; CRLF data files load |
 | `BuildIdTest.cpp` | this binary's id is the generated one; the id's inputs are the simulation's files and nothing else; the generator, run on small trees, follows includes through headers and directories, changes with any reached file, ignores unreached ones and line endings, does not rewrite an unchanged file, and fails loudly on a missing file |
-| `HeadlessCliTest.cpp` | the **real binary**: `replay` of the golden record, mismatch naming the tick, the data-mismatch exit code, bad files, `run` writing a record that replays, a record as a script (re-running the golden record from its own inputs reproduces it), `dump`, every usage error, `help`/`version`, no SDL in `ldd`; and **two processes started together print identical output** (`replay --hashes`, `dump`, `run`) |
+| `HeadlessCliTest.cpp` | the **real binary**: `replay` of the golden record, mismatch naming the tick, the data-mismatch exit code, bad files, `run` writing a record that replays, a record as a script (re-running the golden record from its own inputs reproduces it), `dump`, every usage error, `help`/`version`, no SDL in `ldd`; `replay --perturb-at` (brief 05b's negative control) fails at exactly the tick named, in the `--hashes` output too, and refuses a tick the replay never reaches; and **two processes started together print identical output** (`replay --hashes`, `dump`, `run`) |
 
 ### The golden record
 
@@ -318,6 +318,52 @@ hash, so the file outlives unrelated source edits.
 
 The golden digests in `SimulationTest` are unchanged by brief 05, and recording does not
 move them: it reads the simulation and nothing else.
+
+## Cross-platform determinism gate
+
+Brief 05b. `scripts/determinism-gate.sh` builds `bitriot_headless` (configured with `-DBITRIOT_BUILD_GAME=OFF -DBITRIOT_BUILD_TESTS=OFF`, so no SDL, RmlUi, OpenGL or GoogleTest is needed) under a set of variants and replays records with each. It is **not** part of `ctest` (it takes about three minutes with warm builds and ten from scratch, and needs toolchains most machines lack); run it before trusting a change to the simulation on a platform you have not tried, and whenever a compiler, flag or Emscripten version changes.
+
+```bash
+scripts/determinism-gate.sh                 # every variant that is available; prints a pass/fail table
+scripts/determinism-gate.sh --list          # the variants, and why any is unavailable
+scripts/determinism-gate.sh --only gcc-O2,clang-O2,wasm-O2
+scripts/determinism-gate.sh --strict        # an unavailable variant fails the gate
+EMSDK_DIR=/path/to/emsdk scripts/determinism-gate.sh   # an emsdk that is not in ./.emsdk (the one scripts/setup-emsdk.sh installs is found by itself)
+scripts/setup-emsdk.sh                      # installs the pinned emsdk (6.0.13) into ./.emsdk; the gate never installs it
+```
+
+The wasm variants use the pinned emsdk in `$EMSDK_DIR` (default `./.emsdk`) when it exists, and only otherwise an `emcc` on `PATH` (a distro's emscripten package is not the pinned version); a version other than 6.0.13 is a warning, and a failure under `--strict`. A variant that runs another variant's binary (`wasm-O2-emsdk-node`, Valgrind, `MALLOC_PERTURB_`) is unavailable when that variant is. `--clean` refuses `/`, a home directory, the repository and its parent. A variant that crashes or is aborted by a sanitizer or Valgrind is reported with the first `runtime error`/`ERROR:`/`==pid==` line and the last tick it hashed (`replay --hashes` flushes every line), not as a hash mismatch.
+
+Builds go to `build-gate/<variant>/` (git-ignored) and outputs to `build-gate/_gate/` (`results.md` is the table). Exit status 0 means every variant that ran matched and the negative control was caught; 1 a divergence, a failed build or an uncaught control; 2 a setup error. The gate prints the **first diverging tick** and both hashes for a record that differs.
+
+**What a variant must do.** For each record, `bitriot_headless replay --hashes` exits 0 (every checkpoint of the record agrees) and prints **byte-for-byte the same stdout** as the reference (GCC `-O2`): the state hash of every tick. The records are `tests/data/golden-round.brmr` and six more rounds the reference plays itself at the start (all-AI, a checkpoint on every tick, seeds fixed in the script): 17x13 2 players, 13x11 6 players, 33x25 4 players with 70% blocks, 21x15 in two teams, 15x11 3 players with no blocks and no spawner, 25x19 5 players with solid blocks (the 33x25 and 25x19 rounds run to the 6000-tick cap without ending). `bitriot_headless version` (build id and data hash) must also be identical, which proves every variant was built from the same source and data. Four **exception probes** (a missing file, a bad option, `replay` with no file, and a `throw` from inside `Simulation::step` caught in the replayer) must give the same exit code and `error:`/`warning:`/`note:` lines everywhere; a wasm build with no exceptions mode passes the replays and aborts the probes, which is what they are for.
+
+**The negative control** runs on every variant: `bitriot_headless replay --perturb-at 100 golden-round.brmr` adds one unit (1/65536) to one block's x offset between ticks 99 and 100. The same comparison must report a failure at exactly tick 100 with exit code 1. (A block, because the simulation never moves one; a player's offset is pulled back to the tile centre by the next step and the change vanishes. `--perturb-at` is a documented test-only option of `replay`; `HeadlessCliTest.Perturb*` pin it.) A gate whose control is not caught fails.
+
+**Results** (brief 05b, GCC 13.3, Clang 18.1, Emscripten 6.0.13, Node 22.22.0 and the emsdk's Node 24.19.0, one 4-core Xeon with AVX-512; "golden ms" is the wall time of one `replay --hashes` of the 2,768-tick golden round including process start-up; the machine was shared with another build):
+
+| Variant | Toolchain and flags | Result | Golden ms |
+| --- | --- | --- | --- |
+| `gcc-O2` (reference) | GCC `-O2 -DNDEBUG` | pass (matches the record's 2,769 checkpoints) | 65 |
+| `gcc-O0` | GCC `-O0 -g`, asserts on | pass | 212 |
+| `gcc-O3-native-fastmath` | GCC `-O3 -march=native -ffast-math` (native = sapphirerapids) | pass | 54 |
+| `gcc-initpattern` | GCC `-O2 -ftrivial-auto-var-init=pattern` | pass | 60 |
+| `gcc-asan-ubsan` | GCC `-O1 -fsanitize=address,undefined -fno-sanitize-recover=undefined` | pass, no report | 402 |
+| `gcc-O0-valgrind` | the `gcc-O0` build under memcheck, `--error-exitcode=99` (golden and one small round only) | pass, no error | 13,765 |
+| `gcc-O2-malloc-perturb` | the `gcc-O2` build with `MALLOC_PERTURB_=165` | pass | 51 |
+| `clang-O2` | Clang `-O2`, libstdc++ | pass | 62 |
+| `clang-O0` | Clang `-O0 -g`, asserts on | pass | 185 |
+| `clang-O3-native-fastmath` | Clang `-O3 -march=native -ffast-math` | pass | 61 |
+| `clang-libc++` | Clang `-O2 -stdlib=libc++` (LLVM libc++ 18, the library Emscripten uses) | pass | 55 |
+| `aarch64-O2` | `aarch64-linux-gnu-g++` `-O2` under `qemu-aarch64` 8.2.2 | pass | 2,035 |
+| `aarch64-O3-fastmath` | `aarch64-linux-gnu-g++` `-O3 -ffast-math` under qemu | pass | 1,763 |
+| `wasm-O2` | Emscripten `-O2 -fwasm-exceptions` (legacy wasm EH, the default), `-sNODERAWFS=1`, Node 22.22.0 | pass | 154 |
+| `wasm-O3-fastmath` | Emscripten `-O3 -ffast-math -fwasm-exceptions`, Node 22.22.0 | pass | 148 |
+| `wasm-exnref-O2` | Emscripten `-O2 -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0` (standard exnref EH), Node 22.22.0 | pass | 208 |
+| `wasm-O2-emsdk-node` | the `wasm-O2` build on the emsdk's Node 24.19.0 | pass | 149 |
+| `gcc-m32` | GCC `-m32` (ILP32, 32-bit `long`) | **not available here** (`g++-multilib` conflicts with `g++-aarch64-linux-gnu` on Ubuntu; the wasm32 builds cover 32-bit `long` and `size_t`) | - |
+
+The 17 variants that ran match on all 7 records (the 6,000-tick rounds included) and on `version`, and the negative control was caught at exactly tick 100 on all 17. A deliberately faulty simulation (a scratch copy, not committed) with an unspecified-evaluation-order expression added at tick 150 made `clang-O2`, `aarch64-O2` and `wasm-O2` fail at **tick 150** and `gcc-O2` (which evaluates that argument list right to left on x86-64) pass: the gate catches a real, compiler-dependent divergence at the right tick.
 
 ## Fixed-point maths
 
@@ -582,8 +628,8 @@ files, run, swap back.
 
 ## Coverage today
 
-513 tests in `bitriot_tests` (408 of them also in `bitriot_sim_tests`), across the
-files below (the counts here are as of brief 05; the per-file lists of the later briefs
+517 tests in `bitriot_tests` (412 of them also in `bitriot_sim_tests`), across the
+files below (the counts here are as of brief 05b; the per-file lists of the later briefs
 are in their own sections above):
 
 - `WinConditionTest.cpp` — free-for-all, team and co-op round-end rules,

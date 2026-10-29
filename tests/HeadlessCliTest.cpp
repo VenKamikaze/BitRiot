@@ -137,6 +137,80 @@ TEST(HeadlessCliTest, ReplayNamesTheFirstDivergingTick)
   EXPECT_TRUE(contains(r.out, "tick " + std::to_string(victim + 1) + ":")) << "the golden record has a checkpoint every tick, so the tick is exact\n" << r.out;
 }
 
+// The negative control of the cross-platform gate (05b, scripts/determinism-gate.sh):
+// one offset moved by one unit between two ticks must be caught at the next tick.
+TEST(HeadlessCliTest, PerturbAtMakesTheReplayFailAtExactlyThatTick)
+{
+  Scratch s;
+  for (const uint64_t tick : { 1u, 100u, 2768u })
+  {
+    const CliRun r = s.run("replay \"" + goldenPath() + "\" --perturb-at " + std::to_string(tick), "p" + std::to_string(tick));
+    EXPECT_EQ(r.code, 1) << "tick " << tick << "\n" << r.out << r.err;
+    EXPECT_TRUE(contains(r.out, "state hash differs at tick " + std::to_string(tick) + ":")) << r.out;
+    EXPECT_FALSE(contains(r.out, "replay: the divergence is in ticks")) << "a checkpoint on every tick names the exact tick\n" << r.out;
+  }
+}
+
+TEST(HeadlessCliTest, PerturbedHashesAgreeUpToTheTickBeforeAndDifferAfter)
+{
+  Scratch s;
+  const CliRun clean = s.run("replay --hashes \"" + goldenPath() + "\"", "clean");
+  const CliRun bad = s.run("replay --hashes --perturb-at 100 \"" + goldenPath() + "\"", "bad");
+  ASSERT_EQ(clean.code, 0);
+  ASSERT_EQ(bad.code, 1);
+  // The gate finds the first diverging tick as the first line where the two outputs
+  // differ; make sure that line is the hash of tick 100.
+  std::istringstream a(clean.out), b(bad.out);
+  std::string la, lb;
+  while (std::getline(a, la) && std::getline(b, lb))
+  {
+    if (la != lb)
+    {
+      break;
+    }
+  }
+  EXPECT_EQ(la.rfind("hash 100 ", 0), 0u) << la;
+  EXPECT_EQ(lb.rfind("hash 100 ", 0), 0u) << lb;
+  EXPECT_NE(la, lb);
+  EXPECT_FALSE(contains(bad.out, "hash 101 ")) << "the replay stops at the first mismatch";
+}
+
+TEST(HeadlessCliTest, AReplayThatDivergesBeforeThePerturbationReportsTheDivergence)
+{
+  Scratch s;
+  MatchRecord golden = MatchRecord::readFile(goldenPath());
+  size_t victim = 0;
+  for (size_t i = 200; i < golden.ticks.size(); i++)
+  {
+    const PlayerInput in = golden.ticks[i].slot[0];
+    if (in.held(PlayerInput::UP) && !in.held(PlayerInput::ACTION1) && !in.held(PlayerInput::ACTION2))
+    {
+      victim = i;
+      break;
+    }
+  }
+  ASSERT_GT(victim, 0u);
+  golden.ticks[victim].slot[0] = PlayerInput(PlayerInput::heldBit(PlayerInput::DOWN));
+  golden.writeFile(s.file("broken.brmr"));
+  // The replay stops at the broken tick, long before tick 2000: a mismatch (exit 1), not a usage error.
+  const CliRun r = s.run("replay --perturb-at 2000 \"" + s.file("broken.brmr") + "\"");
+  EXPECT_EQ(r.code, 1) << r.out << r.err;
+  EXPECT_TRUE(contains(r.out, "tick " + std::to_string(victim + 1) + ":")) << r.out;
+}
+
+TEST(HeadlessCliTest, PerturbAtANonexistentTickOrZeroIsAUsageError)
+{
+  Scratch s;
+  const CliRun beyond = s.run("replay --perturb-at 5000 \"" + goldenPath() + "\"", "beyond");
+  EXPECT_EQ(beyond.code, 2) << beyond.out << beyond.err;
+  EXPECT_TRUE(contains(beyond.err, "never reached tick")) << beyond.err;
+  const CliRun zero = s.run("replay --perturb-at 0 \"" + goldenPath() + "\"", "zero");
+  EXPECT_EQ(zero.code, 2);
+  EXPECT_TRUE(contains(zero.err, "at least 1")) << zero.err;
+  const CliRun junk = s.run("replay --perturb-at x \"" + goldenPath() + "\"", "junk");
+  EXPECT_EQ(junk.code, 2);
+}
+
 TEST(HeadlessCliTest, WithCoarseCheckpointsReplayNamesTheWindow)
 {
   Scratch s;
