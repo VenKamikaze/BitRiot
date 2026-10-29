@@ -31,6 +31,8 @@ Each item below is a build of `bitriot_headless` that replays the golden record 
    - If the packages aren't available, say so in the Outcome.
 4. **wasm under Node.**
    - Install emsdk pinned to a specific version. Its binaries download from storage.googleapis.com, which is reachable.
+   - **Reuse vnet's pin.** vnet already pins emsdk in its `scripts/setup-emsdk.sh` (emsdk revision `d7b4130688bfa348392b921ab04015aa15c4f154`, Emscripten **6.0.13**; installed with git, binaries from storage.googleapis.com). Use the same revision and version here so BitRiot and vnet are built by one compiler.
+   - Configure the wasm (and aarch64) builds with **`-DBITRIOT_BUILD_GAME=OFF`** (added by 03b): it skips the SDL/RmlUi/GL `find_package` calls, so only `bitriot_sim` and its tests are built. `bitriot_sim` has no SDL at all, so no Emscripten ports are needed for the gate.
    - Build `bitriot_headless` with `emcmake`, using `-sNODERAWFS=1` so it can read the record and data files directly, and with the same exceptions mode the game will use: `-fwasm-exceptions`.
      - If the Node version in the container lacks support for that mode, use `-sWASM_LEGACY_EXCEPTIONS` or `-fexceptions`, and say which.
    - If `bitriot_sim` still needs SDL core headers (per 03b's Outcome), provide the Emscripten `sdl2` port by git-cloning its source at the tag Emscripten expects and setting `EMCC_LOCAL_PORTS=sdl2=<path>`.

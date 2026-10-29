@@ -2,7 +2,7 @@
 
 - **Repo:** BitRiot (the vnet changes needed go to the vnet repo)
 - **Branch:** `netplay/12-browser`
-- **Depends on:** 07, 08 (screens and settings file), 09 and 10. Brief 11 is optional; if it has landed, use `RELAY_AUTO`. Both the BitRiot and vnet repos must be attached.
+- **Depends on:** 07, 08 (screens and settings file), 09 and 10. Brief 11 has **landed** (vnet 26f4b0f), so the browser uses `RELAY_AUTO`. Both the BitRiot and vnet repos must be attached.
 - **Status:** todo
 
 ## Goal
@@ -11,7 +11,10 @@ Browser players and native players join the same Bit Riot match through the vnet
 
 ## Read first
 
-- The Outcome sections of briefs 07, 09 and 10.
+- The Outcome sections of briefs 07 and 09, and of vnet briefs 10 and 11 (in vnet's `doco/`).
+  - They record what the relay actually does: room creator is `10.0.0.1`; `vnet_status()` reports CONNECTING/READY/FAILED and the transport (`relay-wt` or `relay-ws`); `room-host:PORT` resolves to the host.
+  - Operational limits to design around: a silent UDP member is dropped after ~15 s (`-session-timeout`); per-address caps (128 members, 128 WebSockets, 32 pending WebSockets, 128 WebTransport connections) matter behind one NAT; a global `-max-wt` (default 4000) caps WebTransport connections; WebTransport needs `https://host/vnet`, WebSocket `wss://host/vnet`; a dev certificate's hash changes on every relay restart.
+  - `relay/README.md` in vnet covers deployment (TLS, Docker, sizing).
 - [`README.md`](README.md): D6 and the network notes.
 - Brief 05b's Outcome, for the gate results and the emsdk setup.
 
@@ -19,7 +22,7 @@ Browser players and native players join the same Bit Riot match through the vnet
 
 1. **Bit Riot on the relay**
    - Wire the netplay layer to vnet's relay backends:
-     - the browser uses `RELAY_WS`, or `RELAY_AUTO` if brief 11 is in;
+     - the browser uses `RELAY_AUTO` (WebTransport, falling back to WebSocket);
      - native uses `RELAY_UDP`.
    - The host creates a room; joiners enter the room code.
    - By relay convention (10), the host is `10.0.0.1`.

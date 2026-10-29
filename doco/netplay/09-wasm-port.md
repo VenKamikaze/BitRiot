@@ -25,6 +25,7 @@ Bit Riot builds with Emscripten and runs in a desktop browser: menus, local play
 ### 1. Toolchain
 
 - Use emsdk, pinned to a version, set up through `scripts/setup-emsdk.sh`. Reuse it if 05b created it.
+- **Reuse vnet's pin.** vnet already pins emsdk in its `scripts/setup-emsdk.sh` (emsdk revision `d7b4130688bfa348392b921ab04015aa15c4f154`, Emscripten **6.0.13**; installed with git, binaries from storage.googleapis.com). Use the same revision and version here so BitRiot and vnet are built by one compiler.
 - Build with `emcmake cmake -S . -B build-wasm && cmake --build build-wasm`.
 
 ### 2. Ports
