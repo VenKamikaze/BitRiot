@@ -25,22 +25,22 @@ Each brief (`NN-*.md`) is one unit of work, sized for a single implement → rev
 | 04b | [Control events, rumble and UI plumbing](04b-control-events.md) | BitRiot | 04a | done (play-test pending) |
 | 05 | [Match record, replay and `bitriot_headless`](05-replay-and-determinism.md) | BitRiot | 03b, 04b | done |
 | 05b | [Cross-platform determinism gate](05b-cross-platform-gate.md) | BitRiot | 05 | todo |
-| 06 | [vnet core: API, loopback and native UDP](https://github.com/VenKamikaze/vnet/blob/claude/doco/06-vnet-core.md) | vnet | — | tracked in vnet |
-| 07 | [Native lockstep netplay](07-lockstep-netplay.md) | BitRiot (+vnet) | 05b, 06 | todo |
+| 06 | [vnet core: API, loopback and native UDP](https://github.com/VenKamikaze/vnet/blob/claude/doco/06-vnet-core.md) | vnet | — | tracked in vnet (done) |
+| 07 | [Native lockstep netplay](07-lockstep-netplay.md) | BitRiot (+vnet) | 05b, 06, 14 | todo |
 | 08 | [Lobby UI](08-lobby-ui.md) | BitRiot | 07 | todo |
 | 09 | [WASM port (local play)](09-wasm-port.md) | BitRiot | 03b | todo |
-| 10 | [vnet relay and WebSocket transport](https://github.com/VenKamikaze/vnet/blob/claude/doco/10-vnet-relay-websocket.md) | vnet | 06 | tracked in vnet |
-| 11 | [vnet WebTransport datagrams](https://github.com/VenKamikaze/vnet/blob/claude/doco/11-vnet-webtransport.md) | vnet | 10 | tracked in vnet |
-| 12 | [Browser netplay](12-browser-netplay.md) | BitRiot (+vnet) | 07, 08, 09, 10 | todo |
+| 10 | [vnet relay and WebSocket transport](https://github.com/VenKamikaze/vnet/blob/claude/doco/10-vnet-relay-websocket.md) | vnet | 06 | tracked in vnet (done) |
+| 11 | [vnet WebTransport datagrams](https://github.com/VenKamikaze/vnet/blob/claude/doco/11-vnet-webtransport.md) | vnet | 10 | tracked in vnet (done) |
+| 12 | [Browser netplay](12-browser-netplay.md) | BitRiot (+vnet) | 07, 08, 09, 10, 14 | todo |
 | 13 | [Disconnects and hot-join](13-disconnect-and-hot-join.md) | BitRiot | 05, 07, 08 (12 for browser) | todo |
-| 14 | [vnet API polish and browser lifecycle](https://github.com/VenKamikaze/vnet/blob/claude/doco/14-vnet-api-polish.md) | vnet | 11 | tracked in vnet |
+| 14 | [vnet API polish and browser lifecycle](https://github.com/VenKamikaze/vnet/blob/claude/doco/14-vnet-api-polish.md) | vnet | 11 | tracked in vnet (done) |
 
 `Qn` means open question *n* below. The user must answer it before that brief starts, because an implementer subagent cannot ask the user.
 
 **Parallel tracks:**
 
 - **Determinism:** 01 → 02 → 02b → 03a → 03b (done) → 04a (done) → 04b (done) → 05 (done) → 05b.
-- **vnet:** 06, 10 and 11 are all done (vnet `claude` 26f4b0f, version 0.3.0). Brief 14 (from vnet's design review) is done too: vnet `claude` eb1feeb, version 0.4.0 (tag `v0.4.0` to be pushed by the user). 07 and 12 should pin `v0.4.0` and read vnet's `doco/integration.md`.
+- **vnet:** 06, 10 and 11 are all done (vnet `claude` 26f4b0f, version 0.3.0). Brief 14 (from vnet's design review) is done too: vnet `claude` eb1feeb, version 0.4.0, tag `v0.4.0`. 07 and 12 should pin `v0.4.0` and read vnet's `doco/integration.md`.
 - **WASM:** 09 is ready now (03b is in), in parallel with 05b.
 
 **Resuming?** [`PROMPT.md`](PROMPT.md) §0 has the hand-off state: what's done, what's ready, and what's waiting on the user.

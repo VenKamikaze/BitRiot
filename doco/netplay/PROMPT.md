@@ -7,41 +7,41 @@ You are the **coordinator** for a multi-brief project across two repos:
 
 The goal is deterministic lockstep online multiplayer for Bit Riot, a browser (WASM) build, and vnet underneath both.
 
-## 0. Where things stand (hand-off, 29 Oct 2026, second session)
+## 0. Where things stand (hand-off, 29 Oct 2026, end of the second session)
 
 **Done and merged into `claude`:**
 
-- **BitRiot:** 01, 02, 02b, 03a, 03b, 04a, 04b and 05. 02b, 03a and 05 are `done`; 03b, 04a and 04b are `done (play-test pending)` (controller parts).
+- **BitRiot:** 01, 02, 02b, 03a, 03b, 04a, 04b and 05. 02b, 03a and 05 are `done`; 03b, 04a and 04b are `done (play-test pending)` for their controller parts only (§0 "Waiting on the user").
   - 04a (merge d899b57) and 04b (84f19b1) were merged unreviewed, then reviewed together. The review found one blocking bug, `InputHandler::setJoinIndicator` calling itself (a crash or hang at round start with a keyboard player, or on any join). It was fixed with a test on `netplay/04-review-fixes` (merge 0557976).
   - 05 (merge 0c5c956) had one review and one fix round. That round bounded what a hostile record can make a reader allocate and range-checked the `--config` spec.
   - Test counts on `claude`: `bitriot_tests` 513 and `bitriot_sim_tests` 408. Both pass on GCC Release, GCC Debug and Clang. The 200-seed sweep has 0 failures on both binaries.
-- **vnet:** 06, 10 and 11. The whole vnet track is complete: code merged at 26f4b0f, version 0.3.0, released as tag `v0.3.0` on b302029 (later commits are docs only).
-  - A design review is on vnet branch `docs/design-review` (5fea984), in `doco/design-review.md`. It makes 15 recommendations, none breaking. **R1 (high, before 12):** the relay client times out after a gap in `vnet_poll()` (a hidden tab or a sleeping laptop). It is not merged or acted on yet; that is the user's call.
+- **vnet:** 06, 10, 11 and **14**, all merged into vnet's `claude`. Release tags `v0.1.0`, `v0.2.0`, `v0.3.0` and **`v0.4.0`** (14, merge eb1feeb) are all pushed.
+  - 14 came from a design review of 0.3.0 (`doco/design-review.md`, annotated with what 14 took up). It fixed the relay client dropping its session after a hidden tab or a sleep, and added `vnet_set_impair`, burst loss, a `wake` callback for browsers, native `RELAY_AUTO` with `relay_udp`, `relay_rtt_ms`/`max_members`, `vnet_wait`, `vnet_resolve_host`, `vnet_version` and `doco/integration.md`. Its review found a blocking bug (a `vnet_wait()` loop never detected a dead relay), fixed with tests. Briefs 07 and 12 pin `v0.4.0` and read `integration.md` and 14's follow-ups.
+  - **vnet CI now runs and is green** on all seven jobs (Linux GCC/Clang, ASan+UBSan, macOS, Go relay, browser, MinGW/Wine). Until 29 Oct the workflow file was invalid YAML, so CI had never run. The first run's failures were test-side (a relay test overflowing the runners' smaller UDP buffer, macOS delivering loopback packets late, a NAT stand-in holding its lock while sleeping) and are fixed. CI builds pushes to `main`, `claude`, `vnet/**` and `fix/**`. Read a run's logs with the GitHub MCP tools (`actions_list`, `get_job_logs`); check the latest run on a branch before reporting it done.
+  - BitRiot has no CI workflow.
 
 **Next ready, in parallel:**
 
-- **05b** (cross-platform determinism gate): normal review flow. It uses `bitriot_headless` and the golden record from 05.
-- **09** (WASM port): needs only 03b. Archive downloads from github.com still return 403 in the cloud session, so use the user's `emscripten-ports` branch (brief 09, "Ports").
+- **05b** (cross-platform determinism gate): normal review flow (implement, review, fix, re-review if needed). It replays `tests/data/golden-round.brmr` with `bitriot_headless` under each toolchain. Read 05's Outcome follow-ups for 05b first. vnet's `scripts/setup-emsdk.sh` installs the same pinned Emscripten 6.0.13 by `git fetch`.
+- **09** (WASM port, local play): needs only 03b. Normal review flow. Archive downloads from github.com still return 403 in the cloud session, so use the user's `emscripten-ports` branch (brief 09, "Ports").
 
-They touch different areas, but both may touch `CMakeLists.txt`. Give each its own worktree, merge one, then merge `claude` into the other before review. After those: 07 → 08, then 12 and 13.
+They touch different areas, but both may touch `CMakeLists.txt` and the emsdk setup. Give each its own worktree, merge one, then merge `claude` into the other before its review. After those: 07 → 08, then 12 and 13. vnet has no briefed work left.
 
-**In flight:** nothing. No branch has unmerged work, except vnet `docs/design-review` (docs only, awaiting the user).
+**In flight:** nothing. No branch in either repo has unmerged work.
 
-**Decisions taken while the user was away** (the coordinator's recommendations; the user may revisit them):
+**Decisions taken in the second session while the user was away** (they may revisit them):
 
 - **`hitThisTick` is not in `stateHash()`.** The 04b brief asks for new per-slot state to be hashed. This flag is cleared each step and nothing in the sim reads it, so it cannot affect later ticks. The joint review agreed. Hashing it would move every digest for no gain.
 - **`Simulation::step()` throws on a malformed control event** (an out-of-range slot or an unknown kind). The netplay host must validate peers' events before it rebroadcasts them; this is in 04b's 07 follow-ups.
 - **The 05 build id is a hash of the sim source, not the git commit.** It is reproducible across checkout paths and line endings. `replay` enforces the data hash but only notes a build-id mismatch, so the golden record survives source edits that don't change behaviour. 07 should reject a build-id mismatch in `HELLO`.
 - **The record format's `MAX_TICKS` was lowered** from 4,194,304 to 1,048,576 ticks (about 9.6 hours at 33 ms per tick). A record also holds at most 24 control events per tick and 65,536 in total. This bounds the worst legal record at about 33 MB.
-- **05 ran in parallel with the 04 fix round,** then merged `claude` in before its review, to save wall time.
+- **vnet 14's open choices** (in the brief): delayed datagrams survive `vnet_set_impair`; native `RELAY_AUTO` uses `relay_udp`, else a scheme-less `relay`, else `VNET_EINVAL`; protocol v1 grows only by new `*_EXT` frame types with padding kept zero; `10.0.0.254`/`.255` are reserved (the relay caps `-max-members` at 253).
 
 **Waiting on the user** (ask about these; don't block on them):
 
-1. **Play-test.** 02b and 03a passed (29 Oct 2026: two rounds, one keyboard player against three CPU players). Still pending, all needing a controller: 03b (rumble, hotplug, join selector, Options map size), 04a (pad feel, the same-tick tap fix) and 04b (pad join, keyboard takeover, pad unplug, rumble). One session with a pad and a keyboard covers all three; the Arch commands are in their Outcomes. Record the result in each Outcome.
-2. **vnet tags.** The cloud session can't push tags (HTTP 403), so the user tags from a PC. `v0.1.0` (5847e44) and `v0.2.0` (c8be4df) are pushed. `v0.3.0` is meant for b302029. Check with `git ls-remote --tags https://github.com/VenKamikaze/vnet`, and ask the user if it's missing. vnet's README already pins `v0.3.0`.
-3. **vnet `claude` → `main`** merge: the user's call.
-4. **Brief 09's blocked Emscripten ports are solved.** The user pushed the six GitHub archives to branch `emscripten-ports`. They are verified against Emscripten 6.0.13's hashes, and brief 09 ("Ports") explains how to install them into the Emscripten cache.
-5. **CI has never been observed.** Neither repo's GitHub Actions runs could be watched from the cloud session. Ask the user to check vnet's Actions tab (Linux, macOS, ASan, MinGW/Wine, Go, fuzz, Docker, the browser job).
+1. **Controller play-test.** 02b and 03a passed (29 Oct 2026: two rounds, one keyboard player against three CPU players). Still pending, all needing a pad: 03b (rumble, hotplug, join selector, Options map size), 04a (pad feel, the same-tick tap fix on pad and keyboard) and 04b (pad join, keyboard takeover of a CPU player, pad unplug, rumble). One session with a pad and a keyboard covers all three; the Arch commands are in their Outcomes. Record the result in each Outcome.
+2. **vnet `claude` → `main`** merge: the user's call.
+3. **Tags:** the cloud session can't push tags (HTTP 403), so any future vnet release is tagged by the user from a PC; the releasing brief's Outcome gives the commands.
 
 **Known open issues:**
 
@@ -49,10 +49,12 @@ They touch different areas, but both may touch `CMakeLists.txt`. Give each its o
 - **Co-op stalemate** (in `TODO`).
 - **vnet relay limits:** a forged-source flood can delay new handshakes while it lasts. This is documented in vnet's `relay-protocol.md`.
 
-**Lessons from the first session:**
+**Lessons so far:**
 
 - **The container can restart mid-run** and kill background work. Push feature branches as soon as an implementer reports, not only at merge. If a reviewer was interrupted, resume it (it keeps its context) rather than starting a new one.
 - **Sweeps:** run them from the build dir *after* building the `BitRiot` target (or `bitriot_runtime_links`), which creates the `data/` and `assets/` links. Also sweep `bitriot_sim_tests`, and build with Clang too.
+- **Parallel briefs:** run independent briefs in separate worktrees (`git worktree add`), and tell an implementer when `claude` has moved so it merges `claude` in before its review.
+- **Reviews find real bugs** even when every test passes (04's join-indicator recursion, 05's allocation bomb, 14's `vnet_wait` loop): tests that pass `nullptr` or skip the real glue hide them. Ask reviewers to probe the untested glue.
 - **Golden digests:** the six pinned rounds in `SimulationTest`, and the golden match record `tests/data/golden-round.brmr` (brief 05), must stay byte-identical across refactors. A legitimate sim change moves them, and the commit must say so (see `tests/README.md`).
 
 ## 1. Set up
@@ -71,7 +73,7 @@ Read these in full before doing anything else:
 
 - [`doco/netplay/README.md`](README.md): the master index. It covers order, dependencies, **settled decisions D1–D9**, open questions, workflow, play-test policy and network notes.
 - [`doco/netplay/research/code-facts.md`](research/code-facts.md): what the code actually does, with file:line references.
-- vnet's [`doco/README.md`](https://github.com/VenKamikaze/vnet/blob/claude/doco/README.md): the status table for briefs 06, 10 and 11 lives there.
+- vnet's [`doco/README.md`](https://github.com/VenKamikaze/vnet/blob/claude/doco/README.md): the status table for briefs 06, 10, 11 and 14 lives there. Briefs 07 and 12 also need vnet's [`doco/integration.md`](https://github.com/VenKamikaze/vnet/blob/claude/doco/integration.md).
 
 Then read the brief(s) you are about to start, plus the **Outcome** sections of every brief they depend on.
 
@@ -81,7 +83,7 @@ Then read the brief(s) you are about to start, plus the **Outcome** sections of 
 2. **Tracks that can run in parallel now:**
    - BitRiot's determinism track: 05b (01–05 are done).
    - BitRiot WASM: 09.
-   - vnet is complete (06, 10, 11).
+   - vnet: no briefed work left (06, 10, 11 and 14 are done; `v0.4.0`).
 
    Later briefs (07, 08, 12, 13) follow the dependency table.
 3. **Check the prerequisites.** Some briefs depend on **open questions** (`Qn` in the table). If the user hasn't answered one, **ask the user before starting that brief**. Implementer subagents cannot ask.
@@ -98,7 +100,7 @@ This is the user's standard process:
    - the brief path, the repo, and the branch name;
    - "read `doco/netplay/README.md` (or vnet's `doco/README.md`), the brief, code-facts, and the dependency briefs' Outcomes first";
    - the commit-message trailer lines this session requires;
-   - "commit on the branch; don't push or merge".
+   - "commit at each milestone and push the feature branch (only that branch) after each commit, so a container restart loses nothing; never merge, never touch `claude`, never open a PR".
 
    Ask it to report back: commit hashes, what changed, test results with counts, proof that the new tests fail without the change, sweep numbers before and after (for sim changes), and any concerns.
 3. **Review.** Spawn an **Opus** subagent for a **read-only** review. Tell it to:

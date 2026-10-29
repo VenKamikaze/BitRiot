@@ -2,7 +2,7 @@
 
 - **Repo:** BitRiot (the vnet changes needed go to the vnet repo)
 - **Branch:** `netplay/12-browser`
-- **Depends on:** 07, 08 (screens and settings file), 09 and 10. Brief 11 has **landed** (vnet 26f4b0f), so the browser uses `RELAY_AUTO`. Both the BitRiot and vnet repos must be attached.
+- **Depends on:** 07, 08 (screens and settings file), 09 and 10. Brief 11 has **landed**, so the browser uses `RELAY_AUTO`. Brief 14 (vnet 0.4.0, tag `v0.4.0`) also landed: `RELAY_AUTO` now works natively too (one `vnet_config` with `relay` and `relay_udp` for both worlds), `vnet_status_info` has `relay_rtt_ms` and `max_members`, and the relay client survives a hidden tab or a sleeping laptop. Read vnet's `doco/integration.md` and brief 14's follow-ups for 12. Both the BitRiot and vnet repos must be attached.
 - **Status:** todo
 
 ## Goal
@@ -35,7 +35,7 @@ Browser players and native players join the same Bit Riot match through the vnet
 5. **Background tabs.**
    - Browsers stop `requestAnimationFrame` in hidden tabs. Timers are throttled to roughly 1 Hz, and more heavily after about 5 minutes. A backgrounded peer would therefore stall everyone, and "step from a timer" does **not** keep up.
    - Options that do work:
-     - **(a)** Drive stepping from incoming network messages. Message events aren't throttled.
+     - **(a)** Drive stepping from incoming network messages. Message events aren't throttled. vnet 0.4.0's `vnet_config.wake` callback is the hook for this (see `wake_probe.c` in vnet), but it does not replace a timer-driven poll: vnet's own retries, fallback deadline and keepalives only run inside `vnet_poll()`, so keep a timer poll (about 1 Hz is enough) alongside it.
      - **(b)** Tick from a dedicated Worker timer that posts to the main thread.
      - **(c)** A tab that is playing audio is exempt from throttling.
    - Pick one, measure it in Chromium, and document it.
