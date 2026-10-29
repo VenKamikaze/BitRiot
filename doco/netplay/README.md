@@ -40,7 +40,7 @@ Each brief (`NN-*.md`) is one unit of work, sized for a single implement → rev
 
 - **Determinism:** 01 → 02 → 02b → 03a → 03b (done) → 04a (done) → 04b (done) → 05 → 05b.
 - **vnet:** 06, 10 and 11 are all done (vnet `claude` 26f4b0f, version 0.3.0).
-- **WASM:** 09 is ready now (03b is in), in parallel with 04a.
+- **WASM:** 09 is ready now (03b is in), in parallel with 05b.
 
 **Resuming?** [`PROMPT.md`](PROMPT.md) §0 has the hand-off state: what's done, what's ready, and what's waiting on the user.
 
