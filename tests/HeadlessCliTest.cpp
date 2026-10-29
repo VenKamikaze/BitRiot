@@ -175,6 +175,29 @@ TEST(HeadlessCliTest, PerturbedHashesAgreeUpToTheTickBeforeAndDifferAfter)
   EXPECT_FALSE(contains(bad.out, "hash 101 ")) << "the replay stops at the first mismatch";
 }
 
+TEST(HeadlessCliTest, AReplayThatDivergesBeforeThePerturbationReportsTheDivergence)
+{
+  Scratch s;
+  MatchRecord golden = MatchRecord::readFile(goldenPath());
+  size_t victim = 0;
+  for (size_t i = 200; i < golden.ticks.size(); i++)
+  {
+    const PlayerInput in = golden.ticks[i].slot[0];
+    if (in.held(PlayerInput::UP) && !in.held(PlayerInput::ACTION1) && !in.held(PlayerInput::ACTION2))
+    {
+      victim = i;
+      break;
+    }
+  }
+  ASSERT_GT(victim, 0u);
+  golden.ticks[victim].slot[0] = PlayerInput(PlayerInput::heldBit(PlayerInput::DOWN));
+  golden.writeFile(s.file("broken.brmr"));
+  // The replay stops at the broken tick, long before tick 2000: a mismatch (exit 1), not a usage error.
+  const CliRun r = s.run("replay --perturb-at 2000 \"" + s.file("broken.brmr") + "\"");
+  EXPECT_EQ(r.code, 1) << r.out << r.err;
+  EXPECT_TRUE(contains(r.out, "tick " + std::to_string(victim + 1) + ":")) << r.out;
+}
+
 TEST(HeadlessCliTest, PerturbAtANonexistentTickOrZeroIsAUsageError)
 {
   Scratch s;

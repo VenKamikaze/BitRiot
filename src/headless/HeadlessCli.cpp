@@ -51,7 +51,9 @@ void printHelp(std::ostream& out)
          "      state hash of every tick. --perturb-at is a test-only negative control for\n"
          "      the cross-platform gate (05b): after tick TICK-1 it adds one unit (1/65536)\n"
          "      to the x offset of the first block (no step moves one), so the replay must\n"
-         "      fail at exactly tick TICK (exit 1) if the record has a checkpoint there.\n"
+         "      fail at exactly tick TICK (exit 1) if the record has a checkpoint there and\n"
+         "      that block survives the tick (it does at the ticks the gate uses). --hashes\n"
+         "      flushes after every line, so a crashed run still shows the last tick it hashed.\n"
          "  bitriot_headless run --out <file> [--config SPEC] [--seed N] [--script FILE]\n"
          "                       [--max-ticks N] [--checkpoint-every K] [--no-rle]\n"
          "      Play a fresh round (AI players, plus the inputs and control events of the\n"
@@ -228,13 +230,15 @@ int cmdReplay(const std::vector<std::string>& args, std::ostream& out, std::ostr
       if (print)
       {
         out << "hash " << tick << " " << hex(hash) << "\n";
+        out.flush(); // the gate shows the last tick a crashed or aborted run reached
       }
       if (perturbAt != 0 && tick + 1 == perturbAt && !perturbed)
       {
         // The negative control: one unit of one offset, between two ticks, as if one
         // platform had rounded a single value differently.
         // A block is the target: the simulation never moves it, so nothing can
-        // quietly absorb the change (a player's offset is pulled back to the tile's
+        // quietly absorb the change (but an explosion that destroys it on this very
+        // tick would, as it does for the recorded run too; not at the ticks tested) (a player's offset is pulled back to the tile's
         // centre by the next step). If there is no block, the first entity.
         const auto& entities = sim.entityManager().getDynamicMap()->entityList;
         std::shared_ptr<GameEntity> target;
@@ -259,7 +263,9 @@ int cmdReplay(const std::vector<std::string>& args, std::ostream& out, std::ostr
     };
   }
   const ReplayResult r = replayRecord(record, sim, options);
-  if (perturbAt != 0 && !perturbed)
+  // A replay that diverged earlier reports that (below); only a clean replay that never
+  // got to perturb anything is a usage error.
+  if (perturbAt != 0 && !perturbed && r.status == ReplayResult::OK)
   {
     err << "error: --perturb-at " << perturbAt << ": the replay never reached tick " << (perturbAt - 1) << ", or it had no entity to perturb\n";
     return EXIT_USAGE;

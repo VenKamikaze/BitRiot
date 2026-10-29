@@ -328,9 +328,11 @@ scripts/determinism-gate.sh                 # every variant that is available; p
 scripts/determinism-gate.sh --list          # the variants, and why any is unavailable
 scripts/determinism-gate.sh --only gcc-O2,clang-O2,wasm-O2
 scripts/determinism-gate.sh --strict        # an unavailable variant fails the gate
-EMSDK_DIR=/home/user/.emsdk scripts/determinism-gate.sh   # use an emsdk that is not in ./.emsdk
+EMSDK_DIR=/path/to/emsdk scripts/determinism-gate.sh   # an emsdk that is not in ./.emsdk (the one scripts/setup-emsdk.sh installs is found by itself)
 scripts/setup-emsdk.sh                      # installs the pinned emsdk (6.0.13) into ./.emsdk; the gate never installs it
 ```
+
+The wasm variants use the pinned emsdk in `$EMSDK_DIR` (default `./.emsdk`) when it exists, and only otherwise an `emcc` on `PATH` (a distro's emscripten package is not the pinned version); a version other than 6.0.13 is a warning, and a failure under `--strict`. A variant that runs another variant's binary (`wasm-O2-emsdk-node`, Valgrind, `MALLOC_PERTURB_`) is unavailable when that variant is. `--clean` refuses `/`, a home directory, the repository and its parent. A variant that crashes or is aborted by a sanitizer or Valgrind is reported with the first `runtime error`/`ERROR:`/`==pid==` line and the last tick it hashed (`replay --hashes` flushes every line), not as a hash mismatch.
 
 Builds go to `build-gate/<variant>/` (git-ignored) and outputs to `build-gate/_gate/` (`results.md` is the table). Exit status 0 means every variant that ran matched and the negative control was caught; 1 a divergence, a failed build or an uncaught control; 2 a setup error. The gate prints the **first diverging tick** and both hashes for a record that differs.
 
@@ -626,7 +628,7 @@ files, run, swap back.
 
 ## Coverage today
 
-516 tests in `bitriot_tests` (411 of them also in `bitriot_sim_tests`), across the
+517 tests in `bitriot_tests` (412 of them also in `bitriot_sim_tests`), across the
 files below (the counts here are as of brief 05b; the per-file lists of the later briefs
 are in their own sections above):
 

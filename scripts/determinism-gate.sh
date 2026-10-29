@@ -143,16 +143,15 @@ probe_compile() { # compiler flags... : can it compile and link a C++17 program 
     return $rc
 }
 
+# The pinned emsdk ($EMSDK_DIR, default <repo>/.emsdk) wins over an emcc on PATH (a distro's
+# emscripten package is not the pinned version); with no emsdk there, the emcc on PATH is used.
 try_emsdk() {
-    if command -v emcc >/dev/null 2>&1; then
-        return 0
-    fi
     if [ -f "$EMSDK_DIR/emsdk_env.sh" ]; then
         # shellcheck disable=SC1091
         EMSDK_QUIET=1 source "$EMSDK_DIR/emsdk_env.sh" >/dev/null 2>&1
         command -v emcc >/dev/null 2>&1 && return 0
     fi
-    return 1
+    command -v emcc >/dev/null 2>&1
 }
 
 check_availability() {
@@ -167,26 +166,26 @@ check_availability() {
             AVAIL[$v]=0; REASON[$v]="g++ is not installed"; done
     else
         probe_compile g++ -fsanitize=address,undefined >/dev/null 2>&1 || { AVAIL[gcc-asan-ubsan]=0; REASON[gcc-asan-ubsan]="g++ cannot link the sanitizers"; }
-        probe_compile g++ -m32 >/dev/null 2>&1 || { AVAIL[gcc-m32]=0; REASON[gcc-m32]="no 32-bit multilib (apt: g++-multilib, which on Ubuntu conflicts with g++-aarch64-linux-gnu: install one or the other)"; }
-        command -v valgrind >/dev/null 2>&1 || { AVAIL[gcc-O0-valgrind]=0; REASON[gcc-O0-valgrind]="valgrind is not installed"; }
+        probe_compile g++ -m32 >/dev/null 2>&1 || { AVAIL[gcc-m32]=0; REASON[gcc-m32]="no 32-bit multilib (apt: g++-multilib, which on Ubuntu conflicts with g++-aarch64-linux-gnu: install one or the other; pacman: lib32-gcc-libs lib32-glibc)"; }
+        valgrind -q --error-exitcode=99 true >/dev/null 2>&1 || { AVAIL[gcc-O0-valgrind]=0; REASON[gcc-O0-valgrind]="valgrind is not installed or does not run (apt/pacman: valgrind)"; }
     fi
     if ! command -v clang++ >/dev/null 2>&1; then
         for v in clang-O2 clang-O0 clang-O3-native-fastmath clang-libc++; do AVAIL[$v]=0; REASON[$v]="clang++ is not installed"; done
     else
         probe_compile clang++ -stdlib=libc++ -fuse-ld=lld >/dev/null 2>&1 || probe_compile clang++ -stdlib=libc++ >/dev/null 2>&1 \
-            || { AVAIL[clang-libc++]=0; REASON[clang-libc++]="libc++ is not installed (apt: libc++-dev libc++abi-dev)"; }
+            || { AVAIL[clang-libc++]=0; REASON[clang-libc++]="libc++ is not installed (apt: libc++-dev libc++abi-dev; pacman: libc++)"; }
     fi
     if ! command -v aarch64-linux-gnu-g++ >/dev/null 2>&1; then
-        for v in aarch64-O2 aarch64-O3-fastmath; do AVAIL[$v]=0; REASON[$v]="aarch64-linux-gnu-g++ is not installed (apt: g++-aarch64-linux-gnu)"; done
+        for v in aarch64-O2 aarch64-O3-fastmath; do AVAIL[$v]=0; REASON[$v]="aarch64-linux-gnu-g++ is not installed (apt: g++-aarch64-linux-gnu; pacman: aarch64-linux-gnu-gcc)"; done
     elif ! command -v qemu-aarch64 >/dev/null 2>&1; then
-        for v in aarch64-O2 aarch64-O3-fastmath; do AVAIL[$v]=0; REASON[$v]="qemu-aarch64 is not installed (apt: qemu-user)"; done
+        for v in aarch64-O2 aarch64-O3-fastmath; do AVAIL[$v]=0; REASON[$v]="qemu-aarch64 is not installed (apt/pacman: qemu-user)"; done
     fi
     # The wasm variants: an existing emsdk only. Never installed from here.
     if [ -z "$SYSTEM_NODE" ]; then
         for v in wasm-O2 wasm-O3-fastmath wasm-exnref-O2; do AVAIL[$v]=0; REASON[$v]="node is not installed"; done
     elif ! try_emsdk; then
         for v in wasm-O2 wasm-O3-fastmath wasm-exnref-O2; do
-            AVAIL[$v]=0; REASON[$v]="not available: no emcc on PATH and no emsdk in $EMSDK_DIR (run scripts/setup-emsdk.sh)"; done
+            AVAIL[$v]=0; REASON[$v]="not available: no emsdk in $EMSDK_DIR and no emcc on PATH (run scripts/setup-emsdk.sh)"; done
     else
         EMSCRIPTEN_VERSION="$(emcc --version 2>/dev/null | head -1 | sed -n 's/.* \([0-9][0-9.]*\) (.*/\1/p')"
         EMSDK_NODE_PATH="${EMSDK_NODE:-}"
@@ -194,23 +193,36 @@ check_availability() {
             AVAIL[wasm-O2-emsdk-node]=0; REASON[wasm-O2-emsdk-node]="emsdk's Node is not available"
         fi
     fi
+    # A variant that runs another variant's binary is only as available as that variant.
+    for v in "${VARIANTS[@]}"; do
+        if [ "${KIND[$v]}" = same-binary ] && [ "${AVAIL[${BASE[$v]}]}" != 1 ] && [ "${AVAIL[$v]}" = 1 ]; then
+            AVAIL[$v]=0; REASON[$v]="needs ${BASE[$v]}: ${REASON[${BASE[$v]}]}"
+        fi
+    done
 }
 
 # --------------------------------------------------------------------------------------
 # Building
 # --------------------------------------------------------------------------------------
 declare -A BINPATH RUNNER
-OUT="$BUILD_ROOT/_gate"
 
-generator_args() {
-    if command -v ninja >/dev/null 2>&1; then echo "-G Ninja"; fi
+# GEN: the CMake generator for a build directory: the one it was configured with (changing
+# it is an error), else Ninja if installed, else CMake's default.
+GEN=()
+pick_generator() { # dir
+    GEN=()
+    local cached=""
+    [ -f "$1/CMakeCache.txt" ] && cached="$(sed -n 's/^CMAKE_GENERATOR:INTERNAL=//p' "$1/CMakeCache.txt")"
+    if [ -n "$cached" ]; then GEN=(-G "$cached")
+    elif command -v ninja >/dev/null 2>&1; then GEN=(-G Ninja); fi
 }
 
 build_variant() { # variant ; sets BINPATH; returns 0 on success
     local v="$1" dir="$BUILD_ROOT/$1" log="$BUILD_ROOT/$1.build.log"
     local kind="${KIND[$v]}"
     [ "$kind" = same-binary ] && return 0
-    local -a cfg=(-S "$root" -B "$dir" $(generator_args) -DCMAKE_BUILD_TYPE=Gate -DBITRIOT_BUILD_GAME=OFF -DBITRIOT_BUILD_TESTS=OFF
+    pick_generator "$dir"
+    local -a cfg=(-S "$root" -B "$dir" "${GEN[@]}" -DCMAKE_BUILD_TYPE=Gate -DBITRIOT_BUILD_GAME=OFF -DBITRIOT_BUILD_TESTS=OFF
                   "-DCMAKE_CXX_FLAGS=${FLAGS[$v]}" "-DCMAKE_EXE_LINKER_FLAGS=${LDFLAGS[$v]:-}")
     local launcher=()
     case "$kind" in
@@ -220,7 +232,7 @@ build_variant() { # variant ; sets BINPATH; returns 0 on success
                             -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++)
                       BINPATH[$v]="$dir/bitriot_headless" ;;
         wasm)         launcher=(emcmake)
-                      cfg=(-S "$root" -B "$dir" $(generator_args) -DCMAKE_BUILD_TYPE=Gate -DBITRIOT_BUILD_GAME=OFF -DBITRIOT_BUILD_TESTS=OFF
+                      cfg=(-S "$root" -B "$dir" "${GEN[@]}" -DCMAKE_BUILD_TYPE=Gate -DBITRIOT_BUILD_GAME=OFF -DBITRIOT_BUILD_TESTS=OFF
                            "-DCMAKE_CXX_FLAGS=${FLAGS[$v]}" "-DCMAKE_EXE_LINKER_FLAGS=${FLAGS[$v]} $WASM_LINK")
                       BINPATH[$v]="$dir/bitriot_headless.js" ;;
     esac
@@ -298,6 +310,14 @@ diverging_tick() {
     if [[ "$ref" =~ ^hash\ ([0-9]+)\  ]]; then echo "${BASH_REMATCH[1]}"; else echo "?"; fi
 }
 
+# crash_note STDERRFILE -> one line: the first sanitizer/Valgrind/abort message, else the last lines
+crash_note() {
+    local m
+    m="$(grep -m1 -E 'runtime error|ERROR:|^==[0-9]+==|Aborted|terminate called|Assertion|Segmentation' "$1" 2>/dev/null | cut -c1-200)"
+    if [ -z "$m" ]; then m="$(grep -v '^DEBUG' "$1" 2>/dev/null | tail -3 | tr '\n' ' ' | cut -c1-200)"; fi
+    echo "${m:-no message on stderr}"
+}
+
 # run_replay VARIANT RECORD OUTFILE [extra args...] : runs replay --hashes; sets RC and ELAPSED_MS
 run_replay() {
     local v="$1" rec="$2" out="$3"; shift 3
@@ -310,7 +330,19 @@ run_replay() {
 # --------------------------------------------------------------------------------------
 # Main
 # --------------------------------------------------------------------------------------
-if [ "$CLEAN" = 1 ] && [ -n "$BUILD_ROOT" ] && [ -d "$BUILD_ROOT" ]; then rm -rf "$BUILD_ROOT"; fi
+if [ -z "$BUILD_ROOT" ]; then echo "determinism-gate: --build-root needs a directory" >&2; exit 2; fi
+BUILD_ROOT="$(realpath -m -- "$BUILD_ROOT")"
+if [ "$CLEAN" = 1 ]; then
+    # --clean deletes the build root: never the filesystem root, a home directory or the repository itself.
+    for bad in / "$HOME" "$root" "$(dirname "$root")"; do
+        if [ "$BUILD_ROOT" = "$(realpath -m -- "$bad")" ]; then
+            echo "determinism-gate: refusing to --clean $BUILD_ROOT (use a directory made for the gate, e.g. $root/build-gate)" >&2
+            exit 2
+        fi
+    done
+    [ -d "$BUILD_ROOT" ] && rm -rf "$BUILD_ROOT"
+fi
+OUT="$BUILD_ROOT/_gate"
 mkdir -p "$BUILD_ROOT" "$OUT"
 check_availability
 
@@ -358,11 +390,16 @@ fi
 echo "determinism gate: ${#SELECTED[@]} variants, build root $BUILD_ROOT, $JOBS build jobs"
 [ -n "$EMSCRIPTEN_VERSION" ] && echo "emscripten $EMSCRIPTEN_VERSION (pinned: $PINNED_EMSCRIPTEN), node ${SYSTEM_NODE} $("$SYSTEM_NODE" --version 2>/dev/null)${EMSDK_NODE_PATH:+, emsdk node $("$EMSDK_NODE_PATH" --version 2>/dev/null)}"
 if [ -n "$EMSCRIPTEN_VERSION" ] && [ "$EMSCRIPTEN_VERSION" != "$PINNED_EMSCRIPTEN" ]; then
-    echo "warning: Emscripten $EMSCRIPTEN_VERSION is not the pinned $PINNED_EMSCRIPTEN (scripts/setup-emsdk.sh installs the pin)" >&2
+    echo "warning: Emscripten $EMSCRIPTEN_VERSION ($(command -v emcc)) is not the pinned $PINNED_EMSCRIPTEN (scripts/setup-emsdk.sh installs the pin)" >&2
+    MISMATCH=1
 fi
 
 declare -A STATUS NOTE GOLDEN_MS START_MS NC_STATUS NC_NOTE
 FAILED=0
+if [ "${MISMATCH:-0}" = 1 ] && [ "$STRICT" = 1 ]; then
+    echo "determinism-gate: --strict and the Emscripten version is not the pinned one: failing" >&2
+    FAILED=1
+fi
 RAN=()
 
 # Build and set up each selected, available variant.
@@ -413,8 +450,8 @@ if [ "$EXTRA_ROUNDS" = 1 ]; then
         if ( cd "$root" && ${RUNNER[$ref]} run --out "$file" --seed "$seed" --config "$cfg" --checkpoint-every 1 --max-ticks 6000 ) > "$OUT/records/$name.run.txt" 2>&1; then
             RECORDS+=("$name"); RECFILE[$name]="$file"
         else
-            echo "determinism-gate: the reference could not play $name (see $OUT/records/$name.run.txt)" >&2
-            exit 2
+            echo "GATE FAILED: the reference could not play the extra round $name (see $OUT/records/$name.run.txt)" >&2
+            exit 1
         fi
     done
 fi
@@ -423,9 +460,13 @@ fi
 for r in "${RECORDS[@]}"; do
     run_replay "$ref" "${RECFILE[$r]}" "$OUT/ref/$r.out"
     if [ $RC -ne 0 ]; then
-        echo "determinism-gate: the reference does not replay $r (exit $RC):" >&2
+        # The reference built, started and still disagrees with a record: that is a
+        # determinism failure (or a stale record), not a setup problem.
+        echo >&2
+        echo "GATE FAILED: the reference build (gcc-O2) does not replay the record '$r' (exit $RC), so there is nothing to compare the other variants with:" >&2
         tail -3 "$OUT/ref/$r.out" >&2
-        exit 2
+        [ "$r" = golden ] && echo "(if the simulation was changed on purpose, regenerate the golden record; see tests/README.md)" >&2
+        exit 1
     fi
 done
 ( cd "$root" && ${RUNNER[$ref]} version ) > "$OUT/ref/version.out" 2>/dev/null
@@ -464,18 +505,28 @@ for v in "${RAN[@]}"; do
     fi
     firsttick=""
     myrecords=("${RECORDS[@]}")
-    [ -n "${ONLY_RECORDS[$v]:-}" ] && read -ra myrecords <<< "${ONLY_RECORDS[$v]}"
+    if [ -n "${ONLY_RECORDS[$v]:-}" ]; then
+        myrecords=()
+        for r in ${ONLY_RECORDS[$v]}; do
+            [ -n "${RECFILE[$r]:-}" ] && myrecords+=("$r")
+        done
+    fi
     for r in "${myrecords[@]}"; do
         run_replay "$v" "${RECFILE[$r]}" "$OUT/$v/$r.out"
         rc=$RC
         [ "$r" = golden ] && GOLDEN_MS[$v]=$ELAPSED_MS
         d="$(first_diff "$OUT/ref/$r.out" "$OUT/$v/$r.out")"
-        if [ -n "$d" ]; then
+        if { [ $rc -gt 1 ] && [ $rc -ne 3 ]; } || ! grep -q '^replay: ' "$OUT/$v/$r.out"; then
+            # Not a mismatch: a crash, an abort, a sanitizer or Valgrind error (UBSan exits 1,
+            # like a mismatch, but the output has no closing "replay:" line), a bad file.
+            problems+=("$r: exit $rc, not a hash mismatch: $(crash_note "$OUT/$v/$r.out.err"); last hash printed: $(grep -c '^hash ' "$OUT/$v/$r.out" | awk '{print ($1>0)?$1-1:"none"}')")
+            [ -z "$firsttick" ] && firsttick="?"
+        elif [ -n "$d" ]; then
             problems+=("$r: $(describe_diff "$d") (exit $rc)")
             t="$(diverging_tick "$d")"
             [ -z "$firsttick" ] && firsttick="$t"
         elif [ $rc -ne 0 ]; then
-            problems+=("$r: output identical but exit code $rc: $(head -c 200 "$OUT/$v/$r.out.err" | tr '\n' ' ')")
+            problems+=("$r: output identical but exit code $rc: $(crash_note "$OUT/$v/$r.out.err")")
         fi
     done
     run_probes "$v" "$OUT/$v"
