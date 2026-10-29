@@ -1853,8 +1853,13 @@ TEST_F(SimulationTest, APinnedRoundWithScriptedHumanInputKeepsItsHashes)
   EXPECT_EQ(digest, EXPECTED_DIGEST) << hashes.size() << " hashes";
   EXPECT_GT(hashes.size(), 1000u) << "the round should run a good while with the script playing";
   // The humans really did things: the script is not a no-op.
-  EXPECT_GT(player(1)->getNumberBombsPlaced() + player(1)->getNumberEggsPlaced()
-            + player(2)->getNumberBombsPlaced() + player(2)->getNumberEggsPlaced(), 5);
+  // (the roster keeps a player who died; player(n) does not)
+  int placed = 0;
+  for (int i = 0; i < 2; i++)
+  {
+    placed += sim().roster().at(i)->getNumberBombsPlaced() + sim().roster().at(i)->getNumberEggsPlaced();
+  }
+  EXPECT_GT(placed, 5);
 }
 
 } // namespace
