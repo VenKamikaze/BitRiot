@@ -32,6 +32,12 @@ set(SIM_TEST_SOURCES
   MapTest.cpp
   InputApplyTest.cpp
   ControlEventTest.cpp
+  MatchRecordTest.cpp
+  ReplayTest.cpp
+  GoldenRecordTest.cpp
+  DataHashTest.cpp
+  BuildIdTest.cpp
+  HeadlessCliTest.cpp
 )
 
 set(CORE_TEST_SOURCES
@@ -42,11 +48,12 @@ set(CORE_TEST_SOURCES
   RenderSideTest.cpp
   InputSamplerTest.cpp
   InputControlTest.cpp
+  GameOptionsTest.cpp
 )
 
 add_library(bitriot_sim_test_objs OBJECT ${SIM_TEST_SOURCES})
 target_include_directories(bitriot_sim_test_objs PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(bitriot_sim_test_objs PRIVATE bitriot_sim GTest::gtest)
+target_link_libraries(bitriot_sim_test_objs PRIVATE bitriot_sim bitriot_headless_cli GTest::gtest)
 
 # The whole project builds as C++17 (CMAKE_CXX_STANDARD in the top-level
 # CMakeLists.txt), which GoogleTest >= 1.17 requires.
@@ -59,6 +66,11 @@ set(BITRIOT_TEST_DEFINITIONS
   BITRIOT_SIM_SOURCES_FILE="${CMAKE_BINARY_DIR}/bitriot_sim_sources.txt"
   BITRIOT_SIM_LIBRARY="$<TARGET_FILE:bitriot_sim>"
   BITRIOT_COMPILER_TARGET_ARCH="${CMAKE_SYSTEM_PROCESSOR}"
+  # brief 05: the headless binary the CLI tests start, and what the build-id tests run
+  BITRIOT_HEADLESS_BINARY="$<TARGET_FILE:bitriot_headless>"
+  BITRIOT_CMAKE_COMMAND="${CMAKE_COMMAND}"
+  BITRIOT_BUILD_ID_SCRIPT="${PROJECT_SOURCE_DIR}/cmake/GenerateBuildId.cmake"
+  BITRIOT_BUILD_ID_DIR="${BITRIOT_GENERATED_DIR}"
 )
 target_compile_definitions(bitriot_sim_test_objs PRIVATE ${BITRIOT_TEST_DEFINITIONS})
 
@@ -74,7 +86,9 @@ target_compile_options(bitriot_sim_test_objs PRIVATE ${BITRIOT_TEST_WARNINGS})
 add_executable(bitriot_sim_tests test_main.cpp $<TARGET_OBJECTS:bitriot_sim_test_objs>)
 target_include_directories(bitriot_sim_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_options(bitriot_sim_tests PRIVATE ${BITRIOT_TEST_WARNINGS})
-target_link_libraries(bitriot_sim_tests PRIVATE bitriot_sim GTest::gtest)
+target_link_libraries(bitriot_sim_tests PRIVATE bitriot_sim bitriot_headless_cli GTest::gtest)
+# The CLI tests start the real binary.
+add_dependencies(bitriot_sim_tests bitriot_headless)
 
 # --- bitriot_tests: everything (only when the game is built) -------------------
 if(BITRIOT_BUILD_GAME)
@@ -82,7 +96,8 @@ if(BITRIOT_BUILD_GAME)
   target_include_directories(bitriot_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   target_compile_definitions(bitriot_tests PRIVATE BITRIOT_TESTS_WITH_CORE ${BITRIOT_TEST_DEFINITIONS})
   target_compile_options(bitriot_tests PRIVATE ${BITRIOT_TEST_WARNINGS})
-  target_link_libraries(bitriot_tests PRIVATE bitriot_core GTest::gtest)
+  target_link_libraries(bitriot_tests PRIVATE bitriot_core bitriot_headless_cli GTest::gtest)
+  add_dependencies(bitriot_tests bitriot_headless)
 endif()
 
 # The tests read data/ (and, in bitriot_tests, assets/) relative to the working

@@ -340,6 +340,11 @@ int cmdDump(const std::vector<std::string>& args, std::ostream& out, std::ostrea
   {
     throw UsageError("dump takes one record file");
   }
+  uint64_t wantedTick = 0;
+  if (a.has("tick"))
+  {
+    wantedTick = parseNumber(a.get("tick"), "--tick");
+  }
   MatchRecord record;
   try
   {
@@ -353,7 +358,7 @@ int cmdDump(const std::vector<std::string>& args, std::ostream& out, std::ostrea
   uint64_t tick = record.ticks.size();
   if (a.has("tick"))
   {
-    tick = parseNumber(a.get("tick"), "--tick");
+    tick = wantedTick;
     if (tick > record.ticks.size())
     {
       throw UsageError("--tick " + std::to_string(tick) + " is past the record's last tick (" + std::to_string(record.ticks.size()) + ")");
@@ -419,16 +424,16 @@ int cmdVersion(const std::vector<std::string>& args, std::ostream& out, std::ost
 
 unsigned long long parseNumber(const std::string& text, const std::string& what)
 {
-  if (text.empty() || text[0] == '-' || text[0] == '+')
+  if (text.empty() || text[0] < '0' || text[0] > '9')
   {
-    throw std::invalid_argument(what + " must be a non-negative number, not \"" + text + "\"");
+    throw std::invalid_argument(what + " must be a non-negative number (decimal or 0x hex), not \"" + text + "\"");
   }
   char* end = nullptr;
   errno = 0;
   const unsigned long long v = std::strtoull(text.c_str(), &end, 0);
   if (end == nullptr || *end != '\0' || errno == ERANGE)
   {
-    throw std::invalid_argument(what + " must be a number (decimal or 0x hex), not \"" + text + "\"");
+    throw std::invalid_argument(what + " must be a non-negative number (decimal or 0x hex), not \"" + text + "\"");
   }
   return v;
 }
