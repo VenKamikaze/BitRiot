@@ -703,3 +703,7 @@ weapon and AI behaviour is testable with this harness today and is the obvious
 next area to extend. The other RmlUi menus (`playerselect.rml`,
 `gameoptions.rml`) are now reachable through `RmlLayoutTest` the same way the
 scoreboard is — only their data models need wiring up.
+
+## The web build's smoke test (`tests/web/`, brief 09)
+
+`tests/web/smoke.js` is a Node script, not a GoogleTest binary, and it is not part of `ctest`: it needs the Emscripten build (`build-wasm/`, see the top-level README's "Web build") and the Chromium that Playwright manages (`require('playwright')`). Run it with `node tests/web/smoke.js build-wasm`; it serves the directory itself, runs five scenarios in fresh headless browsers (menus with the mouse, a keyboard round and ESC, a CPU-only round with sound, `?autostart=ai4`, a browser with no WebGL, a fake gamepad that appears later with START and rumble, and *Exit*), prints `ok`/`FAIL` for each check and `PASS`/`FAIL` at the end, exits non-zero on a failure and leaves screenshots and each page's console log in `build-wasm/smoke/`. It judges rendering from page screenshots (a WebGL canvas reads back blank) and treats any page error, `console.error` or `ERROR:` log line as a failure. It drives the game through the exports in `src/web/WebHooks.h`. It does not replace the native suites, which never exercise `main` or the renderer.

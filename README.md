@@ -108,3 +108,29 @@ Steps shown above:
 4. Build it
 5. Run the game - you should now have a 'BitRiot' executable in your current directory:
 
+## Web build (WebAssembly)
+
+BitRiot also builds with Emscripten and runs in a desktop browser: menus, local play with keyboard and gamepads, CPU players and sound. There is no online play in it yet. The browser needs WebAssembly (any current Chrome, Firefox or Safari); no special server headers are needed.
+
+You need git, Python 3, CMake 3.15+ and a C++ compiler for the CMake step; the SDL libraries are **not** needed, because Emscripten provides them as ports (SDL2, SDL2_image, SDL2_ttf, SDL2_mixer, FreeType). RmlUi comes from the submodule.
+
+```
+git clone --recurse-submodules https://github.com/VenKamikaze/BitRiot.git
+cd BitRiot
+scripts/setup-emsdk.sh              # installs the pinned Emscripten SDK into ./.emsdk (git-ignored)
+source .emsdk/emsdk_env.sh          # puts emcc and emcmake on the PATH, for this shell
+emcmake cmake -S . -B build-wasm    # a Release build unless you say otherwise
+cmake --build build-wasm -j4
+python3 -m http.server -d build-wasm 8000
+```
+
+Then open <http://localhost:8000/> and press the *Click to start* button (a browser only lets a page make sound after it has been clicked). The build writes `index.html` (a copy of `BitRiot.html`), `BitRiot.js`, `BitRiot.wasm` and `BitRiot.data` (the `data/` and `assets/` folders) into `build-wasm/`; serve that directory, over HTTP rather than `file://`.
+
+* The SDK revision and Emscripten version are pinned in `scripts/setup-emsdk.sh` (the same pin as the vnet repository, so one compiler builds both). `EMSDK_DIR=/some/path scripts/setup-emsdk.sh` installs elsewhere.
+* Emscripten downloads each port the first time a build needs it and keeps it in its cache (`$(em-config CACHE)`). **If GitHub archive downloads are blocked** (the cloud container answers 403 to them), run `scripts/setup-emsdk.sh --with-ports` once instead. The archives for the six ports that come from GitHub archive URLs are stored on this repository's orphan branch `emscripten-ports`; the script fetches that branch with git, checks every file's SHA-512 against the `HASH` in the SDK's `tools/ports/<name>.py`, unpacks it into the cache exactly as Emscripten would and writes the marker Emscripten looks for, so nothing is downloaded. (harfbuzz and libpng come from other hosts and download normally.) If the SDK pin ever changes, the port versions change with it: refresh that branch.
+* Flags: `-fwasm-exceptions` (the game throws in a few places; the same model as the determinism gate), `-sALLOW_MEMORY_GROWTH=1`, a 2 MB stack, no threads. The page starts the game from its button, so audio opens inside a click. If WebGL is unavailable the game draws with SDL's software renderer.
+* `-DCMAKE_BUILD_TYPE=Debug` gives a bigger, slower build with assertions and the RmlUi debugger (Shift+` in a menu); with `emcmake` the default is Release. The web build never prints debug-level log lines.
+* The page can be opened with `?autostart=ai4` (2 to 6) to start a round of CPU players straight away.
+* A smoke test drives the build in the Playwright-managed Chromium (it needs `npm i playwright` somewhere `require` can find it, or a global install): `node tests/web/smoke.js build-wasm` serves the directory itself, plays the menus, a keyboard round, a CPU-only round, a gamepad and the quit path, and writes screenshots to `build-wasm/smoke/`.
+
+

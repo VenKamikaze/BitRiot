@@ -110,7 +110,7 @@
 </div>
 
 <div id="help">
-  <div><b>Keyboard.</b> Player 1: W A S D, left Ctrl (weapon), left Shift (egg). Player 4: arrow keys, right Ctrl, right Shift. Hold the weapon key and press a direction to pick the weapon.</div>
+  <div><b>Keyboard.</b> Player 1: W A S D, left Ctrl (weapon), left Shift (egg). Player 4: arrow keys, right Ctrl, right Shift. Hold the weapon key and press a direction to pick the weapon. (Ctrl+W closes a browser tab; the page asks first, so choose Stay.)</div>
   <div><b>Controllers.</b> Plug in or wake a pad (press any button; browsers hide pads until you do), then press START in a round to join or take over a CPU player.</div>
   <div><b>Sound</b> starts when you click the button above. Rumble is not supported in this build.</div>
 </div>
@@ -195,6 +195,8 @@
   // reads the canvas's CSS size when it creates its window (a CSS-sized canvas makes
   // the window that size).
   function fit() {
+    // The game's Fullscreen option makes the browser (and SDL) size the canvas.
+    if (document.fullscreenElement || document.webkitFullscreenElement) { return; }
     var cw = canvas.width, ch = canvas.height;
     if (!cw || !ch) { return; }
     var room = document.body.clientWidth - 32;
@@ -212,6 +214,15 @@
 
   // Keep the keyboard on the game: a click on the canvas focuses it.
   canvas.addEventListener('mousedown', function () { canvas.focus(); });
+
+  // Player 1's keys include W and left Ctrl, and Ctrl+W closes the tab: a page cannot
+  // stop that, but it can make the browser ask first. Only while the game is running.
+  window.addEventListener('beforeunload', function (e) {
+    if (window.bitriotStarted && !window.bitriotQuit) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
 
   // Arrow keys and space must not scroll the page while playing.
   window.addEventListener('keydown', function (e) {

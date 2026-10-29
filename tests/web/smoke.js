@@ -6,14 +6,16 @@
 //   node tests/web/smoke.js [build-wasm-dir]        (default: build-wasm)
 //   BITRIOT_SMOKE_SHOTS=dir node tests/web/smoke.js  (screenshots, default <build>/smoke)
 //
-// It serves the build directory itself, so nothing else needs to be running. Four
+// It serves the build directory itself, so nothing else needs to be running. Five
 // scenarios, each in a fresh browser:
-//   1. menus and a CPU-only round (GPU-less WebGL through SwiftShader), with sound;
+//   1. the menus with the mouse, a round with a keyboard player (keys, ESC), then a
+//      CPU-only round (GPU-less WebGL through SwiftShader), with sound;
 //   2. the ?autostart=ai4 address (the same round, started from the address);
 //   3. no WebGL at all, so the game falls back to SDL's software renderer;
 //   4. a gamepad that appears after the page loaded (a fake one: the Gamepad API
 //      hides pads until a button is pressed), driving the menu and pressing START
-//      in a round, which asks the pad to rumble and must fail quietly.
+//      in a round, which asks the pad to rumble and must fail quietly;
+//   5. Exit, which tears the game down and stops the main loop.
 // What it checks: the page screenshot (not canvas read-back, which a WebGL canvas
 // answers with blank unless preserveDrawingBuffer is set) is not blank and changes
 // from the menu to the round, the simulation's tick count advances, nothing logs an
@@ -193,7 +195,25 @@ async function scenarioMenuAndRound(server) {
   const select = await shot(page, 'player-select.png');
   check((await differ(page, menu, select)) > 0.02, 'a mouse click on Play opens the player-select page');
 
-  // Back out is not needed: the hook closes whatever menu is open.
+  // Start Game (the top entry of the page) with the defaults: Player 1 on the
+  // keyboard, three CPU players.
+  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.065);
+  await page.waitForFunction(() => window.Module._bitriot_game_state() === 2, null, { timeout: 15000 })
+    .then(() => check(true, 'Start Game starts a round with a keyboard player'), () => check(false, 'Start Game starts a round with a keyboard player'));
+  await waitTicks(page, 30, 30000);
+  // Player 1's keys: W A S D, left Ctrl (weapon), left Shift (egg). The page must not
+  // see them as shortcuts, and the round must go on.
+  for (const key of ['KeyD', 'KeyS', 'KeyA', 'KeyW']) {
+    await page.keyboard.down(key); await page.waitForTimeout(250); await page.keyboard.up(key);
+  }
+  await page.keyboard.down('ShiftLeft'); await page.waitForTimeout(100); await page.keyboard.up('ShiftLeft');
+  const keyed = await waitTicks(page, 30, 30000);
+  check(keyed >= 30, 'the round carries on while keys are pressed', keyed);
+  // ESC leaves the round for the scoreboard, which is a menu again.
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => window.Module._bitriot_game_state() === 1, null, { timeout: 15000 })
+    .then(() => check(true, 'ESC ends the round (the keyboard reaches the game)'), () => check(false, 'ESC ends the round (the keyboard reaches the game)'));
+
   check((await call(page, 'bitriot_start_ai_match', 4)) === 1, 'a four-CPU round starts through the test hook');
   const advanced = await waitTicks(page, 90, 30000);
   check(advanced >= 90, 'the simulation advanced 90 ticks', advanced);
@@ -239,6 +259,25 @@ async function scenarioSoftwareRenderer(server) {
   const advanced = await waitTicks(page, 60, 60000);
   check(advanced >= 60, 'a round advanced 60 ticks without WebGL', advanced);
   await notBlank(page, await shot(page, 'software.png'), 'the round drawn by the software renderer');
+  await finish(page, browser);
+}
+
+async function scenarioQuit(server) {
+  console.log('5. Exit quits cleanly');
+  const browser = await chromium.launch({ args: GL_ARGS });
+  const page = await openPage(browser, 'quit', server.url);
+  await waitReady(page);
+  await clickStart(page);
+  await page.waitForTimeout(500);
+  const box = await page.locator('#canvas').boundingBox();
+  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.61); // Exit
+  await page.waitForFunction(() => window.bitriotQuit === true, null, { timeout: 15000 })
+    .then(() => check(true, 'Exit quits and tells the page'), () => check(false, 'Exit quits and tells the page'));
+  const frames = await call(page, 'bitriot_frames');
+  await page.waitForTimeout(500);
+  check((await call(page, 'bitriot_frames')) === frames, 'the main loop has stopped');
+  const shown = await page.evaluate(() => !document.getElementById('overlay').hidden);
+  check(shown, 'the page says the game has quit');
   await finish(page, browser);
 }
 
@@ -312,6 +351,7 @@ async function scenarioGamepad(server) {
     await scenarioAutostart(server);
     await scenarioSoftwareRenderer(server);
     await scenarioGamepad(server);
+    await scenarioQuit(server);
   } catch (e) {
     failures++;
     console.log('  FAIL the test stopped: ' + (e && e.stack || e));
