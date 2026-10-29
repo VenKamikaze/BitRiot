@@ -12,6 +12,8 @@ A fact check of the current code, made for the briefs in `doco/netplay/`. File:l
 
 *Brief 05 (Oct 2026) added the match record (`src/MatchRecord.*`), the replayer (`src/MatchReplay.*`), `Simulation::dataHash()` and eager loading of the data files (`src/DataHash.*`), a build id generated at build time (`src/BuildId.h`, `cmake/GenerateBuildId.cmake`), `Simulation::dumpState()`, the `bitriot_headless` binary (`src/headless/`) and `--record <dir>` with `getopt_long` (`src/GameOptions.*`). §7, §10 and §12 are updated; the format is specified in [`match-record-format.md`](../match-record-format.md).*
 
+*Brief 05b (Oct 2026) added the cross-platform determinism gate (`scripts/determinism-gate.sh`), `scripts/setup-emsdk.sh` and `bitriot_headless replay --perturb-at`; no simulation source changed. §12 has the Emscripten facts and the result for libstdc++ vs libc++.*
+
 An earlier design chat analysed the April-2022 code. Where this file disagrees with that chat, this file wins.
 
 **Corrections to the earlier analysis**
@@ -370,9 +372,17 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
 
 **`InputHandler` holds no per-player game state** (04a). Its `m_keyMap`, the `InputSampler`, `m_slotController` and the local slot mask are keyed by slot (playerNumber - 1) and rebuilt/cleared in `setPointers`, so resetting entity ids per round no longer matters to them. What it holds is the *device* side (04b): which pad and keyboard set drives each slot, which slots are local, and the control events produced and not yet sampled. Brief 07 must keep remote humans out of the local mask and out of `setPointers`' keyboard assignment.
 
-**libstdc++ vs libc++** (Emscripten uses libc++): no known divergence.
+**libstdc++ vs libc++** (Emscripten uses libc++): *checked by brief 05b, no divergence.* The gate replays the golden record and six more rounds, a hash on every tick, under GCC and Clang with libstdc++, Clang with LLVM libc++ 18 natively, aarch64 under qemu-user and wasm32 under Node (details in 05b's Outcome and `tests/README.md`).
 
 - The sim uses only `map`, `set`, `list`, `queue`, `vector` and `std::find`.
 - The single `std::sort` is in UI code, over unique keys.
 - There is no `long`/`size_t` arithmetic in the sim, so wasm32's 32-bit `long` doesn't matter.
 - Function-argument evaluation order *does* differ between GCC and Clang, which only matters if two RNG draws share one expression. There are none today.
+
+**Emscripten and the simulation (05b).**
+
+- **Exceptions need a mode.** Emscripten builds with no exception support by default, and the simulation's refusals (`std::logic_error`, `std::out_of_range`, `std::invalid_argument` from `Simulation::start/step`, `MatchRecordError`, the CLI's usage errors) are caught C++ exceptions. A wasm `bitriot_headless` built without `-fwasm-exceptions` replays the golden record correctly and then **aborts** on the first throw ("Aborted(undefined)", exit 1). The gate's exception probes exist for this. With `-fwasm-exceptions` Emscripten 6.0.13 emits the *legacy* wasm EH (`-sWASM_LEGACY_EXCEPTIONS` defaults to 1); `-sWASM_LEGACY_EXCEPTIONS=0` emits the standard exnref EH. Both run on Node 22.22.0 (V8 12.4) and on the Node 24.19.0 that emsdk ships, with no flag, and both replay identically.
+- **`-sNODERAWFS=1 -sENVIRONMENT=node`** is all the headless binary needs to read the record and `data/` from the working directory. No `--preload-file`, no Emscripten ports (the sim has no SDL). The 64 KB default stack was enough for every round replayed (checked with `-sSTACK_OVERFLOW_CHECK=2`); the gate links with a 1 MiB stack and growable memory anyway.
+- **Argument evaluation order differs by compiler and target.** An experiment (not committed) with two calls in one argument list: x86-64 GCC evaluates them right to left; Clang, aarch64 GCC and wasm (Clang) left to right. So the rule in `SimRandom.h` (never two sim draws in one expression) is not hygiene, it is what keeps the platforms equal, and the gate catches a breach at the first tick it runs.
+- **`replay --perturb-at TICK`** (test only): adds 1 to the x offset of the first block after tick TICK-1. It targets a block on purpose: a player's or monster's offset is pulled back towards the tile centre by the next step (`GameEntity::moveInDirection`), so a one-unit nudge there vanishes without changing the next tick's hash.
+- **`g++-multilib` and `g++-aarch64-linux-gnu` conflict on Ubuntu** (installing one removes the other), so a `-m32` run (a cheap stand-in for wasm32's 32-bit `long`) and the aarch64 cross build cannot both be set up on one machine with apt.

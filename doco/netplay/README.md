@@ -64,7 +64,7 @@ Don't reopen these inside a brief. If one turns out to be wrong, stop and raise 
 - **D6. Fixed-point sim maths, then prove it.** *(The user's answer to Q2, Oct 2026. Brief 02b landed it.)*
   - The sim uses no floating point. Offsets, velocities, the A\* open-list keys and the rocket's target are integers: `fixed_t`, Q16.16, in `src/Fixed.h` (brief **02b**, done; it carries a play-test because play feel shifts very slightly).
   - Floats remain only outside the sim (rendering and HUD, rumble, window scaling, RmlUi, audio). `FixedPointSourceGuardTest` fails if a `float`, `double`, floating literal or libm call appears in the `bitriot_sim` library (its sources and the headers they include; there is no allowlist, and a file that needs a float belongs in `bitriot_core`), so they cannot creep back. (It is a text scan: it cannot see an `auto` carrying a double or an implicit int-to-float conversion, so brief 03b added an object-level check that disassembles the compiled `bitriot_sim` archive.)
-  - Brief **05b** still runs **before** netplay is built, as a confirmation gate for other sources of divergence (UB, libstdc++ vs libc++, evaluation order):
+  - Brief **05b** (done: all 17 variants that could run match, none needed a fix; `scripts/determinism-gate.sh`) ran **before** netplay was built, as a confirmation gate for other sources of divergence (UB, libstdc++ vs libc++, evaluation order):
     - GCC vs Clang;
     - an aggressive-flags build;
     - optionally aarch64 under qemu;
@@ -124,6 +124,7 @@ These are the user's conventions for this repo.
   cmake -S . -B build && cmake --build build -j8 && ./build/tests/bitriot_tests
   ```
   Since 03b there is also `./build/tests/bitriot_sim_tests`, the simulation tests linked against `bitriot_sim` and GoogleTest alone (no SDL); run both when you touch the simulation. Configure with `-DBITRIOT_BUILD_GAME=OFF` to build only `bitriot_sim` and `bitriot_sim_tests` without SDL, OpenGL or RmlUi installed (the headless, wasm and cross builds).
+  The cross-platform determinism gate (05b) is `scripts/determinism-gate.sh`; it needs no SDL, and its wasm variants need the pinned emsdk from `scripts/setup-emsdk.sh` (see `tests/README.md`).
 
 **Network limits in the cloud container.** Checked Oct 2026, under the environment's *limited* network policy.
 
