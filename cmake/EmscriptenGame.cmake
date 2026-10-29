@@ -96,10 +96,14 @@ set(RMLUI_LIBRARIES RmlCore RmlDebugger)
 # and a copy of the page as index.html, so the directory can be served as it is.
 function(bitriot_configure_web_target target)
   set(shell ${PROJECT_SOURCE_DIR}/web/shell.html)
+  # The preloaded files are packed into BitRiot.data at link time, so editing one
+  # must relink (the glob is read at configure time: re-run cmake after adding a file).
+  file(GLOB_RECURSE preloaded CONFIGURE_DEPENDS
+    ${PROJECT_SOURCE_DIR}/data/* ${PROJECT_SOURCE_DIR}/assets/*)
   target_sources(${target} PRIVATE ${PROJECT_SOURCE_DIR}/src/web/WebHooks.cpp)
   set_target_properties(${target} PROPERTIES
     SUFFIX ".html"
-    LINK_DEPENDS ${shell})
+    LINK_DEPENDS "${shell};${preloaded}")
   target_link_options(${target} PRIVATE
     "SHELL:--shell-file ${shell}"
     # The page starts the game from its "Click to start" button (Module.callMain).
