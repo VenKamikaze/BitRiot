@@ -1,6 +1,9 @@
 #include "DataReader.h"
 #include "MickLogger.h"
 
+#include <algorithm>
+#include <iterator>
+
 DataReader::DataReader()
 {
   m_pIntFilemap = new map<string, map<string, int> >;
@@ -53,6 +56,38 @@ void DataReader::clearCache()
 {
   m_pIntFilemap->clear();
   m_pStrFilemap->clear();
+}
+
+bool DataReader::loadFile(const string & filename)
+{
+  if (m_pIntFilemap->find(filename) != m_pIntFilemap->end())
+  {
+    return true;
+  }
+  return readTextFile(filename);
+}
+
+bool DataReader::normalisedEntries(const string & filename, vector<pair<string, string> > & out)
+{
+  out.clear();
+  if (!loadFile(filename))
+  {
+    return false;
+  }
+  // The two maps are disjoint (a constant is an int or a string, never both) and
+  // each is sorted by name; merge them.
+  const map<string, int> & ints = m_pIntFilemap->find(filename)->second;
+  const map<string, string> & strs = m_pStrFilemap->find(filename)->second;
+  for (map<string, int>::const_iterator it = ints.begin(); it != ints.end(); ++it)
+  {
+    out.push_back(make_pair(it->first, std::to_string(it->second)));
+  }
+  for (map<string, string>::const_iterator it = strs.begin(); it != strs.end(); ++it)
+  {
+    out.push_back(make_pair(it->first, it->second));
+  }
+  std::sort(out.begin(), out.end());
+  return true;
 }
 
 const int DataReader::getIntFromFile(const string & constantName, const string & filename)
@@ -139,13 +174,25 @@ const string DataReader::getStringFromFile(const string & constantName, const st
 
 bool DataReader::readTextFile(const string & filename)
 {
-  ifstream inputFile;
-  inputFile.open(filename.c_str());
-  if (!inputFile.is_open())
+  ifstream rawFile(filename.c_str(), ios::in | ios::binary);
+  if (!rawFile.is_open())
   {
     m_errorString = "Could not open file: " + filename;
     return false;
   }
+  // The file is parsed from memory with every carriage return removed, so a file
+  // with Windows line endings (git autocrlf, a shared folder) reads the same as one
+  // with Unix endings on every platform: before, a "\r" ended up in the value and the
+  // file did not parse on Linux. The data hash (DataHash.h) relies on this too.
+  string fileText((istreambuf_iterator<char>(rawFile)), istreambuf_iterator<char>());
+  rawFile.close();
+  fileText.erase(remove(fileText.begin(), fileText.end(), '\r'), fileText.end());
+  // A UTF-8 byte order mark (some editors add one) is not part of the first name.
+  if (fileText.compare(0, 3, "\xEF\xBB\xBF") == 0)
+  {
+    fileText.erase(0, 3);
+  }
+  istringstream inputFile(fileText);
 
   // set up map<string, int> for this file
   map<string, int> intValueMap;
@@ -184,13 +231,11 @@ bool DataReader::readTextFile(const string & filename)
       if (input == '\0')
       {
         m_errorString = "Unexpected end of file: " + filename + " after string: " + constantName;
-        inputFile.close();
         return false;
       }
       if (input == '\n')
       {
         m_errorString = "Unexpected end of line in file: " + filename + " after string: " + constantName;
-        inputFile.close();
         return false;
       }
       constantName.push_back(input);
@@ -211,13 +256,11 @@ bool DataReader::readTextFile(const string & filename)
     if (!inputFile)
     {
       m_errorString = "Unexpected end of file: " + filename + " after string: " + constantName;
-      inputFile.close();
       return false;
     }
     if (input == '\n')
     {
       m_errorString = "Unexpected end of line in file: " + filename + " after string: " + constantName;
-      inputFile.close();
       return false;
     }
 
@@ -238,13 +281,11 @@ bool DataReader::readTextFile(const string & filename)
     {
       // error reading int
       m_errorString = "Error reading value in file: " + filename + " after: " + constantName;
-      inputFile.close();
       return false;
     }
     if ((input != '\n') && (!(isAlphaNum(input))))
     {
       m_errorString = "Error reading value in file: " + filename + " after: " + constantName;
-      inputFile.close();
       return false;
     }
 
@@ -263,7 +304,6 @@ bool DataReader::readTextFile(const string & filename)
       {
         m_errorString = "Value after string: " + constantName + " in file: "
                         + filename + " begins with a number but is not an int.";
-        inputFile.close();
         return false;
       }
       else
@@ -302,7 +342,6 @@ bool DataReader::readTextFile(const string & filename)
   }
 
   // we've now parsed the input file
-  inputFile.close();
 
   // add the constant valueMaps to the object's filemaps
   pair<string, map<string, int> > intFilemapEntry(filename, intValueMap);

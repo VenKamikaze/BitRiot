@@ -41,25 +41,28 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <ostream>
 #include <string>
 #include <vector>
 
 class StateHasher
 {
   public:
-    StateHasher() : m_hash(OFFSET_BASIS), m_trace(nullptr), m_prefix("") {}
+    StateHasher() : m_hash(OFFSET_BASIS), m_trace(nullptr), m_prefix(""), m_dump(nullptr) {}
 
     // Every write names its field ("entity.health", "bomb.fuse"). The name does
     // not enter the hash; it only feeds the optional trace below.
     void u8(uint8_t v, const char* name)
     {
       note(name, "u8");
+      show(name, (long long) v);
       raw(v);
     }
 
     void flag(bool v, const char* name)
     {
       note(name, "u8");
+      show(name, v ? 1 : 0);
       raw(v ? 1 : 0);
     }
 
@@ -67,12 +70,14 @@ class StateHasher
     void i32(int32_t v, const char* name)
     {
       note(name, "i32");
+      show(name, (long long) v);
       raw32(v);
     }
 
     void u64(uint64_t v, const char* name)
     {
       note(name, "u64");
+      show(name, (long long) v, true);
       for (int shift = 0; shift < 64; shift += 8)
       {
         raw((uint8_t) ((v >> shift) & 0xff));
@@ -83,6 +88,7 @@ class StateHasher
     void count(size_t n, const char* name)
     {
       note(name, "count");
+      show(name, (long long) n);
       raw32((int32_t) n);
     }
 
@@ -107,6 +113,7 @@ class StateHasher
     void ref(int id, const char* name)
     {
       note(name, "ref");
+      show(name, (long long) refOf(id));
       raw32(refOf(id));
     }
 
@@ -135,6 +142,40 @@ class StateHasher
       m_prefix = prefix;
     }
 
+    // DUMP. With a sink attached, every write that is not quiet also prints
+    // "  name = value" (a u64 as unsigned decimal), so the whole hashed state can
+    // be read and diffed (Simulation::dumpState). Printing changes nothing about the
+    // hash. quiet(true) suspends the printing (the map and the tile lists, which the
+    // dump prints in its own form); beginSection() prints a heading line.
+    void setDump(std::ostream* out)
+    {
+      m_dump = out;
+    }
+    // True while a dump sink is attached: callers build headings only then, so the plain
+    // hash path (every checkpoint, every desync check) allocates nothing for them.
+    bool dumping() const
+    {
+      return m_dump != nullptr;
+    }
+    void quiet(bool on)
+    {
+      m_quiet = on;
+    }
+    void beginSection(const char* heading)
+    {
+      if (m_dump != nullptr)
+      {
+        *m_dump << heading << "\n";
+      }
+    }
+    void beginSection(const std::string& heading)
+    {
+      if (m_dump != nullptr)
+      {
+        *m_dump << heading << "\n";
+      }
+    }
+
     static constexpr uint64_t OFFSET_BASIS = 0xcbf29ce484222325ULL;
     static constexpr uint64_t PRIME = 0x100000001b3ULL;
 
@@ -154,6 +195,23 @@ class StateHasher
       raw((uint8_t) ((u >> 24) & 0xff));
     }
 
+    void show(const char* name, long long v, bool unsignedValue = false)
+    {
+      if (m_dump != nullptr && !m_quiet)
+      {
+        *m_dump << "  " << name << " = ";
+        if (unsignedValue)
+        {
+          *m_dump << (unsigned long long) v;
+        }
+        else
+        {
+          *m_dump << v;
+        }
+        *m_dump << "\n";
+      }
+    }
+
     void note(const char* name, const char* kind)
     {
       if (m_trace != nullptr)
@@ -166,6 +224,8 @@ class StateHasher
     std::vector<int> m_ids;
     std::vector<std::string>* m_trace;
     const char* m_prefix;
+    std::ostream* m_dump;
+    bool m_quiet = false;
 };
 
 #endif /* _STATEHASH_H */

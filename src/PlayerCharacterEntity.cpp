@@ -28,6 +28,18 @@ static const int ROUTE_THROUGH_BLOCKS = 1;
 // any closer before it concludes the pickup is not really reachable.
 static const int MAX_PICKUP_ATTEMPTS = 3;
 
+// How far (in tiles, each way) a bot with enough health looks for a pickup.
+static const int PICKUP_SEARCH_RANGE = 4;
+
+void PlayerCharacterEntity::appendSimConstants(std::vector<std::pair<std::string, int> >& out)
+{
+  out.push_back(std::make_pair(std::string("PlayerCharacterEntity.MIN_HEALTH_TO_LAY"), MIN_HEALTH_TO_LAY));
+  out.push_back(std::make_pair(std::string("PlayerCharacterEntity.MIN_HEALTH_AFTER_OWN_BLAST"), MIN_HEALTH_AFTER_OWN_BLAST));
+  out.push_back(std::make_pair(std::string("PlayerCharacterEntity.PICKUP_RETRY_FRAMES"), PICKUP_RETRY_FRAMES));
+  out.push_back(std::make_pair(std::string("PlayerCharacterEntity.MAX_PICKUP_ATTEMPTS"), MAX_PICKUP_ATTEMPTS));
+  out.push_back(std::make_pair(std::string("PlayerCharacterEntity.PICKUP_SEARCH_RANGE"), PICKUP_SEARCH_RANGE));
+}
+
 PlayerCharacterEntity::PlayerCharacterEntity(int uniqueID, int playerNumber, int atX, int atY, unsigned int flags)
 {
   // constructor
@@ -344,7 +356,7 @@ bool PlayerCharacterEntity::seekPickup()
   // A bot too weak to lay anything cannot make its own energy, so a pickup is
   // its only way back: look across the whole map for one that restores energy,
   // not just in the neighbourhood.
-  static const int RANGE = 4;
+  const int RANGE = PICKUP_SEARCH_RANGE;
   const bool desperate = m_health < MIN_HEALTH_TO_LAY;
   const int range = desperate
                     ? std::max(mapWidth, settings->getMapHeight())

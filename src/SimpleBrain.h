@@ -49,6 +49,11 @@ class SimpleBrain
     DIRECTION getDirectionFromHeading(Heading h, int moveState); // used to determine direction to go
     // in conjunction with direction probability weightings
 
+  public:
+    // For the data hash (DataHash.cpp): the value is a sim constant.
+    static int initialMinMoveTimer() { return INITIAL_MIN_MOVE_TIMER; }
+
+  private:
     int m_minMoveTimer; // used to force movement so entity doesnt try to go different directions at a junction each frame
     static const int INITIAL_MIN_MOVE_TIMER = 5; // frames to head in forced direction
 

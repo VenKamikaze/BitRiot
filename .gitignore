@@ -36,6 +36,7 @@ main.cpp.triplebuf
 
 # --- CMake build output ---
 /build/
+/build-*/
 /cmake-build-debug/
 *.o
 *.a

@@ -10,6 +10,8 @@ A fact check of the current code, made for the briefs in `doco/netplay/`. File:l
 
 *Brief 04a (Oct 2026) split input into a local sampler and a deterministic apply: `Simulation::step(const TickInputs&)` moves players, and the per-slot input state lives in the sim and in the state hash (version 2). §1, §5, §6, §10, §11 and §12 are updated; refs marked "(before 04a)" no longer exist.*
 
+*Brief 05 (Oct 2026) added the match record (`src/MatchRecord.*`), the replayer (`src/MatchReplay.*`), `Simulation::dataHash()` and eager loading of the data files (`src/DataHash.*`), a build id generated at build time (`src/BuildId.h`, `cmake/GenerateBuildId.cmake`), `Simulation::dumpState()`, the `bitriot_headless` binary (`src/headless/`) and `--record <dir>` with `getopt_long` (`src/GameOptions.*`). §7, §10 and §12 are updated; the format is specified in [`match-record-format.md`](../match-record-format.md).*
+
 An earlier design chat analysed the April-2022 code. Where this file disagrees with that chat, this file wins.
 
 **Corrections to the earlier analysis**
@@ -254,7 +256,9 @@ The old AI goal and instruction lists used to persist across a switch; they are 
 
 **Data files**
 
-- `data/entity.txt` and `data/player.txt` are sim parameters: fuses, hatch times, velocities, costs, spawn chances, health. **A missing key silently returns 1** (DataReader.cpp ~83-89).
+- `data/entity.txt` and `data/player.txt` are sim parameters: fuses, hatch times, velocities, costs, spawn chances, health. **A missing key silently returns 1** (`DataReader::getIntFromFile`, which counts it in `errorCount()`; the test harness fails a test that makes one).
+- *(Brief 05.)* **Both files are loaded eagerly:** `Simulation::start()` calls `DataHash::loadSimData()` before touching anything, so a file that is missing or does not parse throws `std::runtime_error` there instead of every constant answering 1 later. A key missing from a file that does load still reads as 1 in whatever asks for it; `Simulation::dataHash()` (FNV-1a 64 over the parsed, normalised, name-sorted `name=value` items of both files plus the named sim constants in code, `src/DataHash.h`) is what tells a peer with a different file. `DataReader` now strips carriage returns before parsing: before, a CRLF file left a `\r` in the value and did not parse on Linux (on Windows the text-mode stream hid it).
+- `DataReader::loadFile()` / `normalisedEntries()` are the eager-load and the parsed-items API.
 - `renderer.txt`, `audio.txt` and `messages.txt` are not sim-relevant.
 - `map.txt` is never read.
 
@@ -307,6 +311,7 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
 - `runRoundToCompletion(maxFrames)` in engine order.
 - Consecutive rounds in one process.
 - A base seed per process (`BITRIOT_TEST_SEED`); each test derives its round seeds from it, its name and its round count.
+- Record and replay (05): `MatchRecorder` captures the `TickInputs` handed to each `step` and a hash every K ticks; `replayRecord()` plays a record back on a `Simulation` and names the first checkpoint that disagrees; `bitriot_headless replay|run|dump|version` do both from a shell, with stdout identical on every build. The golden full-round record is `tests/data/golden-round.brmr`.
 - Scripted control events (04b): a `TickInputs::control` in `Simulation::step`, and the join, takeover, unplug and rumble paths of `InputHandler` driven by hand with a fake rumble device (`tests/ControlEventTest.cpp`, `tests/InputControlTest.cpp`).
 
 **Missing**
@@ -361,7 +366,7 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
 
 **The scoreboard's "Play Again"** (assets/menu/scoreboard.rml ~:34) sets `GAME_INIT` locally (EventManager.cpp ~:114).
 
-**`main` parses options with `getopt("fb")`.** Long options need `getopt_long`.
+**`main` parses options with `getopt_long`** *(brief 05; it was `getopt("fb")`)*: `GameOptions.cpp` (`parseGameOptions`, testable, resets `optind` so it can run twice) takes `-f/--fullscreen`, `-b/--big-map`, `-h/--help` and `--record <dir>`. An unknown option or a stray argument now prints the usage and exits 2 (before, an unknown option printed the usage and the game started anyway); `-h` exits 0. `main.cpp` applies the result. `--record` hands the directory to `GameEngine::setRecordDirectory`; the engine records each round with a `MatchRecorder` (a checkpoint every 30 ticks, RLE) and writes `<dir>/round-<UTC>-seed<seed>.brmr` when the round ends or is quit; `main()` flushes a round still open when the window is closed.
 
 **`InputHandler` holds no per-player game state** (04a). Its `m_keyMap`, the `InputSampler`, `m_slotController` and the local slot mask are keyed by slot (playerNumber - 1) and rebuilt/cleared in `setPointers`, so resetting entity ids per round no longer matters to them. What it holds is the *device* side (04b): which pad and keyboard set drives each slot, which slots are local, and the control events produced and not yet sampled. Brief 07 must keep remote humans out of the local mask and out of `setPointers`' keyboard assignment.
 

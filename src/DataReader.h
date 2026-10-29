@@ -28,6 +28,8 @@ But maybe after BitRiot is mostly finished
 #include <string>
 #include <sstream>
 #include <map>
+#include <vector>
+#include <utility>
 
 #include <iostream>
 #include <fstream>
@@ -44,6 +46,20 @@ class DataReader
     const string getStringFromFile(const string & constantName, const string & filename);
 
     void clearCache(); // clears out the current DataReader object
+
+    // Parses `filename` now instead of on the first lookup (brief 05: the
+    // simulation's data is loaded eagerly so a missing or unreadable file fails at
+    // start-up and not as a silent 1 in the middle of a round). Idempotent: a file
+    // that is already cached is not read again. False if it could not be read or
+    // parsed; lastError() says why, and errorCount() is NOT incremented (the caller
+    // reports it).
+    bool loadFile(const string & filename);
+
+    // Every constant of a loaded file as normalised (name, value) text pairs sorted
+    // by name: an int is written in decimal, a string as it is. Loads the file first.
+    // False (and `out` empty) if it cannot be loaded. This is what the data hash
+    // is computed over (Simulation::dataHash()).
+    bool normalisedEntries(const string & filename, vector<pair<string, string> > & out);
 
     // for displaying error messages
     //void setWindowHandle(HWND windowHandle);

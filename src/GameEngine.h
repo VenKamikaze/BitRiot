@@ -17,6 +17,7 @@
 #include <SDL2/SDL.h>
 
 #include "FrameLoop.h"
+#include "MatchRecord.h"
 #include "MenuSDLRenderer.h"
 #include "GameSettings.h"
 #include "GameOverTimer.h"
@@ -31,6 +32,15 @@ class GameEngine
       menuSystem = std::move(rmlMenu);
     }
     ~GameEngine();
+
+    // Write a match record (brief 05) of every round into this directory (one file
+    // per round, written when the round ends or is quit). Empty: do not record.
+    // Recording only reads the simulation (the inputs it was given, a state hash every
+    // 30 ticks); it cannot change a round.
+    void setRecordDirectory(const std::string& directory) { m_recordDir = directory; }
+    // Writes the round being recorded, if any, and stops recording it. The engine does
+    // it when a round ends; main() calls it when the game is closed mid-round.
+    void finishRecording();
 
     // The pieces of a frame, for FrameLoop (see FrameLoop.h for the order they run
     // in). GameEngine no longer has a one-call-does-everything entry point: a frame
@@ -80,6 +90,10 @@ class GameEngine
     // The CPU surface holds no picture of the current round yet.
     bool m_drawNeeded = true;
     unique_ptr<MenuSDLRenderer> menuSystem = nullptr;
+    std::string m_recordDir;
+    std::string m_recordStamp; // UTC date and time the recorded round started
+    std::unique_ptr<MatchRecorder> m_recorder; // a round is being recorded
+    void startRecording();
     // The deterministic world: setup (start) and the per-tick step. Everything the
     // sim needs lives in there; this class keeps rendering, the InfoPanel, sound,
     // the menu and input, and drives the Simulation.

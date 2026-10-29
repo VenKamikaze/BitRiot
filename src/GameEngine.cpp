@@ -9,6 +9,8 @@
 #include "MapRenderer.h"
 #include "WorldRenderer.h"
 #include <cstddef>
+#include <ctime>
+#include <filesystem>
 #include <string>
 
 GameEngine::GameEngine(SDL_Surface* back, shared_ptr<InputHandler> inputHandler)
@@ -25,6 +27,8 @@ GameEngine::GameEngine(SDL_Surface* back, shared_ptr<InputHandler> inputHandler)
 
 GameEngine::~GameEngine()
 {
+  // (A round still being recorded is written by main() through finishRecording()
+  // before the engine goes: this runs during static destruction, too late to hash.)
   uninitialise();
 }
 
@@ -94,7 +98,9 @@ void GameEngine::resetGame()
   // The old world goes, the new one is built: players, spawning pool and blocks.
   // (The game-over countdown is un-latched by the new EntityManager's constructor
   // inside; the tick count restarts at 0.)
+  finishRecording(); // a round that was never finished (should not happen) is kept
   m_sim.start(config);
+  startRecording();
 
   // The Map is now the round's size; make the window match (before the HUD is built).
   resizeWindowIfMapChanged();
@@ -109,6 +115,64 @@ void GameEngine::resetGame()
   m_pInputHandler->setPointers(m_pPlayers, m_pPanel);
   m_pPanel->setPlayerPointers(m_pPlayers);
   m_drawNeeded = true; // a new HUD and (maybe) a new back buffer: nothing is drawn yet
+}
+
+void GameEngine::startRecording()
+{
+  m_recorder.reset();
+  if (m_recordDir.empty())
+  {
+    return;
+  }
+  try
+  {
+    m_recorder.reset(new MatchRecorder(30, true));
+    m_recorder->begin(m_sim);
+    // The file is named for when the round started, whenever it ends up written.
+    char stamp[32];
+    const std::time_t now = std::time(nullptr);
+    std::tm utc;
+#ifdef _WIN32
+    gmtime_s(&utc, &now);
+#else
+    gmtime_r(&now, &utc);
+#endif
+    std::strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", &utc);
+    m_recordStamp = stamp;
+  }
+  catch (const std::exception& e)
+  {
+    std::MickLogger::getInstance()->error(this, std::string("Cannot record this round: ").append(e.what()));
+    m_recorder.reset();
+  }
+}
+
+void GameEngine::finishRecording()
+{
+  if (!m_recorder)
+  {
+    return;
+  }
+  try
+  {
+    const MatchRecord& record = m_recorder->finish(m_sim);
+
+    // round-<UTC date>-<UTC time the round started>-seed<seed>.brmr, with -2, -3... if
+    // that name exists.
+    const std::string base = m_recordDir + "/round-" + m_recordStamp + "-seed" + std::to_string(record.config.seed);
+    std::string path = base + ".brmr";
+    for (int n = 2; std::filesystem::exists(path); n++)
+    {
+      path = base + "-" + std::to_string(n) + ".brmr";
+    }
+    record.writeFile(path);
+    std::MickLogger::getInstance()->info(this, std::string("Match record written: ").append(path));
+  }
+  catch (const std::exception& e)
+  {
+    std::MickLogger::getInstance()->error(this, std::string("Cannot write the match record: ").append(e.what()));
+  }
+  m_recorder.reset();
 }
 
 int GameEngine::gameLengthSeconds() const
@@ -167,7 +231,21 @@ void GameEngine::stepTick()
   // and runFrame for a few seconds; useful when all human players are dead but AI is
   // still alive, in case a human player wants to take over the AI), the spawning
   // pool and runFrame. The round is over only once this whole step has run.
-  m_sim.step(m_pInputHandler->sampleTick());
+  const TickInputs inputs = m_pInputHandler->sampleTick();
+  m_sim.step(inputs);
+  if (m_recorder)
+  {
+    try
+    {
+      m_recorder->onStep(inputs, m_sim);
+    }
+    catch (const std::exception& e)
+    {
+      // Never let the recorder stop a game.
+      std::MickLogger::getInstance()->error(this, std::string("Match record abandoned: ").append(e.what()));
+      m_recorder.reset();
+    }
+  }
   m_ticksThisFrame++;
   // The sim only records who was hit this tick; the local layer buzzes the pads.
   m_pInputHandler->rumbleForHits(m_sim);
@@ -238,6 +316,7 @@ bool GameEngine::renderFrame()
         // The round's last frame: go to the scoreboard (the menu takes over on the
         // next frame, after this one draws the final world below, as it always did).
         m_roundEnding = false;
+        finishRecording();
         GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
         menuSystem->loadScoreBoard(m_scoreboardWinner, m_sim.roster(), gameLengthSeconds());
         m_scoreboardWinner = nullptr;

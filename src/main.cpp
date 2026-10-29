@@ -11,15 +11,6 @@
 #include "SDL_render.h"
 #include "SDL_surface.h"
 #include <stdexcept>
-#if defined (__GNUC__) && defined(__unix__)
-
-
-/// WIN32 INCLUDES
-#elif defined (WIN32)
-
-#include <getopt.h> // MinGW
-
-#endif
 
 
 #include <iostream> // include important C/C++ stuff
@@ -46,6 +37,10 @@
 #include "EntityRendererFactory.h"
 #include "MapRenderer.h"
 #include "MickSDLUtil.h"
+#include "GameOptions.h"
+
+#include <filesystem>
+#include <system_error>
 
 // DEFINES ////////////////////////////////////////////////
 
@@ -64,6 +59,8 @@ FrameResult frame();
 
 // game object globals
 unique_ptr<GameEngine> engine = nullptr;
+// --record <dir> (GameOptions): handed to the engine when it is made.
+static std::string recordDirectory;
 unique_ptr<FrameLoop> frameLoop = nullptr;
 
 // FUNCTIONS //////////////////////////////////////////////
@@ -125,6 +122,7 @@ int consoleInit()
   erf->initSurfaces(renderer->getSurfaceBackBufferHandle());
   
   engine = make_unique<GameEngine>(renderer->getSurfaceBackBufferHandle(), input->getInputHandler() );
+  engine->setRecordDirectory(recordDirectory);
 
   return 0;
 } // end Game_Init
@@ -138,43 +136,27 @@ FrameResult frame()
   return frameLoop->frame();
 } // end Game_Main
 
-static void show_opts(std::string exec)
+// Applies the parsed options to the game's globals; the --record directory is
+// handed to the engine once it exists (consoleInit).
+static void applyOptions(const GameOptions& options)
 {
-  std::cerr << "Usage: " << exec << " <option(s)>\n"
-            << "Options:\n"
-            << "\t-h\t\tShow this help message\n"
-            << "\t-f\t\tScale to fullscreen\n"
-            << "\t-b\t\tUse a big map\n"
-            << std::endl;
-}
-
-static void setInitFlags(int argc, char* argv[])
-{
-  int c = 0;
-
-  while ((c = getopt (argc, argv, "fb")) != -1)
+  if (options.fullscreen)
   {
-    switch (c)
-    {
-      case 'f':
-        initFlags = initFlags | ASK_FULLSCREEN;
-        break;
-      case 'b':
-        Map::MAP_WIDTH=25;
-        Map::MAP_HEIGHT=19;
-        // Keep the canonical model in sync. GameSettings is constructed pre-main
-        // (a file-scope binder forces it), so it already captured the default 17x13;
-        // without this the GAME_INIT resize guard would see a mismatch and shrink
-        // the map back to 17x13, defeating -b (and it also fixes the pre-existing
-        // render-25/logic-17 split).
-        GameSettings::getInstance()->setMapWidth(25);
-        GameSettings::getInstance()->setMapHeight(19);
-        break;
-      default :  /* h */
-        show_opts(argv[0]);
-        break;
-    }
+    initFlags = initFlags | ASK_FULLSCREEN;
   }
+  if (options.bigMap)
+  {
+    Map::MAP_WIDTH=25;
+    Map::MAP_HEIGHT=19;
+    // Keep the canonical model in sync. GameSettings is constructed pre-main
+    // (a file-scope binder forces it), so it already captured the default 17x13;
+    // without this the GAME_INIT resize guard would see a mismatch and shrink
+    // the map back to 17x13, defeating -b (and it also fixes the pre-existing
+    // render-25/logic-17 split).
+    GameSettings::getInstance()->setMapWidth(25);
+    GameSettings::getInstance()->setMapHeight(19);
+  }
+  recordDirectory = options.recordDir;
 }
 
 int main(int argc, char* argv[])
@@ -183,7 +165,30 @@ int main(int argc, char* argv[])
 
   if(argc > 0)
   {
-    setInitFlags(argc, argv);
+    const GameOptions options = parseGameOptions(argc, argv, std::cerr);
+    if(options.help)
+    {
+      printGameUsage(argv[0], std::cout);
+      return 0;
+    }
+    if(options.error)
+    {
+      printGameUsage(argv[0], std::cerr);
+      return 2;
+    }
+    if(!options.recordDir.empty())
+    {
+      // Fail now, not at the end of the first round, if records cannot be written.
+      std::error_code ec;
+      std::filesystem::create_directories(options.recordDir, ec);
+      if(ec || !std::filesystem::is_directory(options.recordDir))
+      {
+        std::cerr << "Cannot use " << options.recordDir << " for match records: "
+                  << (ec ? ec.message() : std::string("not a directory")) << std::endl;
+        return 2;
+      }
+    }
+    applyOptions(options);
   }
 
   // Init sub-systems
@@ -265,6 +270,11 @@ int main(int argc, char* argv[])
   // Un-init section
   try
   {
+    if(engine)
+    {
+      engine->finishRecording(); // the window was closed mid-round: keep what was played
+    }
+
     if(TTF_WasInit())
     {
       TTF_Quit(); //Quit SDL_ttf
