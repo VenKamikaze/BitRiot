@@ -33,13 +33,14 @@ Each brief (`NN-*.md`) is one unit of work, sized for a single implement → rev
 | 11 | [vnet WebTransport datagrams](https://github.com/VenKamikaze/vnet/blob/claude/doco/11-vnet-webtransport.md) | vnet | 10 | tracked in vnet |
 | 12 | [Browser netplay](12-browser-netplay.md) | BitRiot (+vnet) | 07, 08, 09, 10 | todo |
 | 13 | [Disconnects and hot-join](13-disconnect-and-hot-join.md) | BitRiot | 05, 07, 08 (12 for browser) | todo |
+| 14 | [vnet API polish and browser lifecycle](https://github.com/VenKamikaze/vnet/blob/claude/doco/14-vnet-api-polish.md) | vnet | 11 | tracked in vnet |
 
 `Qn` means open question *n* below. The user must answer it before that brief starts, because an implementer subagent cannot ask the user.
 
 **Parallel tracks:**
 
 - **Determinism:** 01 → 02 → 02b → 03a → 03b (done) → 04a (done) → 04b (done) → 05 (done) → 05b.
-- **vnet:** 06, 10 and 11 are all done (vnet `claude` 26f4b0f, version 0.3.0).
+- **vnet:** 06, 10 and 11 are all done (vnet `claude` 26f4b0f, version 0.3.0). Brief 14 (from vnet's design review, giving 0.4.0) is in progress; start 07 and 12 after it, as they use what it adds.
 - **WASM:** 09 is ready now (03b is in), in parallel with 05b.
 
 **Resuming?** [`PROMPT.md`](PROMPT.md) §0 has the hand-off state: what's done, what's ready, and what's waiting on the user.
