@@ -6,6 +6,8 @@
 #include <stdexcept>
 
 #include "AIGameView.h"
+#include "DataReader.h"
+#include <fstream>
 #include "EntityMessageQueue.h"
 #include "GameOverTimer.h"
 #include "GameSettings.h"
@@ -49,6 +51,22 @@ void NullSound::playSound(std::string fileName)
 
 void HeadlessEnvironment::SetUp()
 {
+  // The simulation reads data/*.txt relative to the working directory, and
+  // DataReader answers 1 (or "") for a file it cannot open or a constant it cannot
+  // find, so a test run from the wrong directory would not fail: it would play with
+  // 1s. Refuse to start instead.
+  for (const char* file : { "data/entity.txt", "data/player.txt", "data/audio.txt" })
+  {
+    std::ifstream in(file);
+    if (!in.good())
+    {
+      std::cerr << "[bitriot] cannot read " << file << " from " << std::getenv("PWD")
+                << ".\n[bitriot] Run the tests from the repository root, or from a build directory "
+                   "that has the data/ link (building any test target creates it)." << std::endl;
+      std::exit(2);
+    }
+  }
+
   // Must exist before any entity is constructed so the sounds they make are
   // recorded. (Without one the simulation plays into a built-in silent default.)
   g_sound = new NullSound();
@@ -119,6 +137,8 @@ void HeadlessGameTest::setRoundSeed(uint64_t seed)
 
 void HeadlessGameTest::SetUp()
 {
+  m_dataErrorsAtStart = DataReader::getInstance()->errorCount();
+
   // MickLogger's DEBUG level is compile-time enabled in Debug builds and is
   // extremely chatty. Swallow std::cout for the duration of the test; cerr is
   // left alone so warnings and errors still surface, and GoogleTest's own
@@ -153,6 +173,16 @@ void HeadlessGameTest::TearDown()
   }
 
   m_sim.reset();
+
+  // A data file that could not be read, or a constant that is not in its file,
+  // answered a default instead of the real value. That is never what a test means.
+  DataReader* data = DataReader::getInstance();
+  if (data->errorCount() != m_dataErrorsAtStart)
+  {
+    ADD_FAILURE() << (data->errorCount() - m_dataErrorsAtStart)
+                  << " DataReader lookup(s) failed during this test and returned a default; the last was: "
+                  << data->lastError();
+  }
 
   if (m_savedCout != nullptr)
   {

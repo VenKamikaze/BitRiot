@@ -5,7 +5,8 @@
 #   bitriot_sim_tests  links bitriot_sim and GoogleTest only: no SDL, no RmlUi, no
 #                      OpenGL. It runs whole rounds, so it proves by linking that the
 #                      simulation needs none of them.
-#   bitriot_tests      links the whole game (bitriot_core) and adds the tests that
+#   bitriot_tests      (only with BITRIOT_BUILD_GAME=ON, the default) links the whole
+#                      game (bitriot_core) and adds the tests that
 #                      need it: the scoreboard layout, the frame loop, and the tile
 #                      counts against the real bitmaps. It also runs every simulation
 #                      test again, against the game's own library.
@@ -71,21 +72,35 @@ target_include_directories(bitriot_sim_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
 target_compile_options(bitriot_sim_tests PRIVATE ${BITRIOT_TEST_WARNINGS})
 target_link_libraries(bitriot_sim_tests PRIVATE bitriot_sim GTest::gtest)
 
-# --- bitriot_tests: everything ---------------------------------------------------
-add_executable(bitriot_tests test_main.cpp ${CORE_TEST_SOURCES} $<TARGET_OBJECTS:bitriot_sim_test_objs>)
-target_include_directories(bitriot_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_definitions(bitriot_tests PRIVATE BITRIOT_TESTS_WITH_CORE ${BITRIOT_TEST_DEFINITIONS})
-target_compile_options(bitriot_tests PRIVATE ${BITRIOT_TEST_WARNINGS})
-target_link_libraries(bitriot_tests PRIVATE bitriot_core GTest::gtest)
+# --- bitriot_tests: everything (only when the game is built) -------------------
+if(BITRIOT_BUILD_GAME)
+  add_executable(bitriot_tests test_main.cpp ${CORE_TEST_SOURCES} $<TARGET_OBJECTS:bitriot_sim_test_objs>)
+  target_include_directories(bitriot_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  target_compile_definitions(bitriot_tests PRIVATE BITRIOT_TESTS_WITH_CORE ${BITRIOT_TEST_DEFINITIONS})
+  target_compile_options(bitriot_tests PRIVATE ${BITRIOT_TEST_WARNINGS})
+  target_link_libraries(bitriot_tests PRIVATE bitriot_core GTest::gtest)
+endif()
+
+# The tests read data/ (and, in bitriot_tests, assets/) relative to the working
+# directory. Building either executable creates the build directory's links, so
+# running it from there works after building only that target.
+if(TARGET bitriot_runtime_links)
+  add_dependencies(bitriot_sim_tests bitriot_runtime_links)
+  if(BITRIOT_BUILD_GAME)
+    add_dependencies(bitriot_tests bitriot_runtime_links)
+  endif()
+endif()
 
 # Asset paths in the game are relative ("data/renderer.txt",
 # "assets/bitmaps/..."), so the tests must run from the repository root. This is
 # also why the tests do not depend on the BitRiot target's data/assets symlinks.
-add_test(
-  NAME bitriot_tests
-  COMMAND bitriot_tests
-  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-)
+if(BITRIOT_BUILD_GAME)
+  add_test(
+    NAME bitriot_tests
+    COMMAND bitriot_tests
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+  )
+endif()
 add_test(
   NAME bitriot_sim_tests
   COMMAND bitriot_sim_tests

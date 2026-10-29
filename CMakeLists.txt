@@ -34,34 +34,43 @@ endif()
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${BitRiot_SOURCE_DIR}/cmake")
 
-find_package(SDL2 REQUIRED)
-find_package(SDL2_mixer REQUIRED)
-find_package(SDL2_ttf REQUIRED)
-find_package(SDL2_image REQUIRED)
-find_package(OpenGL REQUIRED)
-find_package(RmlUi REQUIRED)
-find_package(PkgConfig)
+# The game (window, audio, menus, the frame loop, bitriot_core and the BitRiot
+# executable) needs SDL2, SDL2_mixer/ttf/image, OpenGL and RmlUi. The simulation
+# library bitriot_sim and its tests need none of them, so a headless or cross build
+# (an Emscripten bitriot_headless, an aarch64 sysroot without SDL) configures with
+#   -DBITRIOT_BUILD_GAME=OFF
+# and never looks for them. GoogleTest is still needed for bitriot_sim_tests.
+option(BITRIOT_BUILD_GAME "Build the game (needs SDL2, SDL2_mixer/ttf/image, OpenGL and RmlUi), not just bitriot_sim" ON)
 
-if(NOT SDL2_FOUND)
-  message(SEND_ERROR "Failed to find SDL2.")
+if(BITRIOT_BUILD_GAME)
+  find_package(SDL2 REQUIRED)
+  find_package(SDL2_mixer REQUIRED)
+  find_package(SDL2_ttf REQUIRED)
+  find_package(SDL2_image REQUIRED)
+  find_package(OpenGL REQUIRED)
+  find_package(RmlUi REQUIRED)
+  find_package(PkgConfig)
+
+  if(NOT SDL2_FOUND)
+    message(SEND_ERROR "Failed to find SDL2.")
+  endif()
+
+  if(NOT SDL2_MIXER_FOUND)
+    message(SEND_ERROR "Failed to find SDL2_mixer.")
+  endif()
+
+  if(NOT SDL2_TTF_FOUND)
+    message(SEND_ERROR "Failed to find SDL2_ttf.")
+  endif()
+
+  if(NOT SDL2IMAGE_FOUND)
+    message(SEND_ERROR "Failed to find SDL2_image.")
+  endif()
+
+  if(NOT RMLUI_FOUND)
+    message(SEND_ERROR "Failed to find RmlUi.")
+  endif()
 endif()
-
-if(NOT SDL2_MIXER_FOUND)
-  message(SEND_ERROR "Failed to find SDL2_mixer.")
-endif()
-
-if(NOT SDL2_TTF_FOUND)
-  message(SEND_ERROR "Failed to find SDL2_ttf.")
-endif()
-
-if(NOT SDL2IMAGE_FOUND)
-  message(SEND_ERROR "Failed to find SDL2_image.")
-endif()
-
-if(NOT RMLUI_FOUND)
-  message(SEND_ERROR "Failed to find RmlUi.")
-endif()
-
 
 #file(GLOB SOURCES src/*.cpp)
 
@@ -177,6 +186,18 @@ endif()
 file(GENERATE OUTPUT ${CMAKE_BINARY_DIR}/bitriot_sim_sources.txt
   CONTENT "$<JOIN:$<TARGET_PROPERTY:bitriot_sim,SOURCES>,\n>\n")
 
+# The programs and the tests read data/ (and the game, assets/) relative to the
+# working directory. This makes build/data and build/assets links to the source
+# tree's; the game and both test executables depend on it, so running any of them
+# from the build directory works after building only that target.
+if(NOT MINGW)
+  add_custom_target(bitriot_runtime_links
+    COMMAND ${CMAKE_COMMAND} -E create_symlink ${PROJECT_SOURCE_DIR}/data ${PROJECT_BINARY_DIR}/data
+    COMMAND ${CMAKE_COMMAND} -E create_symlink ${PROJECT_SOURCE_DIR}/assets ${PROJECT_BINARY_DIR}/assets
+    COMMENT "Linking data/ and assets/ into the build directory")
+endif()
+
+if(BITRIOT_BUILD_GAME)
 # Everything except main.cpp and the simulation lives in a static library so the
 # test harness can link the real game code (see tests/). BitRiot is then just
 # main.cpp + this + bitriot_sim.
@@ -239,11 +260,7 @@ else()
     ${OPENGL_LIBRARIES}
   )
 
-  add_custom_command(
-    TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E create_symlink ${PROJECT_SOURCE_DIR}/data ${PROJECT_BINARY_DIR}/data
-    COMMAND ${CMAKE_COMMAND} -E create_symlink ${PROJECT_SOURCE_DIR}/assets ${PROJECT_BINARY_DIR}/assets
-  )
+  add_dependencies(BitRiot bitriot_runtime_links)
   if(RMLUI_STATIC)
     add_custom_command(
       TARGET ${PROJECT_NAME} POST_BUILD
@@ -255,6 +272,8 @@ endif()
 if(RMLUI_STATIC)
   target_compile_definitions(bitriot_core PUBLIC RMLUI_STATIC_LIB)
 endif()
+
+endif() # BITRIOT_BUILD_GAME
 
 # ---------------------------------------------------------------------------
 # Tests

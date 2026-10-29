@@ -49,6 +49,14 @@ class DataReader
     //void setWindowHandle(HWND windowHandle);
     bool displayAnyErrors();
 
+    // How many lookups have failed so far (a file that could not be read, a constant
+    // that is not in its file): each returned a default (1 or "") instead of a value.
+    // The game ignores them; the test harness fails a test that makes one, so a
+    // missing data/ directory or a mistyped constant is loud instead of silently
+    // playing with 1s.
+    int errorCount() const { return m_errorCount; }
+    const string & lastError() const { return m_errorString; }
+
   private:
     DataReader();
 
@@ -64,6 +72,7 @@ class DataReader
 
     //HWND m_windowHandle;
     string m_errorString;
+    int m_errorCount = 0;
 };
 
 #endif
