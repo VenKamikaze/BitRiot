@@ -41,6 +41,7 @@ set(CORE_TEST_SOURCES
   FrameLoopTest.cpp
   RenderSideTest.cpp
   InputSamplerTest.cpp
+  InputControlTest.cpp
 )
 
 add_library(bitriot_sim_test_objs OBJECT ${SIM_TEST_SOURCES})
