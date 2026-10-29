@@ -38,9 +38,11 @@ Each brief (`NN-*.md`) is one unit of work, sized for a single implement → rev
 
 **Parallel tracks:**
 
-- **Determinism:** 01 → 02 → 02b → 03a → … → 05b.
-- **vnet core:** 06 shares no code with the BitRiot briefs.
-- **WASM:** 09 can start once 03b is in.
+- **Determinism:** 01 → 02 → 02b → 03a → 03b (done) → 04a → 04b → 05 → 05b.
+- **vnet:** 06, 10 and 11 are all done (vnet `claude` 26f4b0f, version 0.3.0).
+- **WASM:** 09 is ready now (03b is in), in parallel with 04a.
+
+**Resuming?** [`PROMPT.md`](PROMPT.md) §0 has the hand-off state: what's done, what's ready, and what's waiting on the user.
 
 **Sim/render split.** 03b owned the frame-loop refactor and landed it: the shared `frame()` (`src/FrameLoop.*`, called from `main.cpp`), the fixed-tick accumulator (`src/TickPacer.*`), and render without stepping (`GameEngine::pumpEvents` / `stepTick` / `renderFrame`). 04a, 07 and 09 build on it. Don't restructure `main.cpp` or the `GameEngine` frame hooks elsewhere. The simulation is its own library, `bitriot_sim`, with **no SDL at all**.
 

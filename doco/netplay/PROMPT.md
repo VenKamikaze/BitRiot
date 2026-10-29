@@ -7,6 +7,41 @@ You are the **coordinator** for a multi-brief project across two repos:
 
 The goal is deterministic lockstep online multiplayer for Bit Riot, a browser (WASM) build, and vnet underneath both.
 
+## 0. Where things stand (hand-off, 29 Oct 2026)
+
+**Done and merged into `claude`:**
+
+- **BitRiot:** 01, 02, 02b, 03a and 03b. 02b, 03a and 03b are `done (play-test pending)`.
+- **vnet:** 06, 10 and 11. The whole vnet track is complete: code merged at 26f4b0f, version 0.3.0, released as tag `v0.3.0` on b302029 (later commits are docs only).
+
+**Next ready, in parallel:**
+
+- **04a** (input sampling): starts the 04a → 04b → 05 → 05b → 07 → 08 chain.
+- **09** (WASM port): needs only 03b.
+
+They touch different areas (input/sim vs `main.cpp`, CMake and renderers) but both may touch `CMakeLists.txt` and `GameEngine`. Give each its own worktree, merge one, then merge `claude` into the other before review. After those: 04b → 05 → 05b → 07 → 08, then 12 and 13.
+
+**In flight:** nothing. No branch has unmerged work.
+
+**Waiting on the user** (ask about these; don't block on them):
+
+1. **Play-test** of 02b (fixed-point movement feel), 03a (round flow, scoreboard) and 03b (frame loop, catch-up, rumble). One session on `claude` covers all three; the Arch commands are in 02b's and 03b's Outcomes. Record the result in each Outcome.
+2. **vnet tags.** The cloud session can't push tags (HTTP 403), so the user tags from a PC. `v0.1.0` (5847e44) and `v0.2.0` (c8be4df) are pushed. `v0.3.0` is meant for b302029. Check with `git ls-remote --tags https://github.com/VenKamikaze/vnet`, and ask the user if it's missing. vnet's README already pins `v0.3.0`.
+3. **vnet `claude` → `main`** merge: the user's call.
+4. **CI has never been observed.** Neither repo's GitHub Actions runs could be watched from the cloud session. Ask the user to check vnet's Actions tab (Linux, macOS, ASan, MinGW/Wine, Go, fuzz, Docker, the browser job).
+
+**Known open issues:**
+
+- **Bot livelock** (in `TODO`): a boxed-in bot with its own eggs never bombs out. It is rare, e.g. test-alone seed 4652, and not root-caused.
+- **Co-op stalemate** (in `TODO`).
+- **vnet relay limits:** a forged-source flood can delay new handshakes while it lasts. This is documented in vnet's `relay-protocol.md`.
+
+**Lessons from the first session:**
+
+- **The container can restart mid-run** and kill background work. Push feature branches as soon as an implementer reports, not only at merge. If a reviewer was interrupted, resume it (it keeps its context) rather than starting a new one.
+- **Sweeps:** run them from the build dir *after* building the `BitRiot` target (or `bitriot_runtime_links`), which creates the `data/` and `assets/` links. Also sweep `bitriot_sim_tests`, and build with Clang too.
+- **Golden digests:** the four pinned rounds in `SimulationTest` must stay byte-identical across refactors. A legitimate sim change moves them, and the commit must say so (see `tests/README.md`).
+
 ## 1. Set up
 
 1. **Attach both repos** to the session if they aren't already. In both repos, work from the **`claude`** branch: it is the base for all work, not `main`/`master`.
@@ -30,14 +65,15 @@ Then read the brief(s) you are about to start, plus the **Outcome** sections of 
 ## 3. Pick the next brief(s)
 
 1. **Find ready briefs.** From the status tables in both repos, list every brief whose dependencies are all done.
-2. **Two tracks can run in parallel:**
-   - BitRiot's determinism track: 01 → 02 → 02b → 03a → 03b → 04a → 04b → 05 → 05b.
-   - vnet 06.
+2. **Tracks that can run in parallel now:**
+   - BitRiot's determinism track: 04a → 04b → 05 → 05b (01–03b are done).
+   - BitRiot WASM: 09.
+   - vnet is complete (06, 10, 11).
 
-   Later briefs follow the dependency table.
+   Later briefs (07, 08, 12, 13) follow the dependency table.
 3. **Check the prerequisites.** Some briefs depend on **open questions** (`Qn` in the table). If the user hasn't answered one, **ask the user before starting that brief**. Implementer subagents cannot ask.
    - All four are answered: Q1 (countdown 2 s / 60 ticks), Q2 (fixed-point up front, brief 02b), Q3 (vnet: MIT, public) and Q4 (online cap stays 6). Check the README in case new questions have been added.
-4. **In-flight work:** none at the time of writing. `fix/ai-seek-energy`, which brief 02 depends on, is merged into `claude` (7d6cf6a).
+4. **In-flight work:** none (see §0).
 5. **Confirm the plan** with the user in a few lines: which brief(s) you'll run and in what order. Then proceed.
 
 ## 4. Run each brief
