@@ -155,6 +155,7 @@
     },
     // Called by the game (src/web/WebHooks.cpp) when it cannot start or has to stop.
     bitriotFatal: function (message) {
+      stopFitting();
       overlay.hidden = false;
       progressEl.hidden = true;
       startBtn.hidden = true;
@@ -162,6 +163,7 @@
       window.bitriotFatalMessage = message;
     },
     bitriotQuit: function () {
+      stopFitting();
       overlay.hidden = false;
       startBtn.hidden = true;
       if (!window.bitriotFatalMessage) { showStatus('Bit Riot has quit. Reload the page to play again.'); }
@@ -170,9 +172,17 @@
   };
   window.Module = Module;
 
+  // A JavaScript error or a wasm trap while the game is running freezes the canvas;
+  // say so on the page (the overlay is shown again, over the last picture).
   window.addEventListener('error', function (e) {
-    showStatus('Something went wrong: ' + (e.message || e), true);
+    Module.bitriotFatal('Something went wrong: ' + (e.message || e));
   });
+  window.addEventListener('unhandledrejection', function (e) {
+    Module.bitriotFatal('Something went wrong: ' + ((e.reason && e.reason.message) || e.reason));
+  });
+  Module.onAbort = function (what) {
+    Module.bitriotFatal('Bit Riot crashed: ' + what);
+  };
 
   startBtn.addEventListener('click', function () {
     startBtn.hidden = true;
@@ -206,10 +216,16 @@
     canvas.style.width = Math.floor(cw * scale) + 'px';
     canvas.style.height = Math.floor(ch * scale) + 'px';
   }
+  var fitTimer = null;
   function startFitting() {
+    if (fitTimer !== null) { return; }
     fit();
     window.addEventListener('resize', fit);
-    setInterval(fit, 500); // the map size can change between rounds
+    fitTimer = setInterval(fit, 500); // the map size can change between rounds
+  }
+  function stopFitting() {
+    if (fitTimer !== null) { clearInterval(fitTimer); fitTimer = null; }
+    window.removeEventListener('resize', fit);
   }
 
   // Keep the keyboard on the game: a click on the canvas focuses it.

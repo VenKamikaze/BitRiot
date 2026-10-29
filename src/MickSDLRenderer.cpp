@@ -60,7 +60,9 @@ void MickSDLRenderer::init(WindowMetadata windowMetadata)
                                 windowMetadata.windowWidth, windowMetadata.windowHeight, windowFlags);
     if (m_windowHandle != nullptr)
     {
-      SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
+      // (Override: a user's SDL_RENDER_DRIVER environment variable must not
+      // decide a fallback.)
+      SDL_SetHintWithPriority(SDL_HINT_RENDER_DRIVER, "software", SDL_HINT_OVERRIDE);
       m_rendererHandle = SDL_CreateRenderer(m_windowHandle, -1, 0);
     }
   }
@@ -68,6 +70,14 @@ void MickSDLRenderer::init(WindowMetadata windowMetadata)
   {
     std::string msg = std::string("Failed to create sdl_renderer! ").append(SDL_GetError());
     MickLogger::getInstance()->error(this, msg);
+    // The constructor is about to throw, so the destructor will not run: release
+    // what this attempt made.
+    if (m_windowHandle != nullptr)
+    {
+      SDL_DestroyWindow(m_windowHandle);
+      m_windowHandle = nullptr;
+    }
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
     throw runtime_error(msg);
   }
 
@@ -229,6 +239,10 @@ void MickSDLRenderer::destructVideo()
 MickSDLRenderer::~MickSDLRenderer()
 {
   destructVideo();
+  if (sInstance == this)
+  {
+    sInstance = nullptr;
+  }
 }
 
 MickSDLRenderer* MickSDLRenderer::getInstance()

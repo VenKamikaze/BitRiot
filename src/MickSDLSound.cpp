@@ -22,6 +22,10 @@ MickSDLSound::MickSDLSound() : MickBaseSound()
 
 MickSDLSound::~MickSDLSound()
 {
+  if (s_instance == this)
+  {
+    s_instance = NULL; // getInstance() must not hand out a deleted object
+  }
   map<string, MickSoundFile>::iterator it;
   for ( it = cachedSounds.begin() ; it != cachedSounds.end(); it++ )
   {

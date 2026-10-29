@@ -13,7 +13,14 @@
 //
 // and through Module.bitriotFatal(message) / Module.bitriotQuit() callbacks that the
 // page may define. The page may also be opened with ?autostart=ai4 (any count from
-// 2 to 6), which starts a CPU-only round on the first frame.
+// 2 to 6; five or six raise the map height so all portraits fit), which starts a
+// CPU-only round on the first frame.
+//
+// After the game has quit (webReportQuit) every hook answers 0, except
+// _bitriot_frames, which keeps its last count.
+//
+// NOTE: these hooks ship in every web build. They are test and development aids; gate
+// them (a build option, or a page-side opt-in) before the game is put on a public page.
 #ifndef WEBHOOKS_H_
 #define WEBHOOKS_H_
 

@@ -18,6 +18,7 @@ GameEngine* s_engine = nullptr;
 int s_frames = 0;
 int s_autostartPlayers = 0;   // from ?autostart=aiN, 0 when absent
 bool s_autostartDone = false;
+bool s_quit = false;          // the game has shut down; the hooks answer 0
 }
 
 // The N of ?autostart=aiN in the page's address, or 0.
@@ -63,6 +64,9 @@ void webReportFatal(const std::string& message)
 
 void webReportQuit()
 {
+  // The engine and the sound device are gone: the exported hooks must not touch them.
+  s_engine = nullptr;
+  s_quit = true;
   bitriot_js_quit();
 }
 
@@ -76,12 +80,12 @@ EMSCRIPTEN_KEEPALIVE int bitriot_frames()
 
 EMSCRIPTEN_KEEPALIVE int bitriot_tick()
 {
-  return s_engine ? (int) s_engine->simTick() : 0;
+  return (!s_quit && s_engine) ? (int) s_engine->simTick() : 0;
 }
 
 EMSCRIPTEN_KEEPALIVE int bitriot_game_state()
 {
-  return (int) std::GameSettings::getInstance()->getGameState();
+  return s_quit ? 0 : (int) std::GameSettings::getInstance()->getGameState();
 }
 
 EMSCRIPTEN_KEEPALIVE int bitriot_start_ai_match(int numPlayers)
@@ -91,12 +95,12 @@ EMSCRIPTEN_KEEPALIVE int bitriot_start_ai_match(int numPlayers)
 
 EMSCRIPTEN_KEEPALIVE int bitriot_sounds_played()
 {
-  return (int) MickSDLSound::getInstance()->soundsPlayed();
+  return s_quit ? 0 : (int) MickSDLSound::getInstance()->soundsPlayed();
 }
 
 EMSCRIPTEN_KEEPALIVE int bitriot_joystick_count()
 {
-  return SDL_NumJoysticks();
+  return s_quit ? 0 : SDL_NumJoysticks();
 }
 
 } // extern "C"

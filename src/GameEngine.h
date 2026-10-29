@@ -60,8 +60,9 @@ class GameEngine
     uint64_t simTick() const { return m_sim.tick(); }
     // Starts a round of `numPlayers` computer-controlled players, as if the Start
     // button had been pressed with every slot set to CPU, without going through the
-    // menus. False (and nothing changes) if the count is not a valid player count, the
-    // game is not showing a menu, or the round cannot start. Takes effect on the next frame. This is the test hook
+    // menus. False (and nothing changes) if the count is not a valid player count or the
+    // game is not showing a menu. Five or six players raise the map height to the
+    // least that shows their portraits (19 for six), as the menu would make you do. Takes effect on the next frame. This is the test hook
     // behind the web build's ?autostart=ai4.
     bool startAllAiMatch(int numPlayers);
     // Forces the next renderFrame() to redraw the world and HUD even if no tick ran

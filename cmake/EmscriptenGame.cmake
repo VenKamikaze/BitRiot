@@ -1,6 +1,6 @@
 # EmscriptenGame.cmake - the web build of the game (brief 09).
 #
-#   emcmake cmake -S . -B build-wasm -DBITRIOT_BUILD_TESTS=OFF
+#   emcmake cmake -S . -B build-wasm
 #   cmake --build build-wasm -j4
 #
 # Included by the top-level CMakeLists.txt in place of the find_package calls when

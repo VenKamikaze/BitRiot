@@ -81,7 +81,8 @@ static uint32_t clockMs()
 #ifdef __EMSCRIPTEN__
   // The browser's own monotonic clock (performance.now()), which is also what
   // requestAnimationFrame timestamps come from.
-  return (uint32_t) emscripten_get_now();
+  // (Through uint64_t: converting a double beyond uint32_t's range directly is undefined.)
+  return (uint32_t) (uint64_t) emscripten_get_now();
 #else
   const Uint64 perMs = SDL_GetPerformanceFrequency() / 1000;
   return (uint32_t) (SDL_GetPerformanceCounter() / (perMs ? perMs : 1));
@@ -247,6 +248,11 @@ static void webLoopIteration()
   {
     cerr << "Caught exception in main game loop: " << e.what() << endl;
     webReportFatal(string("Bit Riot stopped: ").append(e.what()));
+  }
+  catch(...)
+  {
+    cerr << "Caught an unknown exception in main game loop." << endl;
+    webReportFatal("Bit Riot stopped: unknown error");
   }
 
   if(!keepRunning)

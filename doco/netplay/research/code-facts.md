@@ -336,7 +336,7 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
   - *Fixed by brief 01:* `Map` has a generation counter bumped by every `init()`. `BlockEntity` remembers the generation it was placed in and its destructor skips the write if the map has since been rebuilt.
 - **ESC/quit** is local: a flag (`InputHandler::quitRequested()`, set by `GameRunningSDLInput`), no longer an exception. `GameEngine::stepTick` reads it, still runs the tick (with that tick's input applied, which the old exception skipped) and flips this machine to the scoreboard; `renderFrame()` also checks it on a frame that ran no tick.
 - **`GameSettings::setNumberOfPlayers`** keeps existing slots. `InputHandler::setPointers` writes keyboard assignments back into `GameSettings` (InputHandler.cpp:106).
-- **Debug logging** is compiled in by default (the default build type is Debug), and `MickLogger` writes debug output to `cout` every frame. The web build never prints debug-level lines (`MickLogger.cpp`: off for `NDEBUG` or `__EMSCRIPTEN__`), which is the brief's "default to info level on web".
+- **Debug logging** is compiled in by default (the default build type is Debug), and `MickLogger` writes debug output to `cout` every frame. The Release web build (the default for `emcmake`) has `NDEBUG`, so it prints info and above, which is the brief's "default to info level on web"; a Debug web build still logs debug lines.
 - **`Map::~Map`** uses `delete` rather than `delete[]` (Map.cpp:122).
 
 ## 12. Further facts (from the brief review)

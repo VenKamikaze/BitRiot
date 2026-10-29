@@ -10,7 +10,7 @@
 // scenarios, each in a fresh browser:
 //   1. the menus with the mouse, a round with a keyboard player (keys, ESC), then a
 //      CPU-only round (GPU-less WebGL through SwiftShader), with sound;
-//   2. the ?autostart=ai4 address (the same round, started from the address);
+//   2. the ?autostart=ai6 address (a round started from the address, on a taller map);
 //   3. no WebGL at all, so the game falls back to SDL's software renderer;
 //   4. a gamepad that appears after the page loaded (a fake one: the Gamepad API
 //      hides pads until a button is pressed), driving the menu and pressing START
@@ -55,6 +55,7 @@ function serve(dir) {
 
 let failures = 0;
 let checks = 0;
+const openPages = []; // { page, browser }: dumped if a scenario throws
 function check(ok, what, detail) {
   checks++;
   if (!ok) { failures++; }
@@ -93,6 +94,7 @@ async function openPage(browser, name, url, initScript) {
   page.__problems = problems;
   page.__lines = lines;
   page.__name = name;
+  openPages.push({ page, browser });
   return page;
 }
 
@@ -113,8 +115,11 @@ async function waitTicks(page, n, timeoutMs) {
   return (await call(page, 'bitriot_tick')) - start;
 }
 
+// A screenshot of the game's canvas alone, as the compositor shows it (a WebGL canvas
+// reads back blank, so no read-back). Not of the whole page: the page's own text and
+// background would make a blank canvas look like a picture.
 async function shot(page, file) {
-  const png = await page.screenshot({ path: path.join(shotDir, file) });
+  const png = await page.locator('#canvas').screenshot({ path: path.join(shotDir, file) });
   return png.toString('base64');
 }
 
@@ -152,7 +157,7 @@ const differ = (page, a, b) => page.evaluate(async ([x, y]) => {
 
 async function notBlank(page, b64, what) {
   const r = await inspect(page, b64);
-  check(r.colours >= 24 && r.dominant < 0.9, what + ' is not blank', r.colours + ' colours, ' + Math.round(r.dominant * 100) + '% the commonest');
+  check(r.colours >= 64 && r.dominant < 0.8, what + ' is not blank', r.colours + ' colours, ' + Math.round(r.dominant * 100) + '% the commonest');
 }
 
 async function finish(page, browser) {
@@ -160,8 +165,23 @@ async function finish(page, browser) {
   check(fatal === null, page.__name + ': the game reported no fatal error', fatal);
   check(page.__problems.length === 0, page.__name + ': no page errors or logged errors', page.__problems.slice(0, 3).join(' | '));
   fs.writeFileSync(path.join(shotDir, page.__name + '.log'), page.__lines.join('\n') + '\n');
+  openPages.splice(openPages.findIndex((o) => o.page === page), 1);
   await page.close();
   await browser.close();
+}
+
+// A scenario threw: keep what its page logged, say what it reported, close its browser.
+async function dumpOpenPages() {
+  for (const { page, browser } of openPages.splice(0)) {
+    try {
+      fs.writeFileSync(path.join(shotDir, page.__name + '.log'), page.__lines.join('\n') + '\n');
+      const fatal = await page.evaluate(() => window.bitriotFatalMessage || null).catch(() => null);
+      console.log('  (' + page.__name + ': fatal message ' + JSON.stringify(fatal) + '; ' + page.__problems.length +
+        ' problem(s)' + (page.__problems.length ? ': ' + page.__problems.slice(0, 3).join(' | ') : '') +
+        '; log in ' + path.join(shotDir, page.__name + '.log') + ')');
+    } catch (e) { /* the page is gone */ }
+    await browser.close().catch(() => {});
+  }
 }
 
 async function audioState(page) {
@@ -214,6 +234,11 @@ async function scenarioMenuAndRound(server) {
   await page.waitForFunction(() => window.Module._bitriot_game_state() === 1, null, { timeout: 15000 })
     .then(() => check(true, 'ESC ends the round (the keyboard reaches the game)'), () => check(false, 'ESC ends the round (the keyboard reaches the game)'));
 
+  // A count the game cannot play is refused and nothing starts.
+  check((await call(page, 'bitriot_start_ai_match', 1)) === 0 && (await call(page, 'bitriot_start_ai_match', 7)) === 0,
+    'the test hook refuses 1 and 7 players');
+  await page.waitForTimeout(300);
+  check((await call(page, 'bitriot_game_state')) === 1, 'a refused start leaves the game in the menu');
   check((await call(page, 'bitriot_start_ai_match', 4)) === 1, 'a four-CPU round starts through the test hook');
   const advanced = await waitTicks(page, 90, 30000);
   check(advanced >= 90, 'the simulation advanced 90 ticks', advanced);
@@ -236,13 +261,15 @@ async function scenarioMenuAndRound(server) {
 }
 
 async function scenarioAutostart(server) {
-  console.log('2. ?autostart=ai4');
+  console.log('2. ?autostart=ai6 (six players need a taller map than the default)');
   const browser = await chromium.launch({ args: GL_ARGS });
-  const page = await openPage(browser, 'autostart', server.url + '?autostart=ai4');
+  const page = await openPage(browser, 'autostart', server.url + '?autostart=ai6');
   await waitReady(page);
   await clickStart(page);
   const advanced = await waitTicks(page, 60, 30000);
-  check(advanced >= 60, 'a round started from the address and advanced 60 ticks', advanced);
+  check(advanced >= 60, 'a six-CPU round started from the address and advanced 60 ticks', advanced);
+  const height = await page.evaluate(() => document.getElementById('canvas').height);
+  check(height === 19 * 32, 'the map was made tall enough for six portraits', height);
   check((await call(page, 'bitriot_game_state')) === 2, 'the game is running a round (GAME_RUNNING)');
   await notBlank(page, await shot(page, 'autostart.png'), 'the autostarted round');
   await finish(page, browser);
@@ -355,6 +382,7 @@ async function scenarioGamepad(server) {
   } catch (e) {
     failures++;
     console.log('  FAIL the test stopped: ' + (e && e.stack || e));
+    await dumpOpenPages();
   } finally {
     server.close();
   }

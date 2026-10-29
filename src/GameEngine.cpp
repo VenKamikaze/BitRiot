@@ -183,14 +183,19 @@ bool GameEngine::startAllAiMatch(int numPlayers)
   {
     return false;
   }
+  // Everything is checked above, so nothing has been changed if we returned false.
+  // Five or six players need a taller map than the default 13 tiles to show all
+  // their portraits (the player-select page refuses to start otherwise); raise the
+  // height rather than refuse. With every slot a CPU player nothing else can stop
+  // the game starting.
   settings->setNumberOfPlayers(numPlayers);
   for (int i = 0; i < numPlayers; i++)
   {
     settings->setPlayerAI(i, true);
   }
-  if (!settings->canStartGame())
+  if (settings->getMapHeight() < settings->requiredMapHeightFor(numPlayers))
   {
-    return false;
+    settings->setMapHeight(settings->requiredMapHeightFor(numPlayers));
   }
   menuSystem->closeAllMenus();
   settings->setGameState(GameSettings::GAME_INIT);

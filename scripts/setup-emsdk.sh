@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
 #
-# Install a pinned Emscripten SDK, for the browser (WebSocket) build of vnet.
+# Install a pinned Emscripten SDK, for the browser builds of vnet and BitRiot.
 #
 #   scripts/setup-emsdk.sh                  # installs into ./.emsdk (git-ignored)
 #   EMSDK_DIR=/opt/emsdk scripts/setup-emsdk.sh
@@ -21,7 +21,9 @@
 # Emscripten itself would, and writes the .emscripten_url marker, so Emscripten
 # finds the port up to date and downloads nothing. Without a blocked network it is
 # optional (Emscripten downloads the ports itself on first use). harfbuzz and libpng
-# are not on the branch: they download normally.
+# are not on the branch: they download normally. --with-ports writes into
+# Emscripten's cache without taking its lock, so do not run it while an emcc or an
+# emcmake build is running.
 set -euo pipefail
 
 EMSDK_COMMIT="d7b4130688bfa348392b921ab04015aa15c4f154"  # emscripten-core/emsdk, 2026-10-20
