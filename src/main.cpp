@@ -222,26 +222,11 @@ int main(int argc, char* argv[])
         }
       }
 
-      try
+      // main game processing goes here. (ESC is a flag the engine checks, not an
+      // exception; the outer catch below handles anything the frame throws.)
+      if(! frame().keepRunning)
       {
-        // main game processing goes here
-        if(! frame().keepRunning)
-        {
-          quitkey = 1;
-        }
-      }
-      catch(const InputException& e)
-      {
-        if(e.gotQuit())
-        {
-          quitkey = 1;
-        }
-        else
-        {
-          cerr << "Caught strange InputException! ";
-          cerr << e.what();
-          break;
-        }
+        quitkey = 1;
       }
 
       if(renderer->getSurfaceBackBufferHandle() != nullptr)

@@ -1306,6 +1306,9 @@ const char* const HASH_SCHEMA[] = {
   "message.offsetY:i32",
   "message.targetX:i32",
   "message.targetY:i32",
+  "input.action1Down:u8",
+  "input.action2Down:u8",
+  "input.spawnSelection:i32",
   "map.tile:u8",
   "entities.count:count",
   "PLAYER_CHARACTER/entity.type:i32",
@@ -1776,10 +1779,10 @@ struct GoldenRound
 };
 
 const GoldenRound GOLDEN_ROUNDS[] = {
-  {"four bots, default map, 55% blocks", 4242, 4, 17, 13, 55, 20000, 0xbe604f0bebd2fa62ULL},
-  {"six bots, big map, 55% blocks",      777,  6, 25, 19, 55, 20000, 0x6f06ba6653ff95d7ULL},
-  {"two bots, small map, no blocks",     31,   2, 9,  9,  0,  20000, 0x30b88c0d114f2b58ULL},
-  {"two bots, 13x11, 55% blocks",        4242, 2, 13, 11, 55, 20000, 0xa5275a95eb757c98ULL},
+  {"four bots, default map, 55% blocks", 4242, 4, 17, 13, 55, 20000, 0x494d4e50730d8936ULL},
+  {"six bots, big map, 55% blocks",      777,  6, 25, 19, 55, 20000, 0x5b6ba5e67602feaaULL},
+  {"two bots, small map, no blocks",     31,   2, 9,  9,  0,  20000, 0xd8ba8146dc790f7dULL},
+  {"two bots, 13x11, 55% blocks",        4242, 2, 13, 11, 55, 20000, 0xda5b6510b076c259ULL},
 };
 
 TEST_F(SimulationTest, PinnedRoundsKeepTheirHashes)

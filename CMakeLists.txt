@@ -143,6 +143,7 @@ set(SOURCES ./src/EntityRenderer.cpp
 ./src/GameEngine.cpp
 ./src/InfoPanel.cpp
 ./src/InputHandler.cpp
+./src/InputSampler.cpp
 ./src/MapRenderer.cpp
 ./src/MickSDLRenderer.cpp
 ./src/MenuSDLRenderer.cpp

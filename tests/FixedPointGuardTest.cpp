@@ -35,9 +35,9 @@ TEST(FixedPointSourceGuardTest, NoFloatingPointInSimulationSources)
   ASSERT_GT(sources.size(), 35u) << "the bitriot_sim source list is missing: " << BITRIOT_SIM_SOURCES_FILE;
   EXPECT_GT(files.size(), sources.size()) << "no headers found; the include scan is broken";
 
-  // The files read: the simulation plus the core files that still mutate it until 04a.
-  const std::set<fs::path> scanned = floatGuardedFiles();
-  EXPECT_GT(scanned.size(), files.size());
+  // The files read are the simulation: since brief 04a nothing in bitriot_core
+  // changes simulation state (input is sampled there and applied in Simulation::step).
+  const std::set<fs::path>& scanned = files;
 
   const fs::path srcDir = fs::path(BITRIOT_SOURCE_DIR) / "src";
   std::vector<std::string> offenders;
@@ -57,9 +57,10 @@ TEST(FixedPointSourceGuardTest, NoFloatingPointInSimulationSources)
   }
 }
 
-// The files the guard reads are the ones that are really the simulation (plus the
-// input layer and the tick driver until 04a): a presentation file does not sneak
-// in, and the entity headers do.
+// The files the guard reads are the ones that are really the simulation: a
+// presentation file does not sneak in, and the entity headers do. Since brief 04a
+// that includes the input types (TickInputs.h) but not the input layer: InputHandler
+// and the sampler only read devices, GameEngine only drives the tick.
 TEST(FixedPointSourceGuardTest, TheGuardReadsTheSimulationAndNotTheRenderer)
 {
   namespace fs = std::filesystem;
@@ -69,20 +70,14 @@ TEST(FixedPointSourceGuardTest, TheGuardReadsTheSimulationAndNotTheRenderer)
   {
     names.insert(fs::relative(file, srcDir).generic_string());
   }
-  // The files the float guard really scans: the simulation plus the core files that
-  // still change simulation state until 04a (the input layer and the tick driver).
-  std::set<std::string> guarded;
-  for (const fs::path& file : floatGuardedFiles())
+  const std::set<std::string>& guarded = names;
+  for (const char* local : { "InputHandler.cpp", "InputHandler.h", "InputSampler.cpp", "InputSampler.h",
+                             "GameEngine.cpp", "GameEngine.h" })
   {
-    guarded.insert(fs::relative(file, srcDir).generic_string());
-  }
-  for (const char* mutating : { "InputHandler.cpp", "InputHandler.h", "GameEngine.cpp", "GameEngine.h" })
-  {
-    EXPECT_TRUE(guarded.count(mutating)) << mutating << " still mutates the simulation but the guard does not read it";
-    EXPECT_FALSE(names.count(mutating)) << mutating << " is core code: it is in the simulation's own file list";
+    EXPECT_FALSE(names.count(local)) << local << " is core code: it must not be in the simulation's file list";
   }
 
-  for (const char* sim : { "Simulation.cpp", "Simulation.h", "GameEntity.h", "PlayerCharacterEntity.cpp",
+  for (const char* sim : { "Simulation.cpp", "Simulation.h", "TickInputs.h", "GameEntity.h", "PlayerCharacterEntity.cpp",
                            "Fixed.h", "Map.h", "SimRandom.cpp", "GameSettings.cpp", "EntityAnim.cpp" })
   {
     EXPECT_TRUE(names.count(sim)) << sim << " is simulation code but the guard does not read it";
