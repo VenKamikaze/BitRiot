@@ -1,7 +1,8 @@
 #include "FrameLoop.h"
 
-FrameLoop::FrameLoop(Hooks hooks, uint32_t tickMs, int maxTicksPerFrame)
-  : m_hooks(std::move(hooks)), m_pacer(tickMs, maxTicksPerFrame)
+FrameLoop::FrameLoop(Hooks hooks, uint32_t tickMs, int maxTicksPerFrame, int maxExtraTicksPerFrame)
+  : m_hooks(std::move(hooks)), m_pacer(tickMs, maxTicksPerFrame),
+    m_maxExtraTicks(maxExtraTicksPerFrame < 0 ? 0 : maxExtraTicksPerFrame)
 {
 }
 
@@ -14,8 +15,11 @@ FrameResult FrameLoop::frame()
     m_hooks.pumpEvents();
   }
 
+  // Did this frame start inside a round? (If not, render() may be what starts one.)
+  const bool insideRound = m_started && m_hooks.simulating();
+
   const uint32_t now = m_hooks.nowMs();
-  if (!m_started || !m_hooks.simulating())
+  if (!insideRound)
   {
     // Nothing is owed for time spent outside a round (or before the first frame).
     m_pacer.restart(now);
@@ -40,7 +44,33 @@ FrameResult FrameLoop::frame()
 
   m_held = m_hooks.simulating() && m_pacer.tickDue();
 
+  // Catch-up beyond what the clock owes (brief 07: a peer that holds more confirmed
+  // ticks than it should). Asked once, after the owed ticks, so the answer can
+  // reflect them; bounded; and each step is still gated like any other.
+  if (m_hooks.extraTicks && m_maxExtraTicks > 0 && m_hooks.simulating())
+  {
+    int wanted = m_hooks.extraTicks();
+    if (wanted > m_maxExtraTicks)
+    {
+      wanted = m_maxExtraTicks;
+    }
+    while (wanted > 0 && m_hooks.simulating() && (!m_hooks.canStep || m_hooks.canStep()))
+    {
+      m_hooks.step();
+      result.ticksStepped++;
+      result.extraTicksStepped++;
+      wanted--;
+    }
+  }
+
   result.keepRunning = m_hooks.render();
+
+  if (!insideRound && m_hooks.simulating())
+  {
+    // render() started a round (GAME_INIT: window, bitmaps, HUD). The time that took
+    // is setup, not game time: do not owe it as ticks on the next frame.
+    m_pacer.restart(m_hooks.nowMs());
+  }
   return result;
 }
 

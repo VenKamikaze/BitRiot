@@ -9,6 +9,8 @@
 //   2. real time since the last frame is added to the pacer's backlog;
 //   3. while a whole tick (NORMAL_TICKS_SPEED, 33 ms) is owed, up to the per-frame
 //      cap, and ticks are allowed (simulating() and canStep()): step();
+//   3b. then, if extraTicks() is set, up to maxExtraTicksPerFrame (2) more steps that
+//      it asks for, under the same two gates (see below);
 //   4. render(), exactly once.
 //
 // Rendering never steps and stepping never renders: a frame with no tick draws the
@@ -25,6 +27,19 @@
 //     without blocking events or drawing; the owed time keeps building up to the
 //     cap and is paid back (at most the cap's worth) when it returns true. Locally
 //     it is absent, which means always yes.
+//   * extraTicks(): optional catch-up. It returns how many steps beyond the clock's
+//     the caller wants this frame (netplay: "I hold more confirmed ticks than I
+//     should, run two more"). It is asked once per frame, after the owed ticks, the
+//     answer is clamped to [0, maxExtraTicksPerFrame] (default 2), and each extra
+//     step still needs simulating() and canStep(). Extra steps do not touch the
+//     pacer's backlog, so they neither borrow from nor repay clock time; without
+//     them a peer that stalled for more than the cap's worth (5 ticks) would never
+//     close the gap, because the clock forgives the rest. So a frame runs at most
+//     5 + 2 steps.
+//
+// A frame that starts outside a round and ends inside one (render() ran GAME_INIT's
+// set-up) restarts the pacer after render(), so the time the set-up took is not
+// owed as ticks on the next frame.
 #ifndef FRAMELOOP_H_
 #define FRAMELOOP_H_
 
@@ -36,7 +51,8 @@
 struct FrameResult
 {
   bool keepRunning = true; // false once render() asked to quit
-  int ticksStepped = 0;    // how many times step() ran this frame
+  int ticksStepped = 0;    // how many times step() ran this frame (extra ticks included)
+  int extraTicksStepped = 0; // how many of those were asked for by extraTicks()
 };
 
 class FrameLoop
@@ -50,12 +66,16 @@ class FrameLoop
       std::function<bool()> render;         // required: draw; false means quit
       std::function<bool()> canStep;        // optional: false vetoes a tick (netplay)
       std::function<void()> pumpEvents;     // optional: read devices and window events
+      std::function<int()> extraTicks;      // optional: steps wanted beyond the clock's (netplay catch-up)
     };
 
     // The most ticks one frame can run, and the most that can ever be owed.
-    static const int DEFAULT_MAX_TICKS_PER_FRAME = 5;
+    static constexpr int DEFAULT_MAX_TICKS_PER_FRAME = 5;
+    // The most extra steps extraTicks() can add to one frame.
+    static constexpr int DEFAULT_MAX_EXTRA_TICKS_PER_FRAME = 2;
 
-    FrameLoop(Hooks hooks, uint32_t tickMs, int maxTicksPerFrame = DEFAULT_MAX_TICKS_PER_FRAME);
+    FrameLoop(Hooks hooks, uint32_t tickMs, int maxTicksPerFrame = DEFAULT_MAX_TICKS_PER_FRAME,
+              int maxExtraTicksPerFrame = DEFAULT_MAX_EXTRA_TICKS_PER_FRAME);
 
     FrameResult frame();
 
@@ -68,6 +88,7 @@ class FrameLoop
   private:
     Hooks m_hooks;
     TickPacer m_pacer;
+    int m_maxExtraTicks;
     bool m_started = false;
     bool m_held = false; // the last frame ended with a tick owed that it did not run
 };

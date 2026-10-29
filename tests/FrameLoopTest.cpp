@@ -32,6 +32,8 @@ struct FakeGame
   int pumps = 0;
   std::vector<std::string> log;
   std::function<void()> onStep;
+  std::function<int()> extra; // when set, becomes the extraTicks() hook
+  std::function<void()> onRender;
 
   FrameLoop::Hooks hooks()
   {
@@ -49,7 +51,20 @@ struct FakeGame
         onStep();
       }
     };
-    h.render = [this] { renders++; log.push_back("render"); return renderResult; };
+    h.render = [this]
+    {
+      renders++;
+      log.push_back("render");
+      if (onRender)
+      {
+        onRender();
+      }
+      return renderResult;
+    };
+    if (extra)
+    {
+      h.extraTicks = extra;
+    }
     return h;
   }
 };
@@ -397,6 +412,177 @@ TEST(FrameLoopTest, TheClockWrappingAroundDoesNotConfuseTheLoop)
   loop.frame();
   game.now += TICK; // wraps past 2^32
   EXPECT_EQ(loop.frame().ticksStepped, 1);
+}
+
+// ---------------------------------------------------------------------------
+// extraTicks(): catch-up beyond the clock (brief 07)
+// ---------------------------------------------------------------------------
+
+TEST(FrameLoopTest, ExtraTicksRunOnTopOfTheOwedOnesAndAreBounded)
+{
+  FakeGame game;
+  game.extra = [] { return 100; }; // wants far more than allowed
+  FrameLoop loop(game.hooks(), TICK, CAP);
+  loop.frame();
+
+  game.now += TICK; // one tick owed
+  const FrameResult r = loop.frame();
+  EXPECT_EQ(r.ticksStepped, 1 + 2) << "one owed, and the default bound of two extra";
+  EXPECT_EQ(r.extraTicksStepped, 2);
+  EXPECT_EQ(FrameLoop::DEFAULT_MAX_EXTRA_TICKS_PER_FRAME, 2);
+}
+
+TEST(FrameLoopTest, ExtraTicksAreAskedOnceAfterTheOwedTicksAndHonourTheAnswer)
+{
+  FakeGame game;
+  int asked = 0;
+  game.extra = [&] { asked++; return 1; };
+  FrameLoop loop(game.hooks(), TICK, CAP);
+  loop.frame();
+  asked = 0;
+
+  game.now += 3 * TICK;
+  game.log.clear();
+  const FrameResult r = loop.frame();
+  EXPECT_EQ(asked, 1);
+  EXPECT_EQ(r.ticksStepped, 3 + 1);
+  const std::vector<std::string> expected = {"pump", "step", "step", "step", "step", "render"};
+  EXPECT_EQ(game.log, expected);
+}
+
+TEST(FrameLoopTest, ExtraTicksRunEvenWhenTheClockOwesNothing)
+{
+  FakeGame game;
+  game.extra = [] { return 2; };
+  FrameLoop loop(game.hooks(), TICK, CAP);
+  loop.frame();
+
+  game.now += 5; // no tick due
+  const FrameResult r = loop.frame();
+  EXPECT_EQ(r.ticksStepped, 2);
+  EXPECT_EQ(r.extraTicksStepped, 2);
+}
+
+TEST(FrameLoopTest, ExtraTicksDoNotBorrowFromOrRepayTheClock)
+{
+  FakeGame game;
+  bool wantExtra = true;
+  game.extra = [&] { return wantExtra ? 2 : 0; };
+  FrameLoop loop(game.hooks(), TICK, CAP);
+  loop.frame();
+
+  game.now += 5;
+  loop.frame(); // two extra ticks, 5 ms of clock
+  wantExtra = false;
+  game.now += 28; // 33 ms in all: exactly one tick of clock time
+  EXPECT_EQ(loop.frame().ticksStepped, 1) << "the extra ticks did not use up the 5 ms already counted";
+  game.now += 33;
+  EXPECT_EQ(loop.frame().ticksStepped, 1);
+}
+
+TEST(FrameLoopTest, ExtraTicksStillNeedCanStep)
+{
+  FakeGame game;
+  game.extra = [] { return 2; };
+  FrameLoop loop(game.hooks(), TICK, CAP);
+  loop.frame();
+
+  game.canStep = false;
+  game.now += TICK;
+  EXPECT_EQ(loop.frame().ticksStepped, 0);
+
+  int allowed = 0; // netplay holds inputs for no ticks at first
+  FrameLoop::Hooks hooks = game.hooks();
+  hooks.canStep = [&] { return allowed > 0; };
+  hooks.step = [&] { game.steps++; allowed--; };
+  FrameLoop limited(hooks, TICK, CAP);
+  limited.frame();
+  allowed = 1; // now it holds inputs for one more tick only
+  game.now += 5;
+  game.steps = 0;
+  EXPECT_EQ(limited.frame().ticksStepped, 1) << "asked for two, allowed one";
+}
+
+TEST(FrameLoopTest, ExtraTicksStopWhenAStepEndsTheRoundAndNeverRunOutsideOne)
+{
+  FakeGame game;
+  game.extra = [] { return 2; };
+  FrameLoop loop(game.hooks(), TICK, CAP);
+  loop.frame();
+
+  game.onStep = [&] { game.simulating = false; }; // the first step ends the round
+  game.now += 5;
+  EXPECT_EQ(loop.frame().ticksStepped, 1);
+
+  game.onStep = nullptr;
+  game.simulating = false; // a menu
+  game.now += TICK;
+  game.steps = 0;
+  EXPECT_EQ(loop.frame().ticksStepped, 0);
+  EXPECT_EQ(game.steps, 0);
+}
+
+TEST(FrameLoopTest, AMissingNegativeOrZeroExtraTicksMeansNone)
+{
+  FakeGame plain;
+  FrameLoop none(plain.hooks(), TICK, CAP);
+  none.frame();
+  plain.now += 5;
+  EXPECT_EQ(none.frame().ticksStepped, 0);
+
+  FakeGame game;
+  int answer = -3;
+  game.extra = [&] { return answer; };
+  FrameLoop loop(game.hooks(), TICK, CAP);
+  loop.frame();
+  game.now += 5;
+  EXPECT_EQ(loop.frame().ticksStepped, 0) << "negative";
+  answer = 0;
+  game.now += 5;
+  EXPECT_EQ(loop.frame().ticksStepped, 0);
+
+  FakeGame off;
+  off.extra = [] { return 2; };
+  FrameLoop disabled(off.hooks(), TICK, CAP, /*maxExtraTicksPerFrame=*/0);
+  disabled.frame();
+  off.now += 5;
+  EXPECT_EQ(disabled.frame().ticksStepped, 0) << "a bound of zero turns the hook off";
+}
+
+TEST(FrameLoopTest, ASetUpHeavyFrameThatStartsARoundDoesNotOweItsSetUpTimeAsTicks)
+{
+  // The GAME_INIT frame: it starts outside a round, and render() builds the world
+  // (window, bitmaps, HUD), which takes a while, then the round is running.
+  FakeGame game;
+  game.simulating = false;
+  FrameLoop loop(game.hooks(), TICK, CAP);
+  loop.frame();
+
+  game.onRender = [&]
+  {
+    game.now += 500; // set-up
+    game.simulating = true;
+    game.onRender = nullptr;
+  };
+  game.now += TICK;
+  const FrameResult setUpFrame = loop.frame();
+  EXPECT_EQ(setUpFrame.ticksStepped, 0);
+
+  game.now += TICK;
+  EXPECT_EQ(loop.frame().ticksStepped, 1) << "one tick, not a burst for the 500 ms of set-up";
+}
+
+TEST(FrameLoopTest, AMenuFrameThatStaysAMenuStillPacesFromItsOwnStart)
+{
+  // The restart after render() is only for a frame that ended inside a round: a
+  // menu frame's sleep hint still counts the frame's own work.
+  FakeGame game;
+  game.simulating = false;
+  FrameLoop loop(game.hooks(), TICK, CAP);
+  loop.frame();
+  game.onRender = [&] { game.now += 10; };
+  loop.frame();
+  EXPECT_EQ(loop.sleepHintMs(), 23u);
 }
 
 } // namespace
