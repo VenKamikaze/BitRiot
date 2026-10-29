@@ -37,6 +37,30 @@ Use `-sUSE_SDL=2`, `-sUSE_SDL_IMAGE=2 -sSDL2_IMAGE_FORMATS='["png"]'`, `-sUSE_SD
   - If they are blocked, git-clone each port's source at the exact tag or commit that your emsdk version's `tools/ports/*.py` expects, and set `EMCC_LOCAL_PORTS=sdl2=<path>,sdl2_image=<path>,…`.
   - Cover the whole dependency set: SDL2, SDL2_image (with libpng and zlib), SDL2_ttf (with FreeType and HarfBuzz), SDL2_mixer, and FreeType for RmlUi.
   - Script this in `setup-emsdk.sh`.
+- **Port sources are provided (verified Oct 2026).** In the cloud container, GitHub `/archive/` URLs return 403, so six of Emscripten 6.0.13's port downloads are blocked:
+
+  | Port | URL Emscripten fetches | File on branch `emscripten-ports` |
+  |---|---|---|
+  | sdl2 | `https://github.com/libsdl-org/SDL/archive/release-2.32.10.zip` | `release-2.32.10.zip` |
+  | sdl2_image | `https://github.com/libsdl-org/SDL_image/archive/refs/tags/release-2.6.0.zip` | `SDL_image-release-2.6.0.zip` |
+  | sdl2_ttf | `https://github.com/libsdl-org/SDL_ttf/archive/release-2.20.2.zip` | `SDL_ttf-release-2.20.2.zip` |
+  | sdl2_mixer | `https://github.com/libsdl-org/SDL_mixer/archive/release-2.8.0.zip` | `SDL_mixer-release-2.8.0.zip` |
+  | freetype | `https://github.com/freetype/freetype/archive/VER-2-14-3.zip` | `freetype-VER-2-14-3.zip` |
+  | zlib | `https://github.com/madler/zlib/archive/refs/tags/v1.3.2.tar.gz` | `zlib-1.3.2.tar.gz` |
+
+  harfbuzz (a GitHub *release* download) and libpng (storage.googleapis.com) download fine.
+
+  - **Where the files are.** The user pushed these six archives to the orphan branch **`emscripten-ports`** of this repo (ab564ce, with a `SHA512SUMS` file). Every one was checked against the `HASH` in Emscripten 6.0.13's `tools/ports/<name>.py` and matches byte for byte.
+  - **How to make Emscripten use them.** Placing the archive in the cache is **not** enough: `fetch_project` deletes it and downloads again. Instead, for each port:
+    1. Unpack the archive into `$(em-config CACHE)/ports/<name>/`, exactly as `shutil.unpack_archive` would. Each archive has one top-level directory.
+    2. Write `$(em-config CACHE)/ports/<name>/.emscripten_url` containing the exact URL from the table, plus a newline.
+
+    Emscripten's `up_to_date()` check then passes and nothing is downloaded. This is preferable to `EMCC_LOCAL_PORTS`, which skips the hash check and uses git checkouts that can differ from the release archives.
+  - **Script it** in `scripts/setup-emsdk.sh`, e.g. `--with-ports`:
+    1. `git fetch origin emscripten-ports`, then `git archive` it to a temp dir.
+    2. Verify each file's SHA-512 against `tools/ports/<name>.py` and fail on any mismatch.
+    3. Unpack each archive and write its marker.
+  - **If the emsdk pin changes**, the port versions change too. Refresh the branch and the table.
 
 ### 3. Compiler and link flags
 
