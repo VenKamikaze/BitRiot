@@ -223,6 +223,7 @@ void GameRunningSDLInput::updateEventQueue()
 
   while(SDL_PollEvent(&event))
   {
+    m_eventsPolled++;
     if(event.type == SDL_KEYUP)
     {
       MickEvent myevent;

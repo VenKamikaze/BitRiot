@@ -107,6 +107,7 @@ void GameEngine::resetGame()
   initPlayerCharacters(numPlayers, genders);
   m_pInputHandler->setPointers(m_pPlayers, m_sim.entityManager().getDynamicMap(), m_pPanel);
   m_pPanel->setPlayerPointers(m_pPlayers);
+  m_drawNeeded = true; // a new HUD and (maybe) a new back buffer: nothing is drawn yet
 }
 
 int GameEngine::gameLengthSeconds() const
@@ -134,10 +135,13 @@ bool GameEngine::simulating() const
 
 void GameEngine::pumpEvents()
 {
-  m_ticksThisFrame = 0;
+  m_pumpedQuietly = false;
   if (simulating())
   {
-    m_pInputHandler->pumpEvents();
+    // Quiet means: the poll ran, and found nothing. (If nothing polls, the frame is
+    // never "quiet", and renderFrame() redraws: a front end that replaces this hook
+    // loses the optimisation, not the picture.)
+    m_pumpedQuietly = !m_pInputHandler->pumpEvents();
   }
 }
 
@@ -186,6 +190,19 @@ void GameEngine::stepTick()
 
 bool GameEngine::renderFrame()
 {
+  // The per-frame counters are reset here, at the end of every render, and not in
+  // pumpEvents(): a front end that replaces the pump hook (netplay) must not be able
+  // to leave a stale "a tick ran this frame" behind.
+  struct EndOfFrame
+  {
+    GameEngine& engine;
+    ~EndOfFrame()
+    {
+      engine.m_ticksThisFrame = 0;
+      engine.m_pumpedQuietly = false;
+    }
+  } endOfFrame{*this};
+
   switch (GameSettings::getInstance()->getGameState())
   {
     case GameSettings::MENU_RUNNING:
@@ -219,6 +236,7 @@ bool GameEngine::renderFrame()
         m_scoreboardWinner = m_sim.currentWinner();
       }
 
+      m_endingThisFrame = m_roundEnding;
       if (m_roundEnding)
       {
         // The round's last frame: go to the scoreboard (the menu takes over on the
@@ -229,10 +247,24 @@ bool GameEngine::renderFrame()
         m_scoreboardWinner = nullptr;
       }
 
-      WorldRenderer::renderWorld(m_sim.entityManager(), m_surface);
+      // Draw the world and the HUD onto the CPU surface only when something may have
+      // changed: a tick ran, the round is ending, an event was read (a join
+      // indicator, a window event), or the surface is new. A frame with none of
+      // those (a tick held back, a frame that came early, a browser's 60 Hz frame
+      // between 30 Hz ticks) would draw the same picture again. The surface is still
+      // pushed to the texture every frame: the renderer's back buffers alternate, so
+      // each must be given the picture again or the screen would flicker between
+      // an old frame and the new one.
+      const bool redraw = m_drawNeeded || m_endingThisFrame || m_ticksThisFrame > 0 || !m_pumpedQuietly;
+      m_drawNeeded = false;
+      m_endingThisFrame = false;
+      if (redraw)
+      {
+        WorldRenderer::renderWorld(m_sim.entityManager(), m_surface);
 
-      m_pPanel->renderSurfaceTo(m_surface, (GameSettings::getInstance()->getMapWidth() * Map::TILE_WIDTH), 0); 
-      
+        m_pPanel->renderSurfaceTo(m_surface, (GameSettings::getInstance()->getMapWidth() * Map::TILE_WIDTH), 0);
+      }
+
       MickSDLRenderer::getInstance()->pushCpuBufferToHardwareBuffer();
       break;
     }

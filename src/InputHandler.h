@@ -25,8 +25,9 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
 
     // Reads pending device and window events into the held/released key and pad
     // state (the quit key, a controller plug, the join selector included). The frame
-    // loop calls it once per frame, whether or not a tick is about to run.
-    void pumpEvents();
+    // loop calls it once per frame, whether or not a tick is about to run. Returns
+    // true if any event was read.
+    bool pumpEvents();
     // Applies the held/released input to the human players, once per stepped tick.
     // Throws InputException(GOT_QUIT) if the quit key was seen. (Brief 04a turns
     // this into a sampled bitmask handed to Simulation::step.)

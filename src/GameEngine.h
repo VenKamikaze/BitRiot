@@ -39,7 +39,10 @@ class GameEngine
 
     // True while ticks may run: a round is in progress and has not just ended.
     bool simulating() const;
-    // Reads device and window events (only during a round).
+    // Reads device and window events (only during a round). A front end that wants
+    // its own polling (netplay) should call this too ("wrap, don't replace"): it is
+    // what lets renderFrame() skip a redraw when nothing happened and what lets a
+    // held-back round still be quit with ESC.
     void pumpEvents();
     // One tick: applies human input, then Simulation::step(), and notes when that
     // tick ended the round (or ESC was seen). Does not draw.
@@ -60,7 +63,14 @@ class GameEngine
     // is loaded by the next renderFrame(), after that frame's last draw of the world.
     bool m_roundEnding = false;
     std::shared_ptr<PlayerCharacterEntity> m_scoreboardWinner;
+    // Steps run since the last renderFrame() (renderFrame() clears it).
     int m_ticksThisFrame = 0;
+    // pumpEvents() ran this frame and read no event (renderFrame() clears it).
+    bool m_pumpedQuietly = false;
+    // The round was ending when this frame's render began (so its picture is drawn).
+    bool m_endingThisFrame = false;
+    // The CPU surface holds no picture of the current round yet.
+    bool m_drawNeeded = true;
     unique_ptr<MenuSDLRenderer> menuSystem = nullptr;
     // The deterministic world: setup (start) and the per-tick step. Everything the
     // sim needs lives in there; this class keeps rendering, the InfoPanel, sound,

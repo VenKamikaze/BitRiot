@@ -639,9 +639,11 @@ bool InputHandler::consumeControllerReleased(int playerId, ButtonName button)
   return true;
 }
 
-void InputHandler::pumpEvents()
+bool InputHandler::pumpEvents()
 {
-  GameRunningSDLInput::getInstance()->updateEventQueue();
+  shared_ptr<GameRunningSDLInput> input = GameRunningSDLInput::getInstance();
+  input->updateEventQueue();
+  return input->takeEventCount() > 0;
 }
 
 void InputHandler::applyInput()
