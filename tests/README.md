@@ -404,7 +404,9 @@ rebuilt before the old `EntityManager` goes) skips its write into the new map.
   (`Simulation::tick()` x `NORMAL_TICKS_SPEED`). These were checked by hand
   (briefs 03a and 03b: a scratch autoplay hook under `xvfb-run`, which compared the
   engine's per-tick state hashes with the harness's, and exercised ESC and a held
-  tick).
+  tick; brief 04a: the same hook pushed real SDL key events, logged each tick's
+  `TickInputs` bits and hash, and a harness replay of those inputs matched every
+  hash).
 - There is no automated AddressSanitizer job. To run one by hand, outside the
   source tree:
 
