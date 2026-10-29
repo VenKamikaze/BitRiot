@@ -1,5 +1,10 @@
 #include "Simulation.h"
 
+#include "BuildId.h"
+#include "DataHash.h"
+
+#include <map>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 
@@ -137,6 +142,11 @@ void Simulation::start(const MatchConfig& config)
     throw std::invalid_argument("Simulation::start: " + problem);
   }
 
+  // 0b. The simulation's data files are read now, not on first use: a file that is
+  // missing or does not parse fails here (std::runtime_error) instead of answering 1
+  // for every constant. Also before anything is touched.
+  DataHash::loadSimData();
+
   // 1. The previous round goes first, while the Map is still the size it was built
   // at: the blocks it placed clear their own tiles as they are destroyed.
   tearDown();
@@ -173,7 +183,7 @@ void Simulation::start(const MatchConfig& config)
   checkSingletonsAreFresh();
 
   // 6. The world.
-  m_spawningPool.reset(new SpawningPool(config.numPlayers() * 100));
+  m_spawningPool.reset(new SpawningPool(config.numPlayers() * POOL_POINTS_PER_PLAYER));
   spawnPlayers();
   seedBlocks();
 }
@@ -599,6 +609,16 @@ std::shared_ptr<PlayerCharacterEntity> Simulation::currentWinner()
   return m_entityManager->getWinningPlayer(m_spawningPool->canSpawnMore());
 }
 
+uint64_t Simulation::dataHash()
+{
+  return DataHash::hash();
+}
+
+uint64_t Simulation::buildId()
+{
+  return bitriotBuildId();
+}
+
 uint64_t Simulation::stateHash() const
 {
   StateHasher h;
@@ -638,11 +658,13 @@ void Simulation::hashInto(StateHasher& h) const
   h.setEntityIds(ids);
 
   // 0, 1
+  h.beginSection("[header]");
   h.i32(STATE_HASH_VERSION, "version");
   h.u64(m_tick, "tick");
   h.flag(m_roundOver, "roundOver");
 
   // 2: the settings the sim reads
+  h.beginSection("[settings]");
   h.i32(width, "settings.mapWidth");
   h.i32(height, "settings.mapHeight");
   h.i32(settings->getNumberOfPlayers(), "settings.numPlayers");
@@ -653,30 +675,36 @@ void Simulation::hashInto(StateHasher& h) const
   h.flag(settings->isNpcSpawnerEnabled(), "settings.npcSpawnerEnabled");
 
   // 3: the sim RNG
+  h.beginSection("[rng]");
   h.u64(SimRandom::sim().stateValue(), "rng.state");
   h.u64(SimRandom::sim().incValue(), "rng.inc");
 
   // 4: the game-over timer
+  h.beginSection("[game over timer]");
   std::GameTimer* timer = std::GameOverTimer::getInstance();
   h.flag(timer->isTimerTriggered(), "timer.triggered");
   h.u64(timer->getTriggeredAtTick(), "timer.triggeredAtTick");
 
   // 5: the spawning pool
+  h.beginSection("[spawning pool]");
   m_spawningPool->hashState(h);
 
   // 6: messages still waiting
+  h.beginSection("[pending messages]");
   EntityMessageQueue::getInstance()->hashState(h);
 
   // 6b: the per-slot input state (which action each human holds, and what it has
   // selected). Slots past the player count are always the default and left out.
   for (int slot = 0; slot < settings->getNumberOfPlayers() && slot < std::GameSettings::MAX_PLAYERS; slot++)
   {
+    h.beginSection("[input state, slot " + std::to_string(slot) + "]");
     h.flag(m_slotInput[slot].action1Down, "input.action1Down");
     h.flag(m_slotInput[slot].action2Down, "input.action2Down");
     h.i32(m_slotInput[slot].spawnSelection, "input.spawnSelection");
   }
 
-  // 7: the static map
+  // 7: the static map (the dump prints it as a picture)
+  h.quiet(true);
   Map* map = Map::getInstance();
   for (int y = 0; y < height; y++)
   {
@@ -687,16 +715,22 @@ void Simulation::hashInto(StateHasher& h) const
   }
 
   // 8: the entities
+  h.quiet(false);
+  h.beginSection("[entities]");
   h.count(dynamicMap->entityList.size(), "entities.count");
+  int walkIndex = 0;
   for (std::map<int, std::shared_ptr<GameEntity>>::const_iterator it = dynamicMap->entityList.begin();
        it != dynamicMap->entityList.end(); ++it)
   {
+    h.beginSection("entity " + std::to_string(walkIndex++) + " " + ENTITY_TYPE_NAMES[it->second->getType()]
+                   + " (id " + std::to_string(it->first) + ")");
     h.setTracePrefix(ENTITY_TYPE_NAMES[it->second->getType()]);
     it->second->hashState(h);
   }
   h.setTracePrefix("");
 
-  // 9: the per-tile entity lists
+  // 9: the per-tile entity lists (the dump prints the non-empty ones itself)
+  h.quiet(true);
   for (int y = 0; y < height; y++)
   {
     for (int x = 0; x < width; x++)
@@ -725,6 +759,100 @@ void Simulation::hashInto(StateHasher& h) const
         h.i32(tile[i].type, "aiView.type");
         h.i32(tile[i].groupType, "aiView.groupType");
         h.flag(tile[i].staticFlag, "aiView.static");
+      }
+    }
+  }
+}
+
+void Simulation::dumpState(std::ostream& out) const
+{
+  StateHasher h;
+  std::ostringstream body;
+  h.setDump(&body);
+  hashInto(h); // throws if not started
+
+  std::GameSettings* settings = std::GameSettings::getInstance();
+  DynamicMap* dynamicMap = m_entityManager->getDynamicMap();
+  const int width = settings->getMapWidth();
+  const int height = settings->getMapHeight();
+
+  out << "state hash 0x";
+  {
+    static const char DIGITS[] = "0123456789abcdef";
+    const uint64_t v = h.value();
+    for (int shift = 60; shift >= 0; shift -= 4)
+    {
+      out << DIGITS[(v >> shift) & 0xf];
+    }
+  }
+  out << "\n";
+  out << "tick " << m_tick << ", round " << (m_roundOver ? "over" : "running") << "\n";
+  out << "config: seed " << m_config.seed << ", map " << width << "x" << height << ", blocks "
+      << m_config.blockPercentage << "%, spawner " << (m_config.npcSpawnerEnabled ? "on" : "off") << ", players";
+  for (int i = 0; i < m_config.numPlayers(); i++)
+  {
+    out << " " << (i + 1) << ":team" << m_config.slots[i].team << (m_config.slots[i].ai ? "/ai" : "/human");
+  }
+  out << "\n\n";
+
+  out << body.str();
+
+  out << "\n[map] (# wall, . empty, + block)\n";
+  Map* map = Map::getInstance();
+  for (int y = 0; y < height; y++)
+  {
+    out << "  ";
+    for (int x = 0; x < width; x++)
+    {
+      const int tile = map->staticTileAt(x, y);
+      out << (tile == Map::WALL ? '#' : (tile == Map::BLOCK ? '+' : '.'));
+    }
+    out << "\n";
+  }
+
+  // The entity-id to walk-index mapping, so a ref in the listing can be followed.
+  std::map<int, int> walkOf;
+  int index = 0;
+  for (std::map<int, std::shared_ptr<GameEntity>>::const_iterator it = dynamicMap->entityList.begin();
+       it != dynamicMap->entityList.end(); ++it)
+  {
+    walkOf[it->first] = index++;
+  }
+  out << "\n[tile entity lists] (walk indexes, in list order; empty tiles omitted)\n";
+  for (int y = 0; y < height; y++)
+  {
+    for (int x = 0; x < width; x++)
+    {
+      const std::vector<int>& tile = dynamicMap->entityMap[x][y];
+      if (!tile.empty())
+      {
+        out << "  (" << x << "," << y << "):";
+        for (size_t i = 0; i < tile.size(); i++)
+        {
+          const std::map<int, int>::const_iterator w = walkOf.find(tile[i]);
+          out << " " << (w == walkOf.end() ? -1 : w->second);
+        }
+        out << "\n";
+      }
+    }
+  }
+  AIGameView* view = AIGameView::getInstance();
+  out << "\n[AI view lists] (walk index/owner/type/group/static; empty tiles omitted)\n";
+  for (int y = 0; y < height; y++)
+  {
+    for (int x = 0; x < width; x++)
+    {
+      const std::vector<EntityInfo>& tile = view->getEntityInfoAtLocation(x, y);
+      if (!tile.empty())
+      {
+        out << "  (" << x << "," << y << "):";
+        for (size_t i = 0; i < tile.size(); i++)
+        {
+          const std::map<int, int>::const_iterator w = walkOf.find(tile[i].id);
+          out << " " << (w == walkOf.end() ? -1 : w->second) << "/" << tile[i].playerNumber << "/" << tile[i].type << "/"
+              << tile[i].groupType << "/" << (tile[i].staticFlag ? 1 : 0);
+        }
+        out << "\n";
       }
     }
   }

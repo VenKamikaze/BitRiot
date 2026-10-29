@@ -14,6 +14,9 @@
 
 using namespace std;
 #include <list>
+#include <string>
+#include <utility>
+#include <vector>
 #include <set>
 #include <map>
 
@@ -151,6 +154,10 @@ class PlayerCharacterEntity : public GameEntity
     static long livePathNodes();
     // A* searches run so far, across all bots. For tests.
     static long pathSearchesRun();
+    // The AI's tuning constants that are not in a data file (named constants in
+    // PlayerCharacterEntity.cpp), as ("PlayerCharacterEntity.NAME", value) pairs,
+    // for the data hash (DataHash.cpp).
+    static void appendSimConstants(std::vector<std::pair<std::string, int> >& out);
 
   protected:
     void clearGoalsAndInstructions(); // wipes m_insList and m_goalList

@@ -199,6 +199,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <ostream>
 #include <string>
 #include <vector>
 
@@ -213,6 +214,21 @@ class Simulation
 {
   public:
     static const int32_t STATE_HASH_VERSION = 2;
+
+    // The spawning pool's budget is this many points per player (a sim constant, in
+    // the data hash).
+    static const int POOL_POINTS_PER_PLAYER = 100;
+
+    // The data hash (DataHash.h): the parsed simulation data files and the named
+    // tuning constants, one 64-bit number. Static: it does not depend on a round. It
+    // loads data/entity.txt and data/player.txt if they are not loaded yet and throws
+    // std::runtime_error if they cannot be. start() loads them too (eagerly), so a
+    // round never runs on the silent defaults of a missing file.
+    static uint64_t dataHash();
+
+    // The build id (BuildId.h): a hash of the simulation's source, generated at build
+    // time. Two builds with the same value run the same simulation code.
+    static uint64_t buildId();
 
     Simulation();
     ~Simulation();
@@ -240,6 +256,13 @@ class Simulation
     // one entry per write (so a repeated item repeats). Values never appear, so
     // it describes the hash's layout, not the round. For the schema test.
     std::vector<std::string> stateHashFields() const;
+
+    // A readable listing of the whole hashed state, for diffing two runs that
+    // diverge (bitriot_headless dump): the header, the per-slot input state, the RNG,
+    // the timer, the pool, the pending messages, the map, then every entity with every
+    // hashed field named and valued, in walk order, then the non-empty tile lists.
+    // Read-only; the same state always prints the same text.
+    void dumpState(std::ostream& out) const;
 
     // -- read-only state -------------------------------------------------------
 

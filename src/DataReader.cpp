@@ -1,6 +1,8 @@
 #include "DataReader.h"
 #include "MickLogger.h"
 
+#include <algorithm>
+
 DataReader::DataReader()
 {
   m_pIntFilemap = new map<string, map<string, int> >;
@@ -53,6 +55,38 @@ void DataReader::clearCache()
 {
   m_pIntFilemap->clear();
   m_pStrFilemap->clear();
+}
+
+bool DataReader::loadFile(const string & filename)
+{
+  if (m_pIntFilemap->find(filename) != m_pIntFilemap->end())
+  {
+    return true;
+  }
+  return readTextFile(filename);
+}
+
+bool DataReader::normalisedEntries(const string & filename, vector<pair<string, string> > & out)
+{
+  out.clear();
+  if (!loadFile(filename))
+  {
+    return false;
+  }
+  // The two maps are disjoint (a constant is an int or a string, never both) and
+  // each is sorted by name; merge them.
+  const map<string, int> & ints = m_pIntFilemap->find(filename)->second;
+  const map<string, string> & strs = m_pStrFilemap->find(filename)->second;
+  for (map<string, int>::const_iterator it = ints.begin(); it != ints.end(); ++it)
+  {
+    out.push_back(make_pair(it->first, std::to_string(it->second)));
+  }
+  for (map<string, string>::const_iterator it = strs.begin(); it != strs.end(); ++it)
+  {
+    out.push_back(make_pair(it->first, it->second));
+  }
+  std::sort(out.begin(), out.end());
+  return true;
 }
 
 const int DataReader::getIntFromFile(const string & constantName, const string & filename)
