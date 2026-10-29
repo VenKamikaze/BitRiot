@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bit Riot</title>
+<style>
+  :root {
+    --bg: #0b0d14;
+    --panel: #151927;
+    --line: #2a3050;
+    --text: #dfe4f5;
+    --muted: #8b93b3;
+    --accent: #ffb000;
+    --accent-ink: #1a1200;
+    --bad: #ff6b6b;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #eceef6;
+      --panel: #ffffff;
+      --line: #c9cde0;
+      --text: #1a1d2e;
+      --muted: #5b6285;
+      --accent: #c27a00;
+      --accent-ink: #ffffff;
+      --bad: #b3261e;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 16px;
+  }
+  h1 { margin: 0; font-size: 1.1rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  #stage {
+    position: relative;
+    width: fit-content;
+    max-width: 100%;
+    background: #000;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+    line-height: 0;
+  }
+  /* Before the game starts the canvas keeps its own pixel size (scaled down on a
+     narrow screen); once it is running fit() sizes it to the window. */
+  canvas#canvas {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    outline: none;
+  }
+  #overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 24px;
+    text-align: center;
+    line-height: 1.45;
+    background: color-mix(in srgb, var(--bg) 92%, transparent);
+  }
+  #overlay[hidden] { display: none; }
+  #status { color: var(--muted); min-height: 1.45em; max-width: 36em; }
+  #status.error { color: var(--bad); }
+  progress { width: min(320px, 70%); height: 10px; accent-color: var(--accent); }
+  progress[hidden] { display: none; }
+  button#start {
+    font: inherit;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    padding: 14px 34px;
+    border-radius: 6px;
+    border: 0;
+    background: var(--accent);
+    color: var(--accent-ink);
+    cursor: pointer;
+  }
+  button#start[hidden] { display: none; }
+  button#start:focus-visible { outline: 3px solid var(--text); outline-offset: 3px; }
+  #help { max-width: 1000px; width: 100%; color: var(--muted); font-size: .9rem; display: grid; gap: 4px 24px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  #help b { color: var(--text); font-weight: 600; }
+  @media (max-width: 520px) { body { padding: 10px; } }
+</style>
+</head>
+<body>
+<h1>Bit Riot</h1>
+
+<div id="stage">
+  <canvas id="canvas" width="768" height="416" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+  <div id="overlay" role="status">
+    <progress id="progress" max="100" value="0"></progress>
+    <div id="status">Loading...</div>
+    <button id="start" type="button" hidden>Click to start</button>
+  </div>
+</div>
+
+<div id="help">
+  <div><b>Keyboard.</b> Player 1: W A S D, left Ctrl (weapon), left Shift (egg). Player 4: arrow keys, right Ctrl, right Shift. Hold the weapon key and press a direction to pick the weapon.</div>
+  <div><b>Controllers.</b> Plug in or wake a pad (press any button; browsers hide pads until you do), then press START in a round to join or take over a CPU player.</div>
+  <div><b>Sound</b> starts when you click the button above. Rumble is not supported in this build.</div>
+</div>
+
+<script>
+  // The game is started by the click (Module.callMain below), not by the page
+  // loading: browsers only let a page play sound after the visitor has interacted
+  // with it, and starting the game inside that click means its audio is opened
+  // while the page is allowed to make noise, and the canvas has the keyboard focus.
+  var overlay = document.getElementById('overlay');
+  var statusEl = document.getElementById('status');
+  var progressEl = document.getElementById('progress');
+  var startBtn = document.getElementById('start');
+  var canvas = document.getElementById('canvas');
+
+  function showStatus(text, isError) {
+    statusEl.textContent = text;
+    statusEl.classList.toggle('error', !!isError);
+  }
+
+  var Module = {
+    canvas: canvas,
+    noInitialRun: true,
+    // The game logs to stdout / stderr; keep both in the browser console.
+    print: function (text) { console.log(text); },
+    printErr: function (text) { console.warn(text); },
+    setStatus: function (text) {
+      // Emscripten reports "Downloading data... (12345/456789)" and "Running...".
+      var m = /\((\d+)\/(\d+)\)/.exec(text);
+      if (m && +m[2] > 0) { progressEl.value = (100 * +m[1]) / +m[2]; }
+      if (text) { showStatus(text); }
+    },
+    monitorRunDependencies: function (left) {
+      if (left === 0) { progressEl.hidden = true; }
+    },
+    onRuntimeInitialized: function () {
+      progressEl.hidden = true;
+      showStatus('Ready.');
+      startBtn.hidden = false;
+      startBtn.focus();
+      window.bitriotReady = true;
+    },
+    // Called by the game (src/web/WebHooks.cpp) when it cannot start or has to stop.
+    bitriotFatal: function (message) {
+      overlay.hidden = false;
+      progressEl.hidden = true;
+      startBtn.hidden = true;
+      showStatus(message, true);
+      window.bitriotFatalMessage = message;
+    },
+    bitriotQuit: function () {
+      overlay.hidden = false;
+      startBtn.hidden = true;
+      if (!window.bitriotFatalMessage) { showStatus('Bit Riot has quit. Reload the page to play again.'); }
+      window.bitriotQuit = true;
+    }
+  };
+  window.Module = Module;
+
+  window.addEventListener('error', function (e) {
+    showStatus('Something went wrong: ' + (e.message || e), true);
+  });
+
+  startBtn.addEventListener('click', function () {
+    startBtn.hidden = true;
+    overlay.hidden = true;
+    canvas.focus();
+    try {
+      Module.callMain([]);
+      window.bitriotStarted = true;
+      startFitting();
+    } catch (e) {
+      // 'unwind' is how a main loop that never returns leaves callMain; not an error.
+      if (e !== 'unwind') { Module.bitriotFatal('Bit Riot could not start: ' + e); }
+      else { window.bitriotStarted = true; startFitting(); }
+    }
+  });
+
+  // Scale the canvas to the window, keeping its aspect ratio, by CSS only: the
+  // game's own resolution does not change, and SDL maps the mouse through the
+  // canvas's displayed size. This starts only once the game is running, because SDL
+  // reads the canvas's CSS size when it creates its window (a CSS-sized canvas makes
+  // the window that size).
+  function fit() {
+    var cw = canvas.width, ch = canvas.height;
+    if (!cw || !ch) { return; }
+    var room = document.body.clientWidth - 32;
+    var maxW = Math.min(room, 1600);
+    var maxH = Math.max(240, window.innerHeight - 230);
+    var scale = Math.min(maxW / cw, maxH / ch);
+    canvas.style.width = Math.floor(cw * scale) + 'px';
+    canvas.style.height = Math.floor(ch * scale) + 'px';
+  }
+  function startFitting() {
+    fit();
+    window.addEventListener('resize', fit);
+    setInterval(fit, 500); // the map size can change between rounds
+  }
+
+  // Keep the keyboard on the game: a click on the canvas focuses it.
+  canvas.addEventListener('mousedown', function () { canvas.focus(); });
+
+  // Arrow keys and space must not scroll the page while playing.
+  window.addEventListener('keydown', function (e) {
+    if (window.bitriotStarted && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].indexOf(e.code) >= 0) {
+      e.preventDefault();
+    }
+  }, { passive: false });
+
+  if (!window.WebAssembly) {
+    showStatus('This browser does not support WebAssembly, which Bit Riot needs.', true);
+    progressEl.hidden = true;
+  }
+</script>
+{{{ SCRIPT }}}
+</body>
+</html>

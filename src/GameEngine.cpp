@@ -175,6 +175,28 @@ void GameEngine::finishRecording()
   m_recorder.reset();
 }
 
+bool GameEngine::startAllAiMatch(int numPlayers)
+{
+  GameSettings* settings = GameSettings::getInstance();
+  if (numPlayers < GameSettings::MIN_PLAYERS || numPlayers > GameSettings::MAX_PLAYERS || !menuSystem
+      || settings->getGameState() != GameSettings::MENU_RUNNING)
+  {
+    return false;
+  }
+  settings->setNumberOfPlayers(numPlayers);
+  for (int i = 0; i < numPlayers; i++)
+  {
+    settings->setPlayerAI(i, true);
+  }
+  if (!settings->canStartGame())
+  {
+    return false;
+  }
+  menuSystem->closeAllMenus();
+  settings->setGameState(GameSettings::GAME_INIT);
+  return true;
+}
+
 int GameEngine::gameLengthSeconds() const
 {
   return (int) ((m_sim.tick() * GameSettings::NORMAL_TICKS_SPEED) / 1000);

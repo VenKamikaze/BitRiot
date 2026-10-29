@@ -62,6 +62,9 @@ class MenuSDLRenderer
     MenuSDLRenderer(SDL_Renderer *renderer, SDL_Window *screen, shared_ptr<InputHandler>);
     void loadScoreBoard(shared_ptr<PlayerCharacterEntity> winner, vector<shared_ptr<PlayerCharacterEntity>> allPlayers, int gameTotalLength);
     void clearScoreBoard();
+    // Closes every menu page, as the Start button does. Used by GameEngine::startAllAiMatch
+    // (the web build's test hook), which starts a round without going through the menus.
+    void closeAllMenus();
     bool showMenu();
     virtual ~MenuSDLRenderer();
 

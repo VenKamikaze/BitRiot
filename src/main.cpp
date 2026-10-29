@@ -42,6 +42,11 @@
 #include <filesystem>
 #include <system_error>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include "web/WebHooks.h"
+#endif
+
 // DEFINES ////////////////////////////////////////////////
 
 // defines for windows interface
@@ -54,6 +59,7 @@ unsigned int initFlags = 0; // start with all turned off
 
 // PROTOTYPES /////////////////////////////////////////////
 FrameResult frame();
+static void shutdownGame();
 
 // GLOBALS ////////////////////////////////////////////////
 
@@ -72,14 +78,15 @@ unique_ptr<FrameLoop> frameLoop = nullptr;
 // millisecond early and so had no tick due.
 static uint32_t clockMs()
 {
+#ifdef __EMSCRIPTEN__
+  // The browser's own monotonic clock (performance.now()), which is also what
+  // requestAnimationFrame timestamps come from.
+  return (uint32_t) emscripten_get_now();
+#else
   const Uint64 perMs = SDL_GetPerformanceFrequency() / 1000;
   return (uint32_t) (SDL_GetPerformanceCounter() / (perMs ? perMs : 1));
-}
-
-#if !(SDL_VIDEO_OPENGL)
-#error "Only the opengl sdl backend is supported. To add support for others, see http://mdqinc.com/blog/2013/01/integrating-librocket-with-sdl-2/"
 #endif
-
+}
 
 int consoleInit()
 {
@@ -159,6 +166,98 @@ static void applyOptions(const GameOptions& options)
   recordDirectory = options.recordDir;
 }
 
+// One pass of the main loop: lock the back buffer, run frame(), present, unlock.
+// Returns false when the game should stop (frame() asked to quit, or the back
+// buffer pointer was lost). Shared by the native while-loop and the browser's
+// requestAnimationFrame callback.
+static bool loopIteration()
+{
+  MickSDLRenderer *renderer = MickSDLRenderer::getInstance();
+
+  if(SDL_MUSTLOCK(renderer->getSurfaceBackBufferHandle()))
+  {
+    if(SDL_LockSurface(renderer->getSurfaceBackBufferHandle()) < 0)
+    {
+      return false;
+    }
+  }
+
+  const bool keepRunning = frame().keepRunning;
+
+  if(renderer->getSurfaceBackBufferHandle() != nullptr)
+  {
+    SDL_RenderPresent(renderer->getRendererHandle());
+  }
+  else
+  {
+    cerr << "Something major went wrong. Lost primary buffer pointer.";
+    return false;
+  }
+
+  if(SDL_MUSTLOCK(renderer->getSurfaceBackBufferHandle()))
+  {
+    SDL_UnlockSurface(renderer->getSurfaceBackBufferHandle());
+  }
+
+  return keepRunning;
+}
+
+// Un-init section: everything the game opened, in reverse order. Safe to call when
+// initialisation stopped part way.
+static void shutdownGame()
+{
+  try
+  {
+    if(engine)
+    {
+      engine->finishRecording(); // the window was closed mid-round: keep what was played
+    }
+
+    if(TTF_WasInit())
+    {
+      TTF_Quit(); //Quit SDL_ttf
+    }
+
+    delete MickSDLRenderer::getInstanceIfCreated();
+
+    delete MickSDLSound::getInstance();
+  }
+  catch(const exception &e)
+  {
+    cerr << "Caught exception when de-initializing subsystems!" << endl;
+    cerr << e.what();
+  }
+
+  cout << "Exiting.. " << endl;
+}
+
+#ifdef __EMSCRIPTEN__
+// The browser's main-loop callback (emscripten_set_main_loop). An exception must
+// not escape into the browser's event loop: it is reported, and the game stops the
+// same way as a quit.
+static void webLoopIteration()
+{
+  bool keepRunning = false;
+  try
+  {
+    keepRunning = loopIteration();
+    webHooksAfterFrame();
+  }
+  catch(const exception& e)
+  {
+    cerr << "Caught exception in main game loop: " << e.what() << endl;
+    webReportFatal(string("Bit Riot stopped: ").append(e.what()));
+  }
+
+  if(!keepRunning)
+  {
+    emscripten_cancel_main_loop();
+    shutdownGame();
+    webReportQuit();
+  }
+}
+#endif
+
 int main(int argc, char* argv[])
 {
   int quitkey = 0;
@@ -208,42 +307,32 @@ int main(int argc, char* argv[])
     quitkey = -1;
   }
 
-  MickSDLRenderer *renderer = MickSDLRenderer::getInstance();
-
+#ifdef __EMSCRIPTEN__
+  if(quitkey)
+  {
+    webReportFatal("Bit Riot could not start. See the browser console for the reason.");
+    shutdownGame();
+    return 1;
+  }
+  webHooksInit(engine.get());
+  // The browser paces the loop (requestAnimationFrame, fps 0) and calls frame() once
+  // per animation frame; frame() runs however many whole ticks are owed, so a 60 Hz
+  // display and the 30 Hz tick rate need no sleep. Nothing here may block. The last
+  // argument makes main() not return: the loop owns the program from here, and
+  // webLoopIteration() tears everything down when the game asks to quit.
+  emscripten_set_main_loop(webLoopIteration, 0, 1);
+  return 0; // not reached
+#else
   // Do game loop
   try
   {
     while(!quitkey)
     {
-
-      if(SDL_MUSTLOCK(renderer->getSurfaceBackBufferHandle()))
-      {
-        if(SDL_LockSurface(renderer->getSurfaceBackBufferHandle()) < 0)
-        {
-          break;
-        }
-      }
-
       // main game processing goes here. (ESC is a flag the engine checks, not an
       // exception; the outer catch below handles anything the frame throws.)
-      if(! frame().keepRunning)
+      if(! loopIteration())
       {
         quitkey = 1;
-      }
-
-      if(renderer->getSurfaceBackBufferHandle() != nullptr)
-      {
-        SDL_RenderPresent(renderer->getRendererHandle());
-      }
-      else
-      {
-        cerr << "Something major went wrong. Lost primary buffer pointer.";
-        break;
-      }
-
-      if(SDL_MUSTLOCK(renderer->getSurfaceBackBufferHandle()))
-      {
-        SDL_UnlockSurface(renderer->getSurfaceBackBufferHandle());
       }
 
       // Hold the tick rate: sleep until the next tick falls due (about 33 ms after
@@ -267,32 +356,9 @@ int main(int argc, char* argv[])
     cerr << e.what();
   }
 
-  // Un-init section
-  try
-  {
-    if(engine)
-    {
-      engine->finishRecording(); // the window was closed mid-round: keep what was played
-    }
-
-    if(TTF_WasInit())
-    {
-      TTF_Quit(); //Quit SDL_ttf
-    }
-
-    delete renderer;
-    renderer = nullptr;
-
-    delete MickSDLSound::getInstance();
-  }
-  catch(const exception &e)
-  {
-    cerr << "Caught exception when de-initializing subsystems!" << endl;
-    cerr << e.what();
-  }
-
-  cout << "Exiting.. " << endl;
+  shutdownGame();
   return 0;
+#endif
 }
 
 

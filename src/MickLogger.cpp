@@ -17,7 +17,9 @@ namespace std
 
   static Logger* loggerInstance = nullptr;
 
-#ifdef NDEBUG
+#if defined(NDEBUG) || defined(__EMSCRIPTEN__)
+  // Debug lines cost a console write each (the game logs per frame), and in a
+  // browser that is slow enough to show: the web build logs info and above.
   static bool DEBUG_ENABLED = false;
 #else
   static bool DEBUG_ENABLED = true;

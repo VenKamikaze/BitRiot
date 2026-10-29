@@ -54,6 +54,16 @@ class GameEngine
     // what lets renderFrame() skip a redraw when nothing happened and what lets a
     // held-back round still be quit with ESC.
     void pumpEvents();
+    // The simulation's tick count: 0 before the first round, then 1 at the first
+    // step of a round, counting up. The web build exposes it to JavaScript (the smoke
+    // test checks that it advances).
+    uint64_t simTick() const { return m_sim.tick(); }
+    // Starts a round of `numPlayers` computer-controlled players, as if the Start
+    // button had been pressed with every slot set to CPU, without going through the
+    // menus. False (and nothing changes) if the count is not a valid player count, the
+    // game is not showing a menu, or the round cannot start. Takes effect on the next frame. This is the test hook
+    // behind the web build's ?autostart=ai4.
+    bool startAllAiMatch(int numPlayers);
     // Forces the next renderFrame() to redraw the world and HUD even if no tick ran
     // and no event was read. Call it when something drawn onto the CPU surface
     // changes outside a tick (netplay's "waiting for <name>" overlay appearing,

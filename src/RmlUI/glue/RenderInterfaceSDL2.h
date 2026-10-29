@@ -32,10 +32,6 @@
 
 #include <SDL.h>
 
-#if !(SDL_VIDEO_OPENGL)
-    #error "Only the opengl sdl backend is supported."
-#endif
-
 
 class RmlUiSDL2Renderer : public Rml::RenderInterface
 {
