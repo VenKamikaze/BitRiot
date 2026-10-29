@@ -50,8 +50,10 @@
  * ---------------------------------------------------------------------------
  * THE APPLY RULES (what Simulation::step() does with a slot's PlayerInput)
  *
- * Each tick, for each slot whose player exists, is alive and is not controlled by
- * the AI (every other slot's bits are ignored). "A1" and "A2" are the action
+ * Each tick the control events (ControlEvent, below) are applied first. Then, for
+ * each slot whose player exists, is alive and is not controlled by the AI as of
+ * that moment (every other slot's bits are ignored; a slot that an event just
+ * handed to a human is driven by this very tick's input). "A1" and "A2" are the action
  * buttons; a "hold" is the simulation's per-slot state (action1Down or
  * action2Down, plus the item the hold has selected). "Place" means: if the
  * player's tile has no static entity, the player lays that item (and pays for it);
@@ -159,11 +161,42 @@ struct PlayerInput
   bool operator!=(const PlayerInput& o) const { return bits != o.bits; }
 };
 
-// A change to who controls a slot: a join, a takeover, an unplug. Brief 04b defines
-// these. Until then the type exists so that TickInputs has its slot, and
-// Simulation::step() refuses a TickInputs that carries one rather than ignore it.
+// A change to who controls a slot: a takeover, an unplug, (later) a leave. The local
+// input layer produces them (the join selector, a keyboard takeover, a controller
+// that goes away); Simulation::step() applies them at the START of the tick they
+// arrive in, before that tick's input, and nothing else ever changes whether a slot
+// is a human or a bot (PlayerCharacterEntity::m_controlledByAI is private to that
+// rule). SLOT is playerNumber - 1, as everywhere.
+//
+//   HUMAN_TAKES_OVER   the slot's bot stops. From this tick its PlayerInput drives the
+//                      player (the same tick's input is applied right after the event).
+//   RETURN_TO_AI       the slot's player is a bot again. The AI runs from this tick.
+//   LEAVE              reserved for netplay (a peer leaves; brief 13). Today it does
+//                      exactly what RETURN_TO_AI does, so a recording that holds one
+//                      keeps its meaning when LEAVE grows.
+//
+// Both transitions clear the player's AI goal and instruction lists and reset its
+// per-slot input state (no hold, selection BLOCK): a bot that takes over a human must
+// not resume a plan made before, and a human that is unplugged mid-hold must not leave
+// a phantom hold for the next device. An event that would not change anything (a
+// takeover of a human, a return of a bot), or that names a dead player or a slot with
+// no player, does nothing at all, and does not reset anything. A slot outside the
+// round's players, or an unknown kind, is refused (std::out_of_range /
+// std::invalid_argument) before any event of the tick is applied.
+//
+// Events of one tick are applied in order, so two for one slot end in the last one.
 struct ControlEvent
 {
+  enum Kind : uint8_t { HUMAN_TAKES_OVER = 0, RETURN_TO_AI = 1, LEAVE = 2 };
+
+  int slot = 0;
+  Kind kind = HUMAN_TAKES_OVER;
+
+  ControlEvent() = default;
+  ControlEvent(int s, Kind k) : slot(s), kind(k) {}
+
+  bool operator==(const ControlEvent& o) const { return slot == o.slot && kind == o.kind; }
+  bool operator!=(const ControlEvent& o) const { return !(*this == o); }
 };
 
 // Everything the simulation is told about one tick.
@@ -172,7 +205,7 @@ struct TickInputs
   // Indexed by SLOT (playerNumber - 1). Slots beyond the round's player count, and
   // slots nobody sampled, are all-zero (no buttons).
   std::array<PlayerInput, std::GameSettings::MAX_PLAYERS> slot;
-  // Applied before the inputs. Empty until brief 04b.
+  // Applied at the start of the tick, before the inputs (see ControlEvent).
   std::vector<ControlEvent> control;
 };
 

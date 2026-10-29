@@ -12,6 +12,8 @@
 #include "GameSettings.h"
 #include "PlayerCharacterEntity.h"
 
+class Simulation;
+
 class InfoPanel
 {
   public:
@@ -30,8 +32,9 @@ class InfoPanel
     // TODO change to vector
     void setPlayerPointers(vector<shared_ptr<PlayerCharacterEntity>> playerCharacters);
 
-    void clearSelections();
-    void setSelection(EntityType type, int team);
+    // The simulation whose per-slot selection the panel shows (Simulation::heldSelection):
+    // a read-only view, set once per round. Without one no selection is shown.
+    void setSimulation(const Simulation* sim);
 
     // Phase 2.7: mid-game CPU-takeover join indicator. Drawn to the right of the
     // targeted player's portrait. NOTREADY while the joiner is choosing a slot,
@@ -88,8 +91,7 @@ class InfoPanel
     void drawBGTiles();
 
     vector<shared_ptr<PlayerCharacterEntity>> m_playerPointers; // pointers to player character entities
-    EntityType playerSelection[GameSettings::MAX_PLAYERS];
-    
+    const Simulation* m_sim = nullptr;
 
 };
 

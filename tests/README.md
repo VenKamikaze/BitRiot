@@ -17,8 +17,8 @@ tests:
 
 | Executable | Links | Contains |
 | --- | --- | --- |
-| `bitriot_sim_tests` | `bitriot_sim` and GoogleTest only: no SDL, no RmlUi, no OpenGL | every simulation test (round lifecycle, AI, win conditions, fixed-point maths, `Simulation`, the state hash, `step(inputs)` and its apply rules, the guards, `Map`, the sound and rumble seams) |
-| `bitriot_tests` | the whole game (`bitriot_core`) | the same simulation tests, plus the ones that need the game: `ScoreboardLayoutTest`, `ScoreboardRandomTest`, `FrameLoopTest`/`TickPacerTest`, `RenderSideTest`, `InputSamplerTest` (the sampler and the key/pad routing) |
+| `bitriot_sim_tests` | `bitriot_sim` and GoogleTest only: no SDL, no RmlUi, no OpenGL | every simulation test (round lifecycle, AI, win conditions, fixed-point maths, `Simulation`, the state hash, `step(inputs)` and its apply rules, the guards, `Map`, the sound seam, `step(inputs)` with control events, `hitThisTick`) |
+| `bitriot_tests` | the whole game (`bitriot_core`) | the same simulation tests, plus the ones that need the game: `ScoreboardLayoutTest`, `ScoreboardRandomTest`, `FrameLoopTest`/`TickPacerTest`, `RenderSideTest`, `InputSamplerTest` (the sampler and the key/pad routing), `InputControlTest` (join, takeover, unplug and rumble through the input layer, with a fake rumble device) |
 
 The simulation tests are compiled once (an object library) and linked into both.
 `bitriot_sim_tests` linking at all is a proof that the simulation needs no SDL; it
@@ -217,8 +217,13 @@ EXPECT_NE(sim().stateHash(), before);
     hash *and the way the simulation plays*. All four are bots; a fifth pinned
     round (`APinnedRoundWithScriptedHumanInputKeepsItsHashes`) has two humans driven
     by scripted `TickInputs` (`support/ScriptedInput.h`), so the apply rules are
-    pinned across compilers too. It moves with the rules, the script generator or
-    the hash; regenerate it with the same `BITRIOT_HASH_DUMP=1` run.
+    pinned across compilers too. A sixth,
+    `APinnedRoundWithControlEventsKeepsItsHashes`, adds control events (takeovers,
+    returns, a LEAVE, one slot switching twice) to a scripted-humans round, so the
+    event rules (apply order, cleared AI plans, reset input state) are pinned too.
+    Both move with the rules, the script generator or the hash; regenerate them with
+    the same `BITRIOT_HASH_DUMP=1` run (the filter is `SimulationTest.*Pinned*`; the
+    first, `PinnedRounds*`, prints only the four bots).
 - **When the digests move.** Any change that alters how a seeded round plays moves
   them, whether or not the hash changed: a bot's behaviour, a rule, a number in
   `data/*.txt`, how many random numbers a round draws, a new hashed field (brief
@@ -294,6 +299,30 @@ Input is two stages (brief 04a), and each is tested on its own.
   `keyboardEvent()` / `setControllerButtonState()` to check which key or pad button
   drives which slot, ending with keys -> `sampleTick()` -> `sim().step()` -> a moved
   player and a placed egg.
+- **Control events** (brief 04b). `ControlEventTest.cpp` (both executables) puts
+  `ControlEvent`s in `TickInputs::control` and checks what `Simulation::step` does:
+  the bot's AI frame (`m_aiFrame`, through a protected-member accessor) stops on exactly
+  the takeover tick and resumes on exactly the return tick, the goal and instruction
+  lists are cleared on both transitions (a sentinel plan is planted and must be gone),
+  the slot's input state is reset, no-op events change nothing (hash for hash against a
+  run without them), a bad slot or kind is refused before the tick happens, `LEAVE` is
+  `RETURN_TO_AI`, a scripted sequence of switches gives the same hash on every tick of
+  every run, `hitThisTick` follows damage (and is cleared the next tick, and by
+  `start()`), and `heldSelection` is what the HUD shows. `m_controlledByAI` is private:
+  a test that must flip it to ask whether the *hash* notices uses the explicit-
+  instantiation accessor at the top of `SimulationTest.cpp`; everything else goes through
+  events (`sim().step(TickInputs with a ControlEvent)`; there is no other way).
+  `InputControlTest.cpp` (core only) drives `InputHandler`'s public entry points by hand
+  (`processJoinControllerEvent(pad, SDL_CONTROLLER_BUTTON_START)` opens a selector and
+  a second one confirms; `processJoinKeyboardEvent(KEY_RCTRL)`; `detachController(pad)`;
+  `keyboardEvent`; `setControllerButtonState`) and checks the events that `sampleTick()`
+  hands out, that the local mapping and mask change at once while the entity does not
+  until `sim().step()`, and rumble through a recording `ControllerRumble`
+  (`setRumble`): nothing buzzes until `rumbleForHits(sim())`, then once per hit pad
+  player per tick, never for a keyboard human, a bot or a slot whose pad was unplugged.
+  The join/unplug *glue* in `GameRunningSDLInput` and `GameEngine::stepTick()` needs SDL
+  events and a window and is not in the suite (see brief 04b's Outcome for the by-hand
+  check under Xvfb).
 - A test of an action wants a human player: `GameSettings::setPlayerAI(slot, false)`
   before `startRound()`. `player(n)` returns null once that player is dead (its entity
   is gone); `sim().roster()` keeps everyone.
@@ -327,7 +356,8 @@ The scan covers those sources and every project header they include.
 - **No SDL library loaded** (`TheSimulationOnlyExecutableHasNoSdlOrUiLibraryLoaded`):
   in `bitriot_sim_tests`, on Linux.
 - The seams: sound falls back to a silent default and a destroyed backend
-  unregisters; rumble goes through `RumbleSink` (integer strength, discarding default);
+  unregisters; the simulation records `hitThisTick` and touches no device (the source scan refuses a
+  `rumble` or `haptic` identifier);
   the animation frame counts are `EntityAnim::frameCount()`.
 
 ## The render side
@@ -580,12 +610,12 @@ files below:
   with each singleton left stale in turn; what the hash does and does not
   notice (health, offsets as raw bits, tile-list order, pending messages,
   per-type counters; not `m_currentAnimFrame`, the cosmetic RNG or local
-  devices); the FNV-1a vectors; and golden digests of four pinned rounds.
+  devices); the FNV-1a vectors; and golden digests of four pinned bot rounds, and (04a, 04b) two more with scripted humans and control events.
 
 - `SimLibraryTest.cpp` - the simulation library (brief 03b): the SDL/UI source scan,
   the object-level floating-point scan (and the tests of both scanners), the
   sim-only executable having no SDL library loaded, a full round with blocks, sound
-  with no backend installed, rumble through `RumbleSink`, and the animation frame
+  with no backend installed, and the animation frame
   table (`EntityAnimTest`).
 - `MapTest.cpp` - `Map` with no surface: the layout, reads outside it are WALL,
   writes outside it are ignored, the stride follows the built size, `resize()`

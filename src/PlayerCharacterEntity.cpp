@@ -1,7 +1,6 @@
 // implementation of player character entity class
 
 #include "PlayerCharacterEntity.h"
-#include "RumbleSink.h"
 #include "SimRandom.h"
 
 #include <algorithm>
@@ -146,11 +145,10 @@ void PlayerCharacterEntity::onCollision(EntityType typeCollidedWith,
     m_health--;
     EntityMessageQueue::getInstance()->postCreateMessage(DAMAGE_EFFECT,
         m_playerNumber, m_tileX, m_tileY, 0, m_offsetX, m_offsetY);
-    if(! isControlledByAI() && attachedController != -1 )
-    {
-      // Try to rumble the controller if possible
-      RumbleSink::getInstance()->rumble(attachedController, 500, 200);
-    }
+    // Brief 04b: no device call from the simulation. The hit is recorded, and the
+    // local layer rumbles the controller for this slot after the step
+    // (Simulation::hitThisTick).
+    m_hitThisTick = true;
   }
 
   if (typeCollidedWith == ENERGY_DROP)
@@ -1955,6 +1953,17 @@ void PlayerCharacterEntity::checkEnvironment()
 
 }
 
+bool PlayerCharacterEntity::applyControl(bool toAI)
+{
+  if (m_controlledByAI == toAI)
+  {
+    return false;
+  }
+  m_controlledByAI = toAI;
+  clearGoalsAndInstructions();
+  return true;
+}
+
 void PlayerCharacterEntity::clearGoalsAndInstructions()
 {
   while (!m_goalList.empty())
@@ -2016,7 +2025,7 @@ void PlayerCharacterEntity::hashExtraState(StateHasher& h) const
     h.i32(it->second.bestSteps, "attempt.bestSteps");
     h.i32(it->second.failures, "attempt.failures");
   }
-  // Not hashed: attachedController (which local device drives the player),
-  // m_animCounter / m_animDelay (animation pacing), m_velocityModifier (a data
-  // constant).
+  // Not hashed: m_hitThisTick (an output of the tick, derived from health, which is
+  // hashed), m_animCounter / m_animDelay (animation pacing), m_velocityModifier (a
+  // data constant). Which local device drives the player is not on the entity at all.
 }

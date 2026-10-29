@@ -144,6 +144,7 @@ void Simulation::start(const MatchConfig& config)
   m_roundOver = false;
   m_roundEndedAtTick = 0;
   m_slotInput = std::array<SlotInputState, std::GameSettings::MAX_PLAYERS>();
+  m_hitThisTick.fill(false);
 
   // 2. The config becomes the settings the sim reads.
   std::GameSettings* settings = std::GameSettings::getInstance();
@@ -322,18 +323,21 @@ void Simulation::step(const TickInputs& inputs)
   {
     throw std::logic_error("Simulation::step: call start() first");
   }
-  if (!inputs.control.empty())
-  {
-    // Control events (a join, a takeover, an unplug) arrive with brief 04b. Failing
-    // loudly beats dropping one on the floor and desyncing.
-    throw std::logic_error("Simulation::step: control events are not supported yet");
-  }
+  // Refuse a bad event before anything of this tick happens, so a refusal leaves the
+  // simulation exactly as it was (and no event of the tick is half applied).
+  validateControlEvents(inputs.control);
 
   m_tick++;
 
-  // Human input first (the control events, when there are any, come before it):
-  // players move and lay items here, before the win check and the AI, as the
-  // engine always applied input before its tick.
+  // The hit flags are an output of one tick: forget last tick's, collect this tick's
+  // at the end (hitThisTick).
+  clearHits();
+
+  // Who controls which slot changes first, at the very start of the tick, so the
+  // bot (or the human) it now is acts on this tick. Then the human input: players
+  // move and lay items here, before the win check and the AI, as the engine always
+  // applied input before its tick.
+  applyControlEvents(inputs.control);
   applyInputs(inputs);
 
   // Top of the tick: the win check and the game-over countdown. During the
@@ -357,6 +361,8 @@ void Simulation::step(const TickInputs& inputs)
     m_roundOver = true;
     m_roundEndedAtTick = m_tick;
   }
+
+  collectHits();
 }
 
 const Simulation::SlotInputState& Simulation::inputState(int slot) const
@@ -367,6 +373,97 @@ const Simulation::SlotInputState& Simulation::inputState(int slot) const
                             + std::to_string(std::GameSettings::MAX_PLAYERS - 1) + " (slot = playerNumber - 1)");
   }
   return m_slotInput[slot];
+}
+
+bool Simulation::hitThisTick(int slot) const
+{
+  if (slot < 0 || slot >= std::GameSettings::MAX_PLAYERS)
+  {
+    throw std::out_of_range("Simulation::hitThisTick: slot " + std::to_string(slot) + " is outside 0.."
+                            + std::to_string(std::GameSettings::MAX_PLAYERS - 1) + " (slot = playerNumber - 1)");
+  }
+  return m_hitThisTick[slot];
+}
+
+EntityType Simulation::heldSelection(int slot) const
+{
+  const SlotInputState& st = inputState(slot);
+  return (st.action1Down || st.action2Down) ? st.spawnSelection : PLAYER_CHARACTER;
+}
+
+std::shared_ptr<PlayerCharacterEntity> Simulation::playerForSlot(int slot) const
+{
+  // The roster is in creation order, which is slot order, and holds the dead too.
+  for (const std::shared_ptr<PlayerCharacterEntity>& candidate : m_entityManager->getRoundPlayerRoster())
+  {
+    if (candidate && candidate->getPlayerNumber() == slot + 1)
+    {
+      return candidate;
+    }
+  }
+  return nullptr;
+}
+
+void Simulation::clearHits()
+{
+  m_hitThisTick.fill(false);
+  for (const std::shared_ptr<PlayerCharacterEntity>& player : m_entityManager->getRoundPlayerRoster())
+  {
+    if (player)
+    {
+      player->m_hitThisTick = false;
+    }
+  }
+}
+
+void Simulation::collectHits()
+{
+  for (const std::shared_ptr<PlayerCharacterEntity>& player : m_entityManager->getRoundPlayerRoster())
+  {
+    const int slot = player ? player->getPlayerNumber() - 1 : -1;
+    if (slot >= 0 && slot < std::GameSettings::MAX_PLAYERS && player->m_hitThisTick)
+    {
+      m_hitThisTick[slot] = true;
+    }
+  }
+}
+
+void Simulation::validateControlEvents(const std::vector<ControlEvent>& events) const
+{
+  for (const ControlEvent& e : events)
+  {
+    if (e.slot < 0 || e.slot >= m_config.numPlayers())
+    {
+      throw std::out_of_range("Simulation::step: control event for slot " + std::to_string(e.slot)
+                              + ", but the round has " + std::to_string(m_config.numPlayers())
+                              + " players (slot = playerNumber - 1)");
+    }
+    if (e.kind != ControlEvent::HUMAN_TAKES_OVER && e.kind != ControlEvent::RETURN_TO_AI
+        && e.kind != ControlEvent::LEAVE)
+    {
+      throw std::invalid_argument("Simulation::step: unknown control event kind "
+                                  + std::to_string((int) e.kind));
+    }
+  }
+}
+
+// The rules are in the comment on ControlEvent (TickInputs.h).
+void Simulation::applyControlEvents(const std::vector<ControlEvent>& events)
+{
+  for (const ControlEvent& e : events)
+  {
+    const std::shared_ptr<PlayerCharacterEntity> player = playerForSlot(e.slot);
+    if (!player || !player->isAlive())
+    {
+      continue; // nobody to hand over: a dead player is neither driven nor bot-run
+    }
+    const bool toAI = e.kind != ControlEvent::HUMAN_TAKES_OVER; // RETURN_TO_AI and LEAVE
+    if (player->applyControl(toAI))
+    {
+      // A fresh slot for the new controller: no hold, no selection carried over.
+      m_slotInput[e.slot] = SlotInputState();
+    }
+  }
 }
 
 void Simulation::applyInputs(const TickInputs& inputs)
@@ -382,16 +479,7 @@ void Simulation::applyInputs(const TickInputs& inputs)
 // The rules table is at the top of TickInputs.h; this is that table.
 void Simulation::applySlotInput(int slot, PlayerInput in)
 {
-  // The roster is in creation order, which is slot order, and holds the dead too.
-  std::shared_ptr<PlayerCharacterEntity> player;
-  for (const std::shared_ptr<PlayerCharacterEntity>& candidate : m_entityManager->getRoundPlayerRoster())
-  {
-    if (candidate && candidate->getPlayerNumber() == slot + 1)
-    {
-      player = candidate;
-      break;
-    }
-  }
+  const std::shared_ptr<PlayerCharacterEntity> player = playerForSlot(slot);
   if (!player || !player->isAlive() || player->isControlledByAI())
   {
     return; // nobody here to drive: a bot, a dead player, or a slot with no player

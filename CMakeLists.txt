@@ -118,7 +118,6 @@ set(SIM_SOURCES ./src/AIGameView.cpp
 ./src/RobotEntity.cpp
 ./src/RocketFiredEntity.cpp
 ./src/RocketSpinEntity.cpp
-./src/RumbleSink.cpp
 ./src/RuntimeException.cpp
 ./src/SimRandom.cpp
 ./src/SimpleBrain.cpp

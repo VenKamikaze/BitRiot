@@ -65,7 +65,6 @@ FrameResult frame();
 // game object globals
 unique_ptr<GameEngine> engine = nullptr;
 unique_ptr<FrameLoop> frameLoop = nullptr;
-MickSDLRumbleSink rumbleSink; // the simulation rumbles controllers through this
 
 // FUNCTIONS //////////////////////////////////////////////
 
@@ -116,8 +115,6 @@ int consoleInit()
     MickLogger::getInstance()->error(nullptr, e.what());
     throw runtime_error(msg);
   }
-
-  RumbleSink::setInstance(&rumbleSink);
 
   MickSDLRenderer *renderer = MickSDLRenderer::getInstance();
   // The simulation builds its own Map for every round (Simulation::start); this

@@ -13,8 +13,10 @@
 //     int converted at a float parameter);
 //   * the sim-only executable really has no SDL or RmlUi library loaded;
 //   * the seams that replaced the SDL calls behave: sound goes to a silent default
-//     when nothing is installed, rumble goes through a sink, and the animation
-//     frame counts come from a table.
+//     when nothing is installed, and the animation frame counts come from a table.
+//     (Rumble is no seam any more: the simulation only records who was hit, brief
+//     04b, and the local layer buzzes the pads; the scan below refuses a rumble or
+//     haptic call in the simulation's text.)
 
 #include "support/HeadlessGame.h"
 #include "support/SimSources.h"
@@ -40,7 +42,6 @@
 #include "MickAssets.h"
 #include "MatchConfig.h"
 #include "MickBaseSound.h"
-#include "RumbleSink.h"
 
 using bitriot_test::HeadlessEnvironment;
 using bitriot_test::HeadlessGameTest;
@@ -62,11 +63,13 @@ namespace
 std::vector<std::string> sdlOrUiUse(const std::string& source)
 {
   static const std::regex forbiddenInclude(
-    R"((SDL|Rml|OpenGL|GLES|^GL/|^gl[a-z]*\.h$|EntityRenderer|MapRenderer|WorldRenderer|InfoPanel|InputHandler|)"
+    R"((SDL|Rml|OpenGL|GLES|^GL/|^gl[a-z]*\.h$|EntityRenderer|MapRenderer|WorldRenderer|InfoPanel|InputHandler|InputSampler|)"
     R"(GameEngine|FrameLoop|TickPacer|MenuSDL|MickSDL|GameRunningSDL))");
   static const std::regex forbiddenToken(
     R"((^|[^A-Za-z0-9_])(SDL_[A-Za-z0-9_]+|Mix_[A-Za-z0-9_]+|TTF_[A-Za-z0-9_]+|IMG_[A-Za-z0-9_]+|Rml::[A-Za-z0-9_]+|)"
-    R"(Uint(8|16|32|64)|Sint(8|16|32|64))([^A-Za-z0-9_]|$))");
+    R"(Uint(8|16|32|64)|Sint(8|16|32|64)|)"
+    // a device call by another name (brief 04b): the sim records hits, the local layer buzzes
+    R"([A-Za-z0-9_]*[Rr]umble[A-Za-z0-9_]*|[A-Za-z0-9_]*[Hh]aptic[A-Za-z0-9_]*)([^A-Za-z0-9_]|$))");
 
   std::vector<std::string> hits;
   // An include's path is a string literal, so read it from the text as written. A
@@ -110,7 +113,8 @@ TEST(SimLibraryTest, TheSimulationSourcesNameNoSdlRmlUiOrOpenGL)
     {
       ADD_FAILURE() << fs::relative(file, srcDir).generic_string() << " ties the simulation to SDL or the UI: " << hit
                     << "\n  bitriot_sim has no SDL (brief 03b). Draw or read a device in bitriot_core, "
-                       "and reach the simulation through a hook such as RumbleSink or MickBaseSound.";
+                       "and reach the simulation through a hook such as MickBaseSound, or an output the "
+                       "local layer reads after the step (Simulation::hitThisTick).";
     }
   }
 }
@@ -127,6 +131,11 @@ TEST(SimLibraryTest, TheSourceScanCatchesSdlAndLeavesLookalikesAlone)
   EXPECT_EQ(sdlOrUiUse("#include \"MapRenderer.h\"").size(), 1u);
   EXPECT_EQ(sdlOrUiUse("#include \"InfoPanel.h\"").size(), 1u);
   EXPECT_EQ(sdlOrUiUse("#include \"FrameLoop.h\"").size(), 1u);
+  EXPECT_EQ(sdlOrUiUse("#include \"InputSampler.h\"").size(), 1u);
+  EXPECT_EQ(sdlOrUiUse("RumbleSink::getInstance()->rumble(id, 500, 200);").size(), 1u);
+  EXPECT_EQ(sdlOrUiUse("rumbleController(id, 0.5f, 200);").size(), 1u);
+  EXPECT_EQ(sdlOrUiUse("SDL_HapticRumblePlay(h, 1, 2);").size(), 1u);
+  EXPECT_EQ(sdlOrUiUse("m_hitThisTick = true;").size(), 0u);
   EXPECT_EQ(sdlOrUiUse("SDL_Rect r;").size(), 1u);
   EXPECT_EQ(sdlOrUiUse("x = SDL_GetTicks();").size(), 1u);
   EXPECT_EQ(sdlOrUiUse("Uint32 pixel;").size(), 1u);
@@ -137,7 +146,7 @@ TEST(SimLibraryTest, TheSourceScanCatchesSdlAndLeavesLookalikesAlone)
   EXPECT_EQ(sdlOrUiUse("#include \"Map.h\"").size(), 0u);
   EXPECT_EQ(sdlOrUiUse("#include <string>").size(), 0u);
   EXPECT_EQ(sdlOrUiUse("#include \"EntityAnim.h\"").size(), 0u);
-  EXPECT_EQ(sdlOrUiUse("#include \"RumbleSink.h\"").size(), 0u);
+  EXPECT_EQ(sdlOrUiUse("#include \"TickInputs.h\"").size(), 0u);
   EXPECT_EQ(sdlOrUiUse("#include \"MickBaseSound.h\"").size(), 0u);
   EXPECT_EQ(sdlOrUiUse("// SDL_Rect is gone").size(), 0u);
   EXPECT_EQ(sdlOrUiUse("/* #include <SDL2/SDL.h> */").size(), 0u);
@@ -544,80 +553,6 @@ TEST_F(SoundSeamTest, WithNoSoundBackendInstalledSoundGoesToASilentDefault)
   // And installing one again works as before.
   HeadlessEnvironment::sound()->makeCurrent();
   EXPECT_EQ(MickBaseSound::getInstance(), HeadlessEnvironment::sound());
-}
-
-class RecordingRumbleSink : public RumbleSink
-{
-  public:
-    struct Call { int controller; int strength; int ms; };
-    void rumble(int controllerId, int strengthPermille, int durationMs) override
-    {
-      calls.push_back({controllerId, strengthPermille, durationMs});
-    }
-    std::vector<Call> calls;
-};
-
-struct RumbleSinkRestorer
-{
-  ~RumbleSinkRestorer() { RumbleSink::setInstance(nullptr); }
-};
-
-class RumbleSinkTest : public HeadlessGameTest
-{
-  protected:
-    void SetUp() override
-    {
-      HeadlessGameTest::SetUp();
-      configurePlayers(2);
-      startRound();
-    }
-};
-
-TEST_F(RumbleSinkTest, ARumbleFromAHitGoesThroughTheInstalledSink)
-{
-  RumbleSinkRestorer restore;
-  RecordingRumbleSink sink;
-  RumbleSink::setInstance(&sink);
-
-  auto p = player(1);
-  p->m_controlledByAI = false;
-  p->attachedController = 3;
-  p->onCollision(EXPLOSION, EXPLOSION_GROUP, 0);
-
-  ASSERT_EQ(sink.calls.size(), 1u);
-  EXPECT_EQ(sink.calls[0].controller, 3);
-  EXPECT_EQ(sink.calls[0].strength, 500);
-  EXPECT_EQ(sink.calls[0].ms, 200);
-}
-
-TEST_F(RumbleSinkTest, NoRumbleForABotOrAPlayerWithNoController)
-{
-  RumbleSinkRestorer restore;
-  RecordingRumbleSink sink;
-  RumbleSink::setInstance(&sink);
-
-  auto bot = player(1);
-  bot->m_controlledByAI = true;
-  bot->attachedController = 3;
-  bot->onCollision(EXPLOSION, EXPLOSION_GROUP, 0);
-
-  auto human = player(2);
-  human->m_controlledByAI = false;
-  human->attachedController = -1;
-  human->onCollision(EXPLOSION, EXPLOSION_GROUP, 0);
-
-  EXPECT_TRUE(sink.calls.empty());
-}
-
-TEST_F(RumbleSinkTest, WithNoSinkInstalledAHitIsDroppedNotACrash)
-{
-  RumbleSink::setInstance(nullptr);
-  ASSERT_NE(RumbleSink::getInstance(), nullptr);
-
-  auto p = player(1);
-  p->m_controlledByAI = false;
-  p->attachedController = 3;
-  EXPECT_NO_THROW(p->onCollision(EXPLOSION, EXPLOSION_GROUP, 0));
 }
 
 class EntityAnimTest : public HeadlessGameTest

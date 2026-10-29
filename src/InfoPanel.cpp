@@ -1,5 +1,6 @@
 
 #include "InfoPanel.h"
+#include "Simulation.h"
 #include "GameSettings.h"
 #include "EntityRenderer.h"
 #include "EntityRendererFactory.h"
@@ -34,8 +35,6 @@ InfoPanel::InfoPanel(SDL_Surface* backbuf, int numPlayers, std::vector<bool>* ma
   }
 
   m_playerPointers.resize(numPlayers, nullptr);
-
-  clearSelections();
 
   m_surface = SDL_CreateRGBSurface(0, WIDTH, HEIGHT, backbuf->format->BitsPerPixel, backbuf->format->Rmask,
       backbuf->format->Gmask, backbuf->format->Bmask, 0);
@@ -242,27 +241,14 @@ void InfoPanel::setPlayerPointers(vector<shared_ptr<PlayerCharacterEntity>> play
   m_playerPointers = playerCharacters;
 }
 
-void InfoPanel::clearSelections()
+void InfoPanel::setSimulation(const Simulation* sim)
 {
-  for (int t = 0; t < GameSettings::MAX_PLAYERS; t++)
-  {
-    playerSelection[t] = PLAYER_CHARACTER; // player character used as null selection
-  }
-}
-
-void InfoPanel::setSelection(EntityType type, int team)
-{
-  team--;
-  if (0 <= team && team < GameSettings::MAX_PLAYERS)
-  {
-    // ok to set array
-    playerSelection[team] = type;
-  }
+  m_sim = sim;
 }
 
 void InfoPanel::setJoinIndicator(int team, JoinState state, JoinDevice device)
 {
-  team--; // 1-based slot -> 0-based array index (see setSelection)
+  team--; // 1-based slot -> 0-based array index (slot = team - 1)
   if (0 <= team && team < GameSettings::MAX_PLAYERS)
   {
     m_joinIndicator[team] = state;
@@ -307,9 +293,12 @@ void InfoPanel::renderSurfaceTo(SDL_Surface* dest, int x, int y)
     //m_surface->Blt(&destRect, m_faceSurfaces[i], &sourceRect, DDBLT_WAIT | DDBLT_KEYSRC, 0);
 
     xOffset += (2 * Map::TILE_WIDTH);
-    if (playerSelection[i] != PLAYER_CHARACTER)
+    // The item this player's held action has selected - read from the simulation,
+    // which owns it (a read-only view: nothing here writes it).
+    const EntityType selection = m_sim ? m_sim->heldSelection(i) : PLAYER_CHARACTER;
+    if (selection != PLAYER_CHARACTER)
     {
-      EntityRenderer * er = EntityRendererFactory::getInstance()->getEntityRenderer(playerSelection[i]);
+      EntityRenderer * er = EntityRendererFactory::getInstance()->getEntityRenderer(selection);
       er->render(m_surface, xOffset, yOffset, 0, 0, GameSettings::getInstance()->teamNumberForPlayer(i + 1));
     }
 

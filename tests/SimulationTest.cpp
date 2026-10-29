@@ -36,6 +36,28 @@ namespace bitriot_test
 namespace
 {
 
+// Pointers to the two PRIVATE members a test needs to look at (the control flag, which
+// only a control event may change, and the hit flag): the standard
+// explicit-instantiation trick, which names a private member without a friend.
+// Tests that flip the flag directly do it only to ask whether the HASH notices.
+template <typename Tag, typename Tag::type Member>
+struct Robber
+{
+  friend typename Tag::type get(Tag) { return Member; }
+};
+struct ControlledByAITag
+{
+  typedef bool PlayerCharacterEntity::* type;
+  friend type get(ControlledByAITag);
+};
+template struct Robber<ControlledByAITag, &PlayerCharacterEntity::m_controlledByAI>;
+struct HitThisTickTag
+{
+  typedef bool PlayerCharacterEntity::* type;
+  friend type get(HitThisTickTag);
+};
+template struct Robber<HitThisTickTag, &PlayerCharacterEntity::m_hitThisTick>;
+
 // Pointers to protected members, so a test can change exactly one field of an
 // entity and ask whether the hash noticed (the same trick HeadlessGame.cpp uses
 // for health).
@@ -1060,7 +1082,7 @@ TEST_F(StateHashTest, AnEntitysAnimStateIsHashedBecauseItDrivesMovement)
 TEST_F(StateHashTest, APlayersFlagsAndCountersAreHashed)
 {
   EXPECT_TRUE(changeMovesTheHash([&] { player(1)->setAlive(false); })) << "alive";
-  EXPECT_TRUE(changeMovesTheHash([&] { player(1)->m_controlledByAI = true; })) << "controlled by AI";
+  EXPECT_TRUE(changeMovesTheHash([&] { player(1).get()->*get(ControlledByAITag()) = true; })) << "controlled by AI";
   EXPECT_TRUE(changeMovesTheHash([&] { player(1)->incNumberEggsPlaced(); })) << "eggs placed";
   EXPECT_TRUE(changeMovesTheHash([&] { player(1)->incNumberBombsPlaced(); })) << "bombs placed";
   EXPECT_TRUE(changeMovesTheHash([&] { (*player(2)).*Access::iq() += 1; })) << "IQ";
@@ -1234,10 +1256,10 @@ TEST_F(StateHashTest, TheCosmeticRngIsNotHashed)
   }));
 }
 
-TEST_F(StateHashTest, ALocalControllerAssignmentIsNotHashed)
+TEST_F(StateHashTest, TheHitFlagIsAnOutputOfTheTickAndNotHashed)
 {
-  EXPECT_FALSE(changeMovesTheHash([&] { player(1)->attachedController = 3; }))
-      << "which device drives a player is local, not part of the match";
+  EXPECT_FALSE(changeMovesTheHash([&] { player(1).get()->*get(HitThisTickTag()) = true; }))
+      << "hitThisTick follows from health, which is hashed; the local layer reads it after the step";
 }
 
 TEST_F(StateHashTest, CosmeticDrawsDuringARoundDoNotChangeItsHashes)
@@ -1860,6 +1882,65 @@ TEST_F(SimulationTest, APinnedRoundWithScriptedHumanInputKeepsItsHashes)
     placed += sim().roster().at(i)->getNumberBombsPlaced() + sim().roster().at(i)->getNumberEggsPlaced();
   }
   EXPECT_GT(placed, 5);
+}
+
+// The scripted-humans round again, with control events (brief 04b): bots taken over by
+// humans, humans handed back, a LEAVE, and the same slot switching twice. Pins the
+// event rules (the apply order, the cleared AI plans, the reset input state) across
+// compilers. Moves when those rules, the script generator or the hash do.
+TEST_F(SimulationTest, APinnedRoundWithControlEventsKeepsItsHashes)
+{
+  const uint64_t SCRIPT_SEED = 59;
+  const int TICKS = 3000;
+  const uint64_t EXPECTED_DIGEST = 0x7f1985741702efddULL; // regenerate: BITRIOT_HASH_DUMP=1 (tests/README.md)
+
+  struct At { int tick; ControlEvent event; };
+  const At events[] = {
+    {60,   ControlEvent(2, ControlEvent::HUMAN_TAKES_OVER)},
+    {140,  ControlEvent(0, ControlEvent::RETURN_TO_AI)},
+    {140,  ControlEvent(3, ControlEvent::HUMAN_TAKES_OVER)},
+    {260,  ControlEvent(2, ControlEvent::LEAVE)},
+    {330,  ControlEvent(0, ControlEvent::HUMAN_TAKES_OVER)},
+    {400,  ControlEvent(1, ControlEvent::RETURN_TO_AI)},
+    {401,  ControlEvent(1, ControlEvent::HUMAN_TAKES_OVER)},
+    {640,  ControlEvent(3, ControlEvent::RETURN_TO_AI)},
+    {900,  ControlEvent(2, ControlEvent::HUMAN_TAKES_OVER)},
+    {1500, ControlEvent(2, ControlEvent::RETURN_TO_AI)},
+  };
+
+  MatchConfig config = makeConfig(616, 4, 17, 13, 55);
+  config.slots[0].ai = false;
+  config.slots[1].ai = false;
+  std::vector<TickInputs> script = randomInputs(SCRIPT_SEED, TICKS, {0, 1, 2, 3});
+  for (const At& e : events)
+  {
+    script[e.tick - 1].control.push_back(e.event);
+  }
+
+  sim().start(config);
+  std::vector<uint64_t> hashes;
+  hashes.push_back(sim().stateHash());
+  for (size_t t = 0; t < script.size() && !sim().roundOver(); t++)
+  {
+    sim().step(script[t]);
+    hashes.push_back(sim().stateHash());
+  }
+  const uint64_t digest = digestOf(hashes);
+  const char* dump = std::getenv("BITRIOT_HASH_DUMP");
+  if (dump != nullptr)
+  {
+    std::fprintf(stderr, "HASHDUMP control events digest=0x%016llxULL ticks=%zu\n",
+                 (unsigned long long) digest, hashes.size());
+    if (dump[0] == 'a')
+    {
+      for (size_t i = 0; i < hashes.size(); i++)
+      {
+        std::fprintf(stderr, "HASH control events %zu 0x%016llx\n", i, (unsigned long long) hashes[i]);
+      }
+    }
+  }
+  EXPECT_EQ(digest, EXPECTED_DIGEST) << hashes.size() << " hashes";
+  EXPECT_GT(hashes.size(), 1000u) << "the round should run a good while with the script playing";
 }
 
 } // namespace

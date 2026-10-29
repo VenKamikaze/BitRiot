@@ -14,6 +14,19 @@
 #include <SDL2/SDL.h>
 #include "GameRunningSDLInput.h"
 
+class Simulation;
+
+// Where a hit becomes a buzz in a player's hand. The game uses SDL haptics (the
+// default); a test installs a recorder with InputHandler::setRumble. The simulation
+// never sees this: it only records hitThisTick(slot), and InputHandler::rumbleForHits
+// turns that into calls here after the step (brief 04b).
+class ControllerRumble
+{
+  public:
+    virtual ~ControllerRumble() {}
+    virtual void rumble(int controllerId, float strength, unsigned durationMs) = 0;
+};
+
 class InputHandler : public std::enable_shared_from_this<InputHandler>
 {
   public:
@@ -30,9 +43,24 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
     // The input of the human slots for the tick being stepped now, one PlayerInput
     // per slot (SLOT = playerNumber - 1), for Simulation::step(). Call it once per
     // stepped tick: it consumes the released edges accumulated since the last call.
-    // The local slot mask is every human slot, as every human is local today; a
-    // netplay client would restrict it to its own players.
+    // The local slot mask is m_localSlots: every human slot today (every human is
+    // local), changed by the takeovers and unplugs below; a netplay client would keep
+    // only its own players in it.
     TickInputs sampleTick();
+    // The control events (ControlEvent, TickInputs.h) produced since the last call -
+    // a join confirmed, a keyboard takeover, a controller unplugged - ride in
+    // TickInputs::control, and the simulation applies them at the start of the tick
+    // this sample is for. The local view (which slots are driven here, which pad
+    // belongs to which slot) changes when the event is PRODUCED, so the slot's input
+    // is sampled for that very tick and the selector never offers the slot twice.
+    //
+    // After a step, buzz the controller of every slot the simulation says was hit
+    // (Simulation::hitThisTick) that has one and is a human. The only place a hit
+    // reaches a device.
+    void rumbleForHits(const Simulation& sim);
+    // Replaces the device that buzzes (a test's recorder); nullptr restores the SDL one.
+    void setRumble(ControllerRumble* rumble);
+
     // True once the quit key (or the window's close button) has been seen. It is a
     // local flag, never a sim input; GameEngine ends the round on this machine.
     bool quitRequested() const;
@@ -47,7 +75,14 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
     int getKeyboardSetForActionKey(KEY k); // get the fixed keyboard-set index whose action1/action2 key is k, or -1. Used by the player-select menu (keyboard-join); searches the fixed m_availableKeySets table, not the per-game m_keyMap.
 
     shared_ptr<PlayerCharacterEntity> getPlayerAttachedToController(int controllerId);
+    // The pad was unplugged. If it drove a live player that has no keyboard set, that
+    // slot goes back to the AI (a RETURN_TO_AI event in the next sample); a player that
+    // also has a keymap stays human on the keys.
     void detachController(int controllerId);
+    // The controller id driving a slot (SLOT = playerNumber - 1), or -1.
+    int controllerForSlot(int slot) const;
+    // Whether this machine reads a slot's input, as of now (events included).
+    bool isLocalSlot(int slot) const;
 
     // Phase 2.7: mid-game CPU-takeover selector. A device (keyboard set or
     // controller) that is not yet bound this game opens a selector to choose
@@ -85,8 +120,19 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
     // state lives here any more (the held action and the selected item are the
     // simulation's, per slot; see Simulation::inputState).
     InputSampler m_sampler;
+    // Which slots a device on this machine drives, as of the events produced so far
+    // (bit n is slot n). The local slot mask handed to the sampler.
+    uint32_t m_localSlots = 0;
+    // The pad that drives each slot, or -1. The local layer's own mapping: it used to
+    // be a field on the entity, but a device is not part of the simulation.
+    array<int, std::GameSettings::MAX_PLAYERS> m_slotController;
+    // Produced, not yet sampled.
+    vector<ControlEvent> m_pendingControl;
+    ControllerRumble* m_rumble = nullptr;
 
   private:
+    void setJoinIndicator(int team, InfoPanel::JoinState state,
+                          InfoPanel::JoinDevice device = InfoPanel::JOIN_DEVICE_CONTROLLER); // no-op without a panel
     void setAvailableKeys();
     vector<array<KEY, NUM_ACTION_BUTTONS>> m_availableKeySets; // fixed table of key sets, indexed by attachedKeyboardId (rebuilt each game).
 
