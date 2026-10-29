@@ -265,7 +265,7 @@ Brief 05 added the record of a round (`src/MatchRecord.*`, the byte format in
 
 | File | What it pins |
 | --- | --- |
-| `MatchRecordTest.cpp` | the bytes, written out by hand from the specification (header, a tick, an RLE run); parse then serialise is byte-identical (plain, RLE, 40 random records, a run longer than 65535, an empty record); every truncation is refused; every single bit flip either is refused or reads back to the same bytes; each header check; counts that cannot be true are refused before anything is allocated; non-maximal runs and out-of-order checkpoints are refused; what the format cannot hold is refused on write |
+| `MatchRecordTest.cpp` | the bytes, written out by hand from the specification (header, a tick, an RLE run); parse then serialise is byte-identical (plain, RLE, 40 random records, a run longer than 65535, an empty record); every truncation is refused; **hostile files** (a run-length bomb, too many events in a tick or a record, a million-tick claim over a 4-byte body) are refused cheaply, with the time and peak memory asserted; every single bit flip either is refused or reads back to the same bytes; each header check; counts that cannot be true are refused before anything is allocated; non-maximal runs and out-of-order checkpoints are refused; what the format cannot hold is refused on write |
 | `ReplayTest.cpp` | a seeded round with scripted humans is recorded and replays to the same hash **on every tick** (and from the serialised bytes); the checkpoint policy (tick 0, every K, the last); the header (build id, data hash, hash version, config); recording does not change the round; **mismatch detection**: a corrupted input is named at its tick (checkpoint every tick) or its window (every K), a corrupted checkpoint, a different seed, other game data, another hash version, an unplayable config, an event for a slot the round lacks (the tick is named), a wrong round-end flag; replay can stop part-way; a record is a script for another run |
 | `GoldenRecordTest.cpp` | the golden record (below) |
 | `DataHashTest.cpp` | the data hash is the documented FNV over the sorted items; the sim's named constants are in it; comments, blank lines, line order, spacing, leading zeros and CRLF do not move it, and any changed value, name, added or removed constant does; an unreadable file is an error; **eager loading**: `start()` refuses unreadable data and leaves the running round alone, and after `start()` the files are not read again; CRLF data files load |
@@ -582,7 +582,7 @@ files, run, swap back.
 
 ## Coverage today
 
-499 tests in `bitriot_tests` (397 of them also in `bitriot_sim_tests`), across the
+513 tests in `bitriot_tests` (408 of them also in `bitriot_sim_tests`), across the
 files below (the counts here are as of brief 05; the per-file lists of the later briefs
 are in their own sections above):
 
