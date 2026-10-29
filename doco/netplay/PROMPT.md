@@ -28,7 +28,8 @@ They touch different areas (input/sim vs `main.cpp`, CMake and renderers) but bo
 1. **Play-test** of 02b (fixed-point movement feel), 03a (round flow, scoreboard) and 03b (frame loop, catch-up, rumble). One session on `claude` covers all three; the Arch commands are in 02b's and 03b's Outcomes. Record the result in each Outcome.
 2. **vnet tags.** The cloud session can't push tags (HTTP 403), so the user tags from a PC. `v0.1.0` (5847e44) and `v0.2.0` (c8be4df) are pushed. `v0.3.0` is meant for b302029. Check with `git ls-remote --tags https://github.com/VenKamikaze/vnet`, and ask the user if it's missing. vnet's README already pins `v0.3.0`.
 3. **vnet `claude` → `main`** merge: the user's call.
-4. **CI has never been observed.** Neither repo's GitHub Actions runs could be watched from the cloud session. Ask the user to check vnet's Actions tab (Linux, macOS, ASan, MinGW/Wine, Go, fuzz, Docker, the browser job).
+4. **Brief 09's blocked Emscripten ports are solved.** The user pushed the six GitHub archives to branch `emscripten-ports`. They are verified against Emscripten 6.0.13's hashes, and brief 09 ("Ports") explains how to install them into the Emscripten cache.
+5. **CI has never been observed.** Neither repo's GitHub Actions runs could be watched from the cloud session. Ask the user to check vnet's Actions tab (Linux, macOS, ASan, MinGW/Wine, Go, fuzz, Docker, the browser job).
 
 **Known open issues:**
 
