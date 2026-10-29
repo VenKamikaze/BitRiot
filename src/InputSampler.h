@@ -41,7 +41,7 @@ class InputSampler
 {
   public:
     // Every slot is local: the mask for a machine that reads all the input.
-    static const uint32_t ALL_SLOTS = (1u << std::GameSettings::MAX_PLAYERS) - 1;
+    static constexpr uint32_t ALL_SLOTS = (1u << std::GameSettings::MAX_PLAYERS) - 1;
 
     // A button of a slot's device changed state. A press of a button that is already
     // down (key repeat) and a release of one that is not down change nothing.

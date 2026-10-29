@@ -125,11 +125,11 @@ struct PlayerInput
 {
   // The six physical buttons. The values are the bit numbers of their HELD bits.
   enum Button { UP = 0, DOWN = 1, LEFT = 2, RIGHT = 3, ACTION1 = 4, ACTION2 = 5 };
-  static const int NUM_BUTTONS = 6;
+  static constexpr int NUM_BUTTONS = 6;
 
-  static const uint8_t HELD_MASK = 0x3F;
-  static const uint8_t ACTION1_RELEASED = 1 << 6;
-  static const uint8_t ACTION2_RELEASED = 1 << 7;
+  static constexpr uint8_t HELD_MASK = 0x3F;
+  static constexpr uint8_t ACTION1_RELEASED = 1 << 6;
+  static constexpr uint8_t ACTION2_RELEASED = 1 << 7;
 
   uint8_t bits = 0;
 

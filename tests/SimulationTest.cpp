@@ -7,6 +7,7 @@
 // of its config, and what stateHash() does and does not notice.
 
 #include "support/HeadlessGame.h"
+#include "support/ScriptedInput.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -1809,6 +1810,51 @@ TEST_F(SimulationTest, PinnedRoundsKeepTheirHashes)
     }
     EXPECT_EQ(digest, g.digest) << g.name << " (" << hashes.size() << " hashes)";
   }
+}
+
+// The golden rounds above are all bots. This one has two humans driven by scripted
+// TickInputs (taps, bounces, holds, both actions, everything the apply rules handle),
+// two bots, blocks and the spawner, so the input rules and the per-slot input state
+// are pinned across compilers too. Moves when the apply rules, the script generator
+// (tests/support/ScriptedInput.h) or the hash do.
+TEST_F(SimulationTest, APinnedRoundWithScriptedHumanInputKeepsItsHashes)
+{
+  const uint64_t SCRIPT_SEED = 31;
+  const int TICKS = 3000;
+  const uint64_t EXPECTED_DIGEST = 0xf493bd22680761b3ULL; // regenerate: BITRIOT_HASH_DUMP=1 (tests/README.md)
+
+  MatchConfig config = makeConfig(515, 4, 17, 13, 55);
+  config.slots[0].ai = false;
+  config.slots[1].ai = false;
+  const std::vector<TickInputs> script = randomInputs(SCRIPT_SEED, TICKS, {0, 1});
+
+  sim().start(config);
+  std::vector<uint64_t> hashes;
+  hashes.push_back(sim().stateHash());
+  for (size_t t = 0; t < script.size() && !sim().roundOver(); t++)
+  {
+    sim().step(script[t]);
+    hashes.push_back(sim().stateHash());
+  }
+  const uint64_t digest = digestOf(hashes);
+  const char* dump = std::getenv("BITRIOT_HASH_DUMP");
+  if (dump != nullptr)
+  {
+    std::fprintf(stderr, "HASHDUMP scripted humans digest=0x%016llxULL ticks=%zu\n",
+                 (unsigned long long) digest, hashes.size());
+    if (dump[0] == 'a')
+    {
+      for (size_t i = 0; i < hashes.size(); i++)
+      {
+        std::fprintf(stderr, "HASH scripted humans %zu 0x%016llx\n", i, (unsigned long long) hashes[i]);
+      }
+    }
+  }
+  EXPECT_EQ(digest, EXPECTED_DIGEST) << hashes.size() << " hashes";
+  EXPECT_GT(hashes.size(), 1000u) << "the round should run a good while with the script playing";
+  // The humans really did things: the script is not a no-op.
+  EXPECT_GT(player(1)->getNumberBombsPlaced() + player(1)->getNumberEggsPlaced()
+            + player(2)->getNumberBombsPlaced() + player(2)->getNumberEggsPlaced(), 5);
 }
 
 } // namespace
