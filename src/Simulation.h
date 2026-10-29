@@ -24,10 +24,10 @@
  *
  *   1. tears down the previous round (entities, then the spawning pool);
  *   2. applies the MatchConfig into GameSettings (the sim keeps reading
- *      GameSettings; see MatchConfig.h) and checks that Map is already the
- *      config's size - rebuilding the Map needs the primary SDL surface until
- *      brief 03b, so the caller (GameEngine::applyMapDimensionsIfChanged, the
- *      harness's setMapSize) resizes it first;
+ *      GameSettings; see MatchConfig.h) and gives the Map the config's size
+ *      (Map::resize: the walls and pillars are rebuilt if the size changed; since
+ *      brief 03b the Map holds no bitmaps, so the round brings its own map and the
+ *      caller resizes nothing - the window and HUD follow separately);
  *   3. reseeds SimRandom::sim() from config.seed - before anything that draws;
  *   4. builds the EntityManager, whose constructor resets the singletons that
  *      describe the previous world: the message queue, the GameOverTimer (the
@@ -141,7 +141,7 @@
  *                         MONSTER_GROUP 7, ROBOT_GROUP 8, EFFECT_GROUP 9
  *   Map::StaticTile       WALL 0, EMPTY 1, BLOCK 2
  *   DIRECTION             UP 0, DOWN 1, LEFT 2, RIGHT 3 (a rocket's direction)
- *   EntityRenderer::ANIM_STATE (the anim state)   IDLE 0, MOVE_UP 1, MOVE_DOWN 2,
+ *   EntityAnim::ANIM_STATE (the anim state)   IDLE 0, MOVE_UP 1, MOVE_DOWN 2,
  *                         MOVE_LEFT 3, MOVE_RIGHT 4 (SimpleBrain::ANIM_STATE agrees)
  *   EntityMessage::MessageType   DESTROY_ENTITY 0, CREATE_ENTITY 1, MOVE_ENTITY 2
  *   AIGoal::GOAL_TYPES    INCREASE_ENERGY 0, SECURE_AREA 1, CREATE_ENTITIES 2,

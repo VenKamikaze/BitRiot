@@ -2,6 +2,8 @@
 #include "InfoPanel.h"
 #include "GameSettings.h"
 #include "EntityRenderer.h"
+#include "EntityRendererFactory.h"
+#include "MapRenderer.h"
 #include <SDL2/SDL_image.h>
 #include <algorithm>
 #include <cstddef>
@@ -530,7 +532,7 @@ void InfoPanel::drawBGTiles()
       int atX, atY;
       atX = x * Map::TILE_WIDTH;
       atY = y * Map::TILE_HEIGHT;
-      Map::getInstance()->renderTileTo(m_surface, atX, atY, tile);
+      MapRenderer::getInstance()->renderTileTo(m_surface, atX, atY, tile);
 
 
     }

@@ -18,7 +18,7 @@ ExplosionEntity::ExplosionEntity(int uniqueID, int atX, int atY)
   m_offsetY = 0;
   m_health = DataReader::getInstance()->getIntFromFile("EXPLOSION_INITIAL_HEALTH", "data/entity.txt");
   m_velocity = 0;
-  m_currentAnimState = EntityRenderer::IDLE;
+  m_currentAnimState = EntityAnim::IDLE;
   m_currentAnimFrame = 0;
 
 }

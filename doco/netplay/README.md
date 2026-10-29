@@ -20,7 +20,7 @@ Each brief (`NN-*.md`) is one unit of work, sized for a single implement → rev
 | 02 | [Seeded simulation RNG](02-sim-rng.md) | BitRiot | 01 | done |
 | 02b | [Fixed-point simulation maths](02b-fixed-point-sim.md) | BitRiot | 01, 02 | done (play-test pending) |
 | 03a | [`Simulation`, `MatchConfig` and state hash](03a-simulation-and-state-hash.md) | BitRiot | 01, 02, 02b | done (play-test pending) |
-| 03b | [Surface-free sim library and frame loop](03b-surface-free-sim-and-frame-loop.md) | BitRiot | 03a | todo |
+| 03b | [Surface-free sim library and frame loop](03b-surface-free-sim-and-frame-loop.md) | BitRiot | 03a | done (play-test pending) |
 | 04a | [Input sampling and `step(inputs)`](04a-input-sampling.md) | BitRiot | 03b | todo |
 | 04b | [Control events, rumble and UI plumbing](04b-control-events.md) | BitRiot | 04a | todo |
 | 05 | [Match record, replay and `bitriot_headless`](05-replay-and-determinism.md) | BitRiot | 03b, 04b | todo |
@@ -42,7 +42,7 @@ Each brief (`NN-*.md`) is one unit of work, sized for a single implement → rev
 - **vnet core:** 06 shares no code with the BitRiot briefs.
 - **WASM:** 09 can start once 03b is in.
 
-**Sim/render split.** 03b owns the frame-loop refactor: the shared `frame()`, the fixed-tick accumulator, and render without stepping. 04a, 07 and 09 build on it. Don't restructure `main.cpp` or `GameEngine::runEngine` elsewhere.
+**Sim/render split.** 03b owned the frame-loop refactor and landed it: the shared `frame()` (`src/FrameLoop.*`, called from `main.cpp`), the fixed-tick accumulator (`src/TickPacer.*`), and render without stepping (`GameEngine::pumpEvents` / `stepTick` / `renderFrame`). 04a, 07 and 09 build on it. Don't restructure `main.cpp` or the `GameEngine` frame hooks elsewhere. The simulation is its own library, `bitriot_sim`, with **no SDL at all**.
 
 **Merged prerequisite.** `fix/ai-seek-energy` (merged in 7d6cf6a) changed the bot AI in `src/PlayerCharacterEntity.cpp`, where many `rand()` calls live. Brief 02 must re-find those call sites rather than trust the line numbers in code-facts §2. It also added the energy-seeking flood fill and a leak-free A*; see `tests/AISeekEnergyTest.cpp`.
 
@@ -60,7 +60,7 @@ Don't reopen these inside a brief. If one turns out to be wrong, stop and raise 
 - **D5. No SDL_net.** Native netplay uses vnet's native UDP backend. vnet also has an in-process **loopback backend** with simulated delay and loss, for tests.
 - **D6. Fixed-point sim maths, then prove it.** *(The user's answer to Q2, Oct 2026. Brief 02b landed it.)*
   - The sim uses no floating point. Offsets, velocities, the A\* open-list keys and the rocket's target are integers: `fixed_t`, Q16.16, in `src/Fixed.h` (brief **02b**, done; it carries a play-test because play feel shifts very slightly).
-  - Floats remain only outside the sim (rendering and HUD, rumble, window scaling, RmlUi, audio). `FixedPointSourceGuardTest` fails if a `float`, `double`, floating literal or libm call appears in any `src/` file that is not on its allowlist, so they cannot creep back. (It is a text scan: it cannot see an `auto` carrying a double or an implicit int-to-float conversion, so brief 03b adds an object-level check on the `bitriot_sim` objects.)
+  - Floats remain only outside the sim (rendering and HUD, rumble, window scaling, RmlUi, audio). `FixedPointSourceGuardTest` fails if a `float`, `double`, floating literal or libm call appears in the `bitriot_sim` library (its sources and the headers they include; there is no allowlist, and a file that needs a float belongs in `bitriot_core`), so they cannot creep back. (It is a text scan: it cannot see an `auto` carrying a double or an implicit int-to-float conversion, so brief 03b added an object-level check that disassembles the compiled `bitriot_sim` archive.)
   - Brief **05b** still runs **before** netplay is built, as a confirmation gate for other sources of divergence (UB, libstdc++ vs libc++, evaluation order):
     - GCC vs Clang;
     - an aggressive-flags build;
@@ -112,6 +112,7 @@ These are the user's conventions for this repo.
   ```bash
   cmake -S . -B build && cmake --build build -j8 && ./build/tests/bitriot_tests
   ```
+  Since 03b there is also `./build/tests/bitriot_sim_tests`, the simulation tests linked against `bitriot_sim` and GoogleTest alone (no SDL); run both when you touch the simulation. Configure with `-DBITRIOT_BUILD_GAME=OFF` to build only `bitriot_sim` and `bitriot_sim_tests` without SDL, OpenGL or RmlUi installed (the headless, wasm and cross builds).
 
 **Network limits in the cloud container.** Checked Oct 2026, under the environment's *limited* network policy.
 

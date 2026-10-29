@@ -22,7 +22,7 @@ Control changes (AI↔human), rumble and the InfoPanel highlight are brief 04b.
   - §6 (input): semantics, quirks, and the state held in `InputHandler`
   - §12: the exact current action rules and `setPointers`
   - §1: ESC as an exception
-- `src/InputHandler.{h,cpp}` (`processKeyboardInput`, `processPlayerButtons`, `setPointers`) and `src/GameRunningSDLInput.{h,cpp}`.
+- `src/InputHandler.{h,cpp}` (`pumpEvents` and `applyInput`, which 03b split out of `processKeyboardInput`; `processPlayerButtons`, `setPointers`) and `src/GameRunningSDLInput.{h,cpp}`.
 - The Outcomes of 03a and 03b: the `Simulation` and `frame()` APIs.
 
 ## Design

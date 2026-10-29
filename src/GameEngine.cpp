@@ -5,6 +5,9 @@
 #include "GameRunningSDLInput.h"
 #include "MickSDLRenderer.h"
 #include "PlayerCharacterEntity.h"
+#include "EntityRendererFactory.h"
+#include "MapRenderer.h"
+#include "WorldRenderer.h"
 #include <cstddef>
 #include <string>
 
@@ -13,6 +16,9 @@ GameEngine::GameEngine(SDL_Surface* back, shared_ptr<InputHandler> inputHandler)
   m_pInputHandler = inputHandler;
 
   m_surface = back;
+  // The window was made from the Map's statics (main.cpp, including -b).
+  m_windowMapWidth = Map::MAP_WIDTH;
+  m_windowMapHeight = Map::MAP_HEIGHT;
 
   GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
 }
@@ -32,19 +38,20 @@ void GameEngine::uninitialise()
   m_pInputHandler = nullptr;
 }
 
-void GameEngine::applyMapDimensionsIfChanged()
+void GameEngine::resizeWindowIfMapChanged()
 {
-  int newWidth = GameSettings::getInstance()->getMapWidth();
-  int newHeight = GameSettings::getInstance()->getMapHeight();
+  // Simulation::start() has already rebuilt the Map at the round's size and set
+  // Map::MAP_WIDTH/HEIGHT; only the startup-once resources are left.
+  const int newWidth = Map::MAP_WIDTH;
+  const int newHeight = Map::MAP_HEIGHT;
 
-  if (Map::MAP_WIDTH == newWidth && Map::MAP_HEIGHT == newHeight)
+  if (m_windowMapWidth == newWidth && m_windowMapHeight == newHeight)
   {
     return; // nothing to do
   }
 
-  // GameSettings is canonical; the Map statics are derived from it.
-  Map::MAP_WIDTH = newWidth;
-  Map::MAP_HEIGHT = newHeight;
+  m_windowMapWidth = newWidth;
+  m_windowMapHeight = newHeight;
 
   // Resize the startup-once resources (window, back-buffer surface, texture) to the
   // new content size. InfoPanel::WIDTH is the fixed side-panel width.
@@ -57,8 +64,9 @@ void GameEngine::applyMapDimensionsIfChanged()
   // The old back buffer was freed in resize(); re-point our handle.
   m_surface = renderer->getSurfaceBackBufferHandle();
 
-  // Rebuild the static map (walls/pillars) at the new size against the new surface.
-  Map::getInstance()->init(m_surface);
+  // The tile pictures are converted to the primary surface's format; reload them
+  // against the new surface.
+  MapRenderer::getInstance()->init(m_surface);
 }
 
 void GameEngine::resetGame()
@@ -88,6 +96,9 @@ void GameEngine::resetGame()
   // inside; the tick count restarts at 0.)
   m_sim.start(config);
 
+  // The Map is now the round's size; make the window match (before the HUD is built).
+  resizeWindowIfMapChanged();
+
   // after setting initialisation parameters
   m_pPlayers.resize(numPlayers);
 
@@ -96,6 +107,7 @@ void GameEngine::resetGame()
   initPlayerCharacters(numPlayers, genders);
   m_pInputHandler->setPointers(m_pPlayers, m_sim.entityManager().getDynamicMap(), m_pPanel);
   m_pPanel->setPlayerPointers(m_pPlayers);
+  m_drawNeeded = true; // a new HUD and (maybe) a new back buffer: nothing is drawn yet
 }
 
 int GameEngine::gameLengthSeconds() const
@@ -103,8 +115,94 @@ int GameEngine::gameLengthSeconds() const
   return (int) ((m_sim.tick() * GameSettings::NORMAL_TICKS_SPEED) / 1000);
 }
 
-bool GameEngine::runEngine()
+FrameLoop::Hooks GameEngine::frameHooks(std::function<uint32_t()> clockMs)
 {
+  FrameLoop::Hooks hooks;
+  hooks.nowMs = std::move(clockMs);
+  hooks.simulating = [this] { return simulating(); };
+  hooks.pumpEvents = [this] { pumpEvents(); };
+  hooks.step = [this] { stepTick(); };
+  hooks.render = [this] { return renderFrame(); };
+  // hooks.canStep stays empty: locally a tick is always allowed. Netplay (brief 07)
+  // sets it to hold a tick until the host's inputs for it have arrived.
+  return hooks;
+}
+
+bool GameEngine::simulating() const
+{
+  return GameSettings::getInstance()->getGameState() == GameSettings::GAME_RUNNING && !m_roundEnding;
+}
+
+void GameEngine::pumpEvents()
+{
+  m_pumpedQuietly = false;
+  if (simulating())
+  {
+    // Quiet means: the poll ran, and found nothing. (If nothing polls, the frame is
+    // never "quiet", and renderFrame() redraws: a front end that replaces this hook
+    // loses the optimisation, not the picture.)
+    m_pumpedQuietly = !m_pInputHandler->pumpEvents();
+  }
+}
+
+void GameEngine::stepTick()
+{
+  // One sim tick. Both the game-over countdown and the scoreboard's game
+  // length count ticks, never wall-clock time.
+
+  // Human input is applied to the player entities before the step. (Brief
+  // 04a turns this into step(inputs).) ESC ends the round on this machine
+  // only: the rest of the tick still runs, as it always has.
+  bool quitRequested = false;
+  std::shared_ptr<PlayerCharacterEntity> winnerAtQuit;
+  try
+  {
+    m_pInputHandler->applyInput();
+  }
+  catch(const InputException &e)
+  {
+    if(e.gotQuit())
+    {
+      quitRequested = true;
+      winnerAtQuit = m_sim.currentWinner();
+    }
+  }
+
+  // The win check and game-over countdown (a timed delay during which we
+  // continue to update and runFrame for a few seconds; useful when all
+  // human players are dead but AI is still alive, in case a human player
+  // wants to take over the AI), the spawning pool and runFrame. The round
+  // is over only once this whole step has run.
+  m_sim.step();
+  m_ticksThisFrame++;
+
+  if (m_sim.roundOver())
+  {
+    m_roundEnding = true;
+    m_scoreboardWinner = m_sim.winner();
+  }
+  else if (quitRequested)
+  {
+    m_roundEnding = true;
+    m_scoreboardWinner = winnerAtQuit;
+  }
+}
+
+bool GameEngine::renderFrame()
+{
+  // The per-frame counters are reset here, at the end of every render, and not in
+  // pumpEvents(): a front end that replaces the pump hook (netplay) must not be able
+  // to leave a stale "a tick ran this frame" behind.
+  struct EndOfFrame
+  {
+    GameEngine& engine;
+    ~EndOfFrame()
+    {
+      engine.m_ticksThisFrame = 0;
+      engine.m_pumpedQuietly = false;
+    }
+  } endOfFrame{*this};
+
   switch (GameSettings::getInstance()->getGameState())
   {
     case GameSettings::MENU_RUNNING:
@@ -123,56 +221,50 @@ bool GameEngine::runEngine()
     case GameSettings::GAME_INIT:
     {
       menuSystem->clearScoreBoard(); // does nothing if scoreboard does not exist.
-      applyMapDimensionsIfChanged();
       resetGame();
       GameSettings::getInstance()->setGameState(GameSettings::GAME_RUNNING);
       break;
     }
     case GameSettings::GAME_RUNNING:
     {
-      // One sim tick. Both the game-over countdown and the scoreboard's game
-      // length count ticks, never wall-clock time.
-
-      // Human input is applied to the player entities before the step. (Brief
-      // 04a turns this into step(inputs).) ESC ends the round on this machine
-      // only: the rest of the tick still runs, as it always has.
-      bool quitRequested = false;
-      std::shared_ptr<PlayerCharacterEntity> winnerAtQuit;
-      try
+      // ESC (or closing the window) seen on a frame that ran no tick, because the
+      // frame loop held it back: the round must still be quittable. When a tick did
+      // run, stepTick() has already taken the quit.
+      if (!m_roundEnding && m_ticksThisFrame == 0 && GameRunningSDLInput::getInstance()->doQuit())
       {
-        m_pInputHandler->processKeyboardInput();
-      }
-      catch(const InputException &e)
-      {
-        if(e.gotQuit())
-        {
-          quitRequested = true;
-          winnerAtQuit = m_sim.currentWinner();
-        }
+        m_roundEnding = true;
+        m_scoreboardWinner = m_sim.currentWinner();
       }
 
-      // The win check and game-over countdown (a timed delay during which we
-      // continue to update and runFrame for a few seconds; useful when all
-      // human players are dead but AI is still alive, in case a human player
-      // wants to take over the AI), the spawning pool and runFrame. The round
-      // is over only once this whole step has run.
-      m_sim.step();
-
-      if (m_sim.roundOver())
+      m_endingThisFrame = m_roundEnding;
+      if (m_roundEnding)
       {
+        // The round's last frame: go to the scoreboard (the menu takes over on the
+        // next frame, after this one draws the final world below, as it always did).
+        m_roundEnding = false;
         GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
-        menuSystem->loadScoreBoard(m_sim.winner(), m_sim.roster(), gameLengthSeconds());
+        menuSystem->loadScoreBoard(m_scoreboardWinner, m_sim.roster(), gameLengthSeconds());
+        m_scoreboardWinner = nullptr;
       }
-      else if (quitRequested)
+
+      // Draw the world and the HUD onto the CPU surface only when something may have
+      // changed: a tick ran, the round is ending, an event was read (a join
+      // indicator, a window event), or the surface is new. A frame with none of
+      // those (a tick held back, a frame that came early, a browser's 60 Hz frame
+      // between 30 Hz ticks) would draw the same picture again. The surface is still
+      // pushed to the texture every frame: the renderer's back buffers alternate, so
+      // each must be given the picture again or the screen would flicker between
+      // an old frame and the new one.
+      const bool redraw = m_drawNeeded || m_endingThisFrame || m_ticksThisFrame > 0 || !m_pumpedQuietly;
+      m_drawNeeded = false;
+      m_endingThisFrame = false;
+      if (redraw)
       {
-        GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
-        menuSystem->loadScoreBoard(winnerAtQuit, m_sim.roster(), gameLengthSeconds());
+        WorldRenderer::renderWorld(m_sim.entityManager(), m_surface);
+
+        m_pPanel->renderSurfaceTo(m_surface, (GameSettings::getInstance()->getMapWidth() * Map::TILE_WIDTH), 0);
       }
 
-      m_sim.entityManager().renderEntities(m_surface);
-
-      m_pPanel->renderSurfaceTo(m_surface, (GameSettings::getInstance()->getMapWidth() * Map::TILE_WIDTH), 0); 
-      
       MickSDLRenderer::getInstance()->pushCpuBufferToHardwareBuffer();
       break;
     }

@@ -3,6 +3,8 @@
 #include <cstdlib>
 #include <iostream>
 
+#include <SDL2/SDL.h>
+
 #include "RmlUI/glue/ShellFileInterface.h"
 #include "RmlUI/glue/SystemInterfaceSDL2.h"
 
@@ -59,6 +61,10 @@ void NullRenderInterface::ReleaseTexture(Rml::TextureHandle) {}
 
 void RmlEnvironment::SetUp()
 {
+  // The system interface reads SDL's clock. SDL_Init(0) initialises no subsystem at
+  // all, so this works on a machine with no display.
+  SDL_Init(0);
+
   // Paths are resolved relative to the working directory (the repository root),
   // exactly as MenuSDLRenderer::initGui does it.
   g_fileInterface = new ShellFileInterface("assets/menu/");
@@ -92,6 +98,7 @@ void RmlEnvironment::TearDown()
     Rml::Shutdown();
     g_available = false;
   }
+  SDL_Quit();
 }
 
 bool RmlEnvironment::available()

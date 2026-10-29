@@ -109,21 +109,17 @@ uint64_t digestOf(const std::vector<uint64_t>& values)
 class SimulationTest : public HeadlessGameTest
 {
   protected:
-    // Resizes the Map the way the engine does before a round, then starts it.
+    // Starts the config. start() gives the Map the config's size itself (since
+    // brief 03b); the harness's setMapSize() is no longer called first.
     void startConfig(const MatchConfig& config)
     {
-      setMapSize(config.mapWidth, config.mapHeight);
       sim().start(config);
     }
 
     // Starts the config and records the state hash at tick 0 and after each of
     // up to `ticks` steps (fewer if the round ends).
-    std::vector<uint64_t> playHashes(const MatchConfig& config, int ticks, bool resizeMap = true)
+    std::vector<uint64_t> playHashes(const MatchConfig& config, int ticks)
     {
-      if (resizeMap)
-      {
-        setMapSize(config.mapWidth, config.mapHeight);
-      }
       sim().start(config);
       std::vector<uint64_t> hashes;
       hashes.push_back(sim().stateHash());
@@ -268,8 +264,8 @@ TEST_F(SimulationTest, StartAppliesTheConfigIntoGameSettings)
   configurePlayers(2);
   gs->setNpcSpawnerEnabled(true);
   gs->setBlockSpawnPercentage(70);
-  setMapSize(13, 11); // the Map is the caller's job (it needs the primary surface)...
-  gs->setMapWidth(21); // ...but the sim reads the size from GameSettings, which start() sets
+  setMapSize(13, 11);
+  gs->setMapWidth(21); // the sim reads the size from GameSettings, which start() sets
   gs->setMapHeight(15);
 
   sim().start(config);
@@ -353,8 +349,7 @@ TEST_F(SimulationTest, AConfigFromAnotherMachineIsHeldToTheMenuLimits)
 
 TEST_F(SimulationTest, ARefusedConfigLeavesTheRunningRoundAndTheSettingsAlone)
 {
-  // Validation, including the Map-size check, happens before anything is torn
-  // down or written.
+  // Validation happens before anything is torn down or written.
   configurePlayers(3);
   startRound();
   sim().step();
@@ -366,23 +361,80 @@ TEST_F(SimulationTest, ARefusedConfigLeavesTheRunningRoundAndTheSettingsAlone)
   std::GameSettings::getInstance()->setPlayerGender(2, false);
   const std::GameSettings::Snapshot settingsPrepared = std::GameSettings::getInstance()->snapshot();
 
-  MatchConfig wrongMap = makeConfig(5, 5, 21, 15, 30); // the Map is 17x13
-  EXPECT_THROW(sim().start(wrongMap), std::runtime_error);
-  MatchConfig invalid = makeConfig(5, 1, 17, 13, 30);
+  // A refused config of another size must not resize the Map either.
+  MatchConfig invalid = makeConfig(5, 1, 21, 15, 30);
   EXPECT_THROW(sim().start(invalid), std::invalid_argument);
 
+  EXPECT_EQ(Map::MAP_WIDTH, 17);
+  EXPECT_EQ(Map::getInstance()->builtWidth(), 17);
   EXPECT_EQ(sim().stateHash(), before) << "the running round was torn down";
   EXPECT_TRUE(sim().config() == keptConfig);
   expectSameSettings(std::GameSettings::getInstance()->snapshot(), settingsPrepared);
   EXPECT_EQ(std::GameSettings::getInstance()->getNumberOfPlayers(), 3);
 }
 
-TEST_F(SimulationTest, StartRefusesAMapThatWasNotResizedFirst)
+TEST_F(SimulationTest, StartBuildsTheMapAtTheConfigsSize)
 {
-  // Rebuilding the Map needs the primary SDL surface (until brief 03b), so the
-  // caller resizes it. A forgotten resize must be loud, not a silent mismatch.
+  // Since brief 03b the Map holds no bitmaps, so a round brings its own: start()
+  // resizes the Map to the config, and nobody has to do it first.
   setMapSize(17, 13);
-  EXPECT_THROW(sim().start(makeConfig(1, 2, 21, 15, 0)), std::runtime_error);
+  Map* map = Map::getInstance();
+  const unsigned int generation = map->generation();
+
+  sim().start(makeConfig(1, 2, 21, 15, 0));
+  EXPECT_EQ(Map::MAP_WIDTH, 21);
+  EXPECT_EQ(Map::MAP_HEIGHT, 15);
+  EXPECT_EQ(map->builtWidth(), 21);
+  EXPECT_EQ(map->builtHeight(), 15);
+  EXPECT_GT(map->generation(), generation) << "a different size rebuilds the layout";
+  for (int x = 0; x < 21; x++)
+  {
+    EXPECT_EQ(map->staticTileAt(x, 0), Map::WALL);
+    EXPECT_EQ(map->staticTileAt(x, 14), Map::WALL);
+  }
+  for (int y = 0; y < 15; y++)
+  {
+    EXPECT_EQ(map->staticTileAt(0, y), Map::WALL);
+    EXPECT_EQ(map->staticTileAt(20, y), Map::WALL);
+  }
+  EXPECT_EQ(map->staticTileAt(2, 2), Map::WALL) << "a pillar";
+  EXPECT_EQ(map->staticTileAt(18, 12), Map::WALL) << "the last pillar";
+  EXPECT_EQ(map->staticTileAt(1, 1), Map::EMPTY);
+  EXPECT_EQ(map->staticTileAt(19, 13), Map::EMPTY) << "the far corner exists only on the bigger map";
+  EXPECT_EQ(em().getDynamicMap()->entityMap.size(), 21u);
+
+  // Down again, and the same size twice (which keeps the layout but clears blocks).
+  sim().start(makeConfig(2, 2, 9, 7, 100));
+  EXPECT_EQ(map->builtWidth(), 9);
+  EXPECT_EQ(map->builtHeight(), 7);
+  const unsigned int small = map->generation();
+  sim().start(makeConfig(3, 2, 9, 7, 0));
+  EXPECT_EQ(map->generation(), small) << "the same size does not rebuild the layout";
+  int blocks = 0;
+  for (int x = 0; x < 9; x++)
+  {
+    for (int y = 0; y < 7; y++)
+    {
+      blocks += map->staticTileAt(x, y) == Map::BLOCK ? 1 : 0;
+    }
+  }
+  EXPECT_EQ(blocks, 0) << "the last round's blocks were cleared";
+}
+
+TEST_F(SimulationTest, StartedOnAMapOfAnotherSizeTheRoundIsTheSameAsOnAPreparedOne)
+{
+  // The same config must play the same whether the Map was already that size (as
+  // the harness's setMapSize() makes it) or start() had to resize it.
+  const MatchConfig config = makeConfig(4242, 3, 21, 15, 55);
+
+  setMapSize(21, 15);
+  const std::vector<uint64_t> prepared = playHashes(config, 300);
+
+  setMapSize(9, 7);
+  const std::vector<uint64_t> resized = playHashes(config, 300);
+
+  ASSERT_EQ(prepared.size(), resized.size());
+  EXPECT_EQ(prepared, resized);
 }
 
 // ===========================================================================
@@ -844,7 +896,7 @@ class SingletonResetTest : public SimulationTest
       setMapSize(a.mapWidth, a.mapHeight);
       plant(poison);
 
-      const std::vector<uint64_t> second = playHashes(a, 400, /*resizeMap=*/false);
+      const std::vector<uint64_t> second = playHashes(a, 400);
       ASSERT_EQ(first.size(), second.size());
       for (size_t i = 0; i < first.size(); i++)
       {

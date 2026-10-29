@@ -31,7 +31,7 @@ GameEntity::GameEntity()
   m_tileX = m_tileY = 0;
   m_offsetX = m_offsetY = 0;
 
-  m_currentAnimState = EntityRenderer::IDLE;
+  m_currentAnimState = EntityAnim::IDLE;
   m_currentAnimFrame = 0;
 
 }
@@ -59,10 +59,6 @@ void GameEntity::hashExtraState(StateHasher&) const
 void GameEntity::moveInDirection(DIRECTION d)
 {
   Map * staticMap = Map::getInstance();
-
-  //unsused
-  //EntityRenderer * er = getEntityRenderer();
-
 
   fixed_t thisMoveVelocity = m_velocity;
 
@@ -125,10 +121,10 @@ void GameEntity::moveInDirection(DIRECTION d)
       }
 
       // update animation
-      if (m_currentAnimState != EntityRenderer::MOVE_UP)
+      if (m_currentAnimState != EntityAnim::MOVE_UP)
       {
         // if moving up animation exists, change to it
-        m_currentAnimState = EntityRenderer::MOVE_UP;
+        m_currentAnimState = EntityAnim::MOVE_UP;
         m_currentAnimFrame = 0;
       }
 
@@ -189,10 +185,10 @@ void GameEntity::moveInDirection(DIRECTION d)
       }
 
       // update animation
-      if (m_currentAnimState != EntityRenderer::MOVE_DOWN)
+      if (m_currentAnimState != EntityAnim::MOVE_DOWN)
       {
         // if moving up animation exists, change to it
-        m_currentAnimState = EntityRenderer::MOVE_DOWN;
+        m_currentAnimState = EntityAnim::MOVE_DOWN;
         m_currentAnimFrame = 0;
       }
 
@@ -254,10 +250,10 @@ void GameEntity::moveInDirection(DIRECTION d)
       }
 
       // update animation
-      if (m_currentAnimState != EntityRenderer::MOVE_LEFT)
+      if (m_currentAnimState != EntityAnim::MOVE_LEFT)
       {
         // if moving up animation exists, change to it
-        m_currentAnimState = EntityRenderer::MOVE_LEFT;
+        m_currentAnimState = EntityAnim::MOVE_LEFT;
         m_currentAnimFrame = 0;
       }
 
@@ -316,9 +312,9 @@ void GameEntity::moveInDirection(DIRECTION d)
       }
 
       // update animation
-      if (m_currentAnimState != EntityRenderer::MOVE_RIGHT)
+      if (m_currentAnimState != EntityAnim::MOVE_RIGHT)
       {
-        m_currentAnimState = EntityRenderer::MOVE_RIGHT;
+        m_currentAnimState = EntityAnim::MOVE_RIGHT;
         m_currentAnimFrame = 0;
       }
 
@@ -365,31 +361,11 @@ void GameEntity::moveInDirection(DIRECTION d)
 
 
 
-EntityRenderer * GameEntity::getEntityRenderer()
-{
-  EntityRendererFactory * erf = EntityRendererFactory::getInstance();
-  return erf->getEntityRenderer(m_type);
-}
-
-bool GameEntity::render(SDL_Surface* dest)
-{
-  EntityRenderer * er = getEntityRenderer();
-
-  int destX = pixelX();
-  int destY = pixelY();
-
-  // Render in the entity's alliance-team colour (teammates share a colour), not
-  // its per-player slot colour. getTeamNumber() -> the same colour-table index.
-  return er->render(dest, destX, destY, m_currentAnimState, m_currentAnimFrame, getTeamNumber());
-}
-
 void GameEntity::incAnimFrame()
 {
-  EntityRenderer * er = getEntityRenderer();
-
   m_currentAnimFrame++;
 
-  if (m_currentAnimFrame >= er->getNumFrames(m_playerNumber))
+  if (m_currentAnimFrame >= EntityAnim::frameCount(m_type))
   {
     m_currentAnimFrame = 0;
   }

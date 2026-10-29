@@ -4,6 +4,8 @@ A fact check of the current code, made for the briefs in `doco/netplay/`. File:l
 
 *Brief 03a (Oct 2026) moved round setup and the tick out of `GameEngine` into `Simulation` (`src/Simulation.*`); §1, §2, §3, §7, §10 and §12 are updated for it, and the `GameEngine.cpp` line refs below that predate it (marked) no longer exist.*
 
+*Brief 03b (Oct 2026) split the simulation into its own CMake library, `bitriot_sim`, with no SDL at all, and replaced the busy-wait loop with `FrameLoop` (`src/FrameLoop.*`, `src/TickPacer.*`) and a split `GameEngine` (`pumpEvents` / `stepTick` / `renderFrame`). §1, §2, §4, §9, §10 and §12 are updated; refs marked "(before 03b)" no longer exist.*
+
 An earlier design chat analysed the April-2022 code. Where this file disagrees with that chat, this file wins.
 
 **Corrections to the earlier analysis**
@@ -24,26 +26,29 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 
 ## 1. Game loop
 
-- **`main()`'s loop** (main.cpp:199-247): lock the surface, call `consoleMain()`, call `SDL_RenderPresent` (:234).
-- **`consoleMain()` runs one frame** (main.cpp:115-130). It calls `engine->runEngine()`, then busy-waits in `SDL_Delay(1)` until 33 ms have passed (`GameSettings::NORMAL_TICKS_SPEED=33`, GameSettings.h:220).
-  - A slow frame slows the game; there is no catch-up.
-  - `FAST_TICKS_SPEED` (GameSettings.h:221) is unused.
-- **`GameEngine::runEngine()`** (GameEngine.cpp:123-196) switches on the global `GameSettings::gameState`:
-  - `MENU_RUNNING`: `menuSystem->showMenu()`. This pumps SDL events itself and calls RmlUi Update/Render (MenuSDLRenderer.cpp:108-256).
-  - `GAME_INIT`: `applyMapDimensionsIfChanged()` + `resetGame()`. No sim tick runs. *(03a: `resetGame()` builds a `MatchConfig` from `GameSettings` with `pickRoundSeed()`, calls `Simulation::start(config)`, then does the presentation side: the `InfoPanel`, `resetInputEvents`, each player's controller and team sprite, `InputHandler::setPointers`. The tick counter is `Simulation::tick()`; the engine's own `m_gameTicks` is gone.)*
-  - `GAME_RUNNING`, in this order *(03a; it used to be win check, then input, then pool, runFrame)*:
-    1. `m_pInputHandler->processKeyboardInput()`. This is where SDL events are pumped; ESC sets a local quit flag.
-    2. `Simulation::step()`: tick++, the win check and `GameOverTimer::advance(tick, ...)` at the top, then `SpawningPool::update()`, then `EntityManager::runFrame()` (`runAI` → `processMessageQueue` → `runCollisions`). See Simulation.h for the exact semantics.
-    3. If `roundOver()` (or ESC was pressed): state to `MENU_RUNNING` and the scoreboard loads, from the state after the step.
-    4. Render to the CPU surface, then `pushCpuBufferToHardwareBuffer()`.
-- **The engine does one sim step and one render per call.** The round is over only after the whole step has run: pool and `runFrame` run on the tick it ends. The scoreboard therefore sees the state after that final step (the winner itself is fixed at the top of the tick). Moving the win check ahead of input is harmless: input only moves players and posts messages, and the win check reads alive flags and entity groups.
+*(Rewritten by brief 03b. Before it: `main()` locked the surface, called `consoleMain()` (which ran `GameEngine::runEngine()` once and busy-waited in `SDL_Delay(1)` until 33 ms had passed, so a slow frame slowed the game and there was no catch-up), then `SDL_RenderPresent`.)*
+
+- **`main()`'s loop** (main.cpp): lock the surface, call `frame()`, `SDL_RenderPresent`, unlock, then `SDL_Delay(frameLoop->sleepHintMs())`. `frame()` is a plain function (`FrameResult frame()`), which a web build can hand to `emscripten_set_main_loop`; it never blocks. `FAST_TICKS_SPEED` (GameSettings.h) is unused.
+- **`FrameLoop::frame()`** (`src/FrameLoop.h` has the full contract), in order:
+  1. `pumpEvents()`: read device and window events (during a round only);
+  2. `TickPacer::advance(now)`: add real time to a backlog, capped at 5 ticks' worth (a stall is forgiven, not fast-forwarded); outside a round the pacer is restarted every frame, so time spent in a menu is never owed;
+  3. while a whole tick (`GameSettings::NORMAL_TICKS_SPEED` = 33 ms) is owed, up to 5 per frame, and `simulating()` and `canStep()` allow it: `step()`. `canStep()` is the netplay veto (absent locally = always yes); `simulating()` is re-checked after every step so a step that ends the round stops the frame;
+  3b. optionally `extraTicks()`: up to 2 more steps beyond the clock's (netplay catch-up), under the same two gates, not touching the backlog;
+  4. `render()` once. Rendering never steps, and a frame owing three ticks runs three steps and draws once. A frame that started outside a round and ended inside one (`GAME_INIT`) restarts the pacer after `render()`, so round set-up time is not owed as ticks.
+  The clock is SDL's performance counter in ms (`clockMs()` in main.cpp), not `SDL_GetTicks()`: on Linux `SDL_GetTicks()` can step 1 ms at second boundaries, which made one frame in thirty arrive a millisecond early with no tick due.
+- **`GameEngine`** exposes the pieces as `frameHooks()`; `runEngine()` is gone. They switch on the global `GameSettings::gameState`:
+  - `MENU_RUNNING`: `renderFrame()` calls `menuSystem->showMenu()`. This pumps SDL events itself and calls RmlUi Update/Render (MenuSDLRenderer.cpp). Not simulating, so no tick.
+  - `GAME_INIT`: `renderFrame()` clears the scoreboard and calls `resetGame()`. No tick runs. `resetGame()` builds a `MatchConfig` from `GameSettings` with `pickRoundSeed()`, calls `Simulation::start(config)` (which builds the Map at the config's size), then `resizeWindowIfMapChanged()` (window, back buffer and texture, and `MapRenderer::init` against the new surface), then the presentation side: the `InfoPanel`, `resetInputEvents`, each player's controller and team sprite, `InputHandler::setPointers`. The tick counter is `Simulation::tick()`.
+  - `GAME_RUNNING`:
+    - `pumpEvents()` (frame start): `InputHandler::pumpEvents()` polls SDL (`GameRunningSDLInput::updateEventQueue`).
+    - `stepTick()` (zero or more per frame): `InputHandler::applyInput()` (throws `InputException(GOT_QUIT)` if ESC was seen; caught in `stepTick`), then `Simulation::step()` (tick++, the win check and `GameOverTimer::advance(tick, ...)` at the top, then `SpawningPool::update()`, then `EntityManager::runFrame()`; see Simulation.h). If `roundOver()` (or ESC was seen) it sets `m_roundEnding` and the loop stops stepping.
+    - `renderFrame()` draws the world and HUD onto the CPU surface only if a tick ran, the round is ending, an event was read this frame or the surface is new, and always pushes the surface to the texture (the renderer's back buffers alternate); ESC seen on a frame that ran no tick (held by `canStep()`) ends the round too. If a round is ending, state goes to `MENU_RUNNING` and the scoreboard loads (the state after the whole last step); then the world (`WorldRenderer::renderWorld`) and the HUD are drawn and `pushCpuBufferToHardwareBuffer()` runs. The menu takes over on the next frame, as it always did.
+  - `GAME_QUIT`: `renderFrame()` returns false.
+- **The round is over only after the whole step has run**: pool and `runFrame` run on the tick it ends. The scoreboard therefore sees the state after that final step (the winner itself is fixed at the top of the tick). Nothing steps after that: the old "round-end tick still runs input after flipping to `MENU_RUNNING`" (brief 01's follow-up) is moot. **During the countdown the sim still runs** (intentional: AI takeover is allowed), and ESC still lets its tick finish.
 - **Exceptions are control flow.**
-  - ESC throws `InputException(GOT_QUIT)` (InputHandler.cpp:650), caught at GameEngine.cpp:166 and main.cpp:218.
+  - ESC throws `InputException(GOT_QUIT)` (`InputHandler::applyInput`), caught in `GameEngine::stepTick` and main.cpp.
   - There are 16 `throw` sites in src. WASM builds therefore need `-fexceptions` or `-fwasm-exceptions`.
-- **What a WASM main-loop inversion touches:**
-  - main.cpp:171-278: the loop locals, the per-frame try/catch, and teardown (258-277), which moves to a quit path.
-  - The busy-wait (main.cpp:121-126).
-  - Sim/render decoupling inside `runEngine`.
+- **What a WASM main-loop inversion touches:** main.cpp's loop locals, the per-frame try/catch and teardown (they move to a quit path), and `frame()` itself is already the callback; the `SDL_Delay(sleepHintMs())` goes (the browser paces).
 
 ## 2. Randomness and other nondeterminism
 
@@ -83,7 +88,7 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 **Undefined behaviour and bounds**
 
 - GameEntity's constructor leaves `m_health`, `m_velocity`, `m_ID`, `m_type` and others unset. SimpleMovingEntity.cpp:27 reads the uninitialised `m_health`.
-- `Map::staticTileAt` has no bounds check (Map.cpp:28-31).
+- ~~`Map::staticTileAt` has no bounds check.~~ Fixed by brief 03b: a read outside the built map is WALL and a write outside it is ignored, and the row stride is the built height, not the `MAP_HEIGHT` static.
 - `runCollisions` does `entityList.find(id)->second` with no end check.
 
 **Singletons with sim state:** `Map`, `AIGameView`, `EntityFactory`, `EntityMessageQueue`, `GameSettings`, `GameOverTimer`, `DataReader`. Because of these, **only one simulation can exist per process.**
@@ -132,7 +137,7 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 - `abs(m_offsetX) <= m_velocity` for rockets, and `nearTileCenter` for players and `SimpleBrain`, compare an offset with exactly one step. For many velocities (a robot's 4/19, a rocket's 0.4) the offset lands on exactly +-velocity on some ticks, and the float answer was decided by rounding noise. The fixed answer is deterministic but can differ from the float one. Rockets are pinned to the float timing by rounding their velocity up; monsters' turns and bots' step-finish ticks can differ by a tick (02b Outcome).
 - The A* float keys: totals that collided were nudged by `+0.001f` until free. A slot freed when a node left the list was reused by the next node with that total, so the order is *not* plain insertion order. A key of `(total, insertion sequence)` gives different routes (the 02b test shows it); `(total, next free number)` gives identical ones.
 
-**Where floats remain in `src/`** (none in sim code): rumble strength (`MickSDLUtil`, `GameRunningSDLInput`, and one literal at the call in `PlayerCharacterEntity::onCollision` until brief 04b removes rumble from the sim), HUD drawing (`InfoPanel.cpp`), window scaling (`MickSDLRenderer.cpp`), and RmlUi's API (`src/RmlUI`). `FixedPointSourceGuardTest` scans `src/` and keeps it that way (a text scan: it cannot see an `auto` carrying a double or an implicit int to float conversion, e.g. `MenuSDLRenderer.cpp`'s `ProcessMouseWheel(event.wheel.y, ...)`; brief 03b should add an object-level check); the allowlist is in `tests/FixedPointGuardTest.cpp`.
+**Where floats remain in `src/`** (none in `bitriot_sim`): rumble strength (`MickSDLUtil`, `GameRunningSDLInput`; the simulation passes an integer, per mille, through `RumbleSink`, and `MickSDLRumbleSink` converts), HUD drawing (`InfoPanel.cpp`), window scaling (`MickSDLRenderer.cpp`), and RmlUi's API (`src/RmlUI`). All of them are in `bitriot_core`. Since brief 03b `FixedPointSourceGuardTest` scans the text of the `bitriot_sim` target's sources and the headers they include (no allowlist), and `SimLibraryTest` disassembles the compiled archive and fails on any floating-point instruction, which sees what the text scan cannot (an `auto` carrying a double, an implicit int to float conversion at a call, a float hidden by a macro).
 
 **Current flags** (CMakeLists.txt): `-Wall -Wno-comment`; Debug (the default build type) `-ggdb -O0`; Release `-O2`; `-include cstdint`. With no floating point in the sim, `-ffp-contract=off` and the `-ffast-math` rejection are not needed for determinism and were not added. The project is pinned to C++17 (`CMAKE_CXX_STANDARD`, extensions off) for every target, and the library builds with `-Wfloat-conversion`.
 
@@ -167,14 +172,14 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 - Slots 5-6 are controller-only. The maximum is 6 players.
 - Controllers: A/X = action1, B/Y = action2, d-pad = directions, START = join. Analog sticks are unused (GameRunningSDLInput.cpp:186-218).
 
-**Sampling and applying are fused.** `processKeyboardInput()` (InputHandler.cpp:642-689) pumps SDL (`updateEventQueue`, GameRunningSDLInput.cpp:221-291), then applies the input through `processPlayerButtons(player, isDown, isReleased)` (:494-619). That function already takes `std::function` predicates, which is the natural seam for a bitmask.
+**Sampling and applying are fused** *(03b split the pump out: `InputHandler::pumpEvents()` polls SDL once per frame; `applyInput()` is what runs once per stepped tick)*. `applyInput()` (formerly the tail of `processKeyboardInput()`; the SDL poll is `GameRunningSDLInput::updateEventQueue`, GameRunningSDLInput.cpp:221-291) applies the input through `processPlayerButtons(player, isDown, isReleased)` (:494-619). That function already takes `std::function` predicates, which is the natural seam for a bitmask.
 
 **Semantics**
 
 - `isKeyDown` means the key is held.
 - `isKeyReleased` is a sticky pending release that the first read consumes. Controllers work the same way.
 - Keyboard players are processed only when some key is down or released.
-- **Quirk:** a tap shorter than one tick is lost, but its release stays pending.
+- **Quirk:** a tap shorter than one tick is lost, but its release stays pending. *(Since 03b the window is the time between two `applyInput()` calls, which is one tick normally but several on a catch-up frame; there, a release seen in the window applies on the first tick, losing that tick's last held step, and a press and release between two applies loses the press but keeps the release. Brief 04a's sampler should record edges per tick.)*
 - Directions use else-if precedence: up, then down, then left, then right.
 - Actions: press to select, release to place.
 
@@ -243,7 +248,7 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
 
 **Game renderer**
 
-- Software `SDL_Surface` blits into a CPU back buffer.
+- Software `SDL_Surface` blits into a CPU back buffer. Since brief 03b the drawing is `MapRenderer` (the tile bitmaps and `Map` drawing), `WorldRenderer` (entities, read-only on the simulation) and `EntityRenderer`/`EntityRendererFactory`, all in `bitriot_core`; the simulation holds no bitmap.
 - `SDL_UpdateTexture` copies it to a streaming texture, which is shown with `RenderCopy` and letterboxing (MickSDLRenderer.cpp:154-183).
 - SDL_ttf (InfoPanel) and SDL_image for PNG.
 
@@ -251,7 +256,7 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
 
 - SDL_mixer, `Mix_OpenAudio(44100,…,4096)`, WAV only, loaded lazily on first play. There is no music and no MIDI.
 - Sounds are triggered from sim code: entity constructors, `explode`, collisions.
-- `MickBaseSound::setBaseInstance` lets a null backend be swapped in to mute playback.
+- `MickBaseSound::getInstance()` returns the installed backend (`setBaseInstance`, called by `MickSDLSound` and the test `NullSound`) or, since brief 03b, a built-in silent one, so it is never null and `bitriot_sim` does not link SDL_mixer. A backend that is destroyed unregisters itself.
 
 **Threads:** none.
 
@@ -280,18 +285,18 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
 
 - ~~A per-round seed or PRNG object.~~ Done by brief 02: `GameSettings::setRoundSeed()` / `pickRoundSeed()` (03a: the reseed itself moved into `Simulation::start()`), harness `setRoundSeed()`, `BITRIOT_TEST_SEED` as the base seed.
 - ~~A state-hash function.~~ Done by 03a: `Simulation::stateHash()`.
-- An input-injection path. `processKeyboardInput` hard-wires the `GameRunningSDLInput` singleton. (Brief 04a.)
+- An input-injection path. `InputHandler::applyInput` hard-wires the `GameRunningSDLInput` singleton. (Brief 04a.)
 - ~~A headless `GameEngine` tick; the harness duplicated the spawn positions and seeded no blocks.~~ Done by 03a: the harness starts rounds with `Simulation::start()` and steps `Simulation::step()`, the code `GameEngine` runs. It defaults to 0% blocks so older scenario tests keep open ground. `GameEngine` itself still cannot run headlessly (renderer, `InfoPanel`, menu), but it is now only glue around `Simulation`.
 - Two sims in one process, which the singletons rule out.
-- A sim without bitmaps: it still needs `EntityRendererFactory` surfaces, because `incAnimFrame` calls `getNumFrames` (GameEntity.cpp:358-368).
+- ~~A sim without bitmaps.~~ Done by brief 03b: `GameEntity::incAnimFrame` reads `EntityAnim::frameCount()` (a table in `src/EntityAnim.cpp`, kept in agreement with the bitmaps by `RenderSideTest`), `Map` has no surfaces, and the harness creates no surface. `bitriot_sim_tests` links `bitriot_sim` alone and plays real rounds.
 
 ## 11. Other surprises
 
 - **Map-resize bug.**
-  - `applyMapDimensionsIfChanged()` rebuilds `Map` before `Simulation::start()` (via `resetGame()`) deletes the old EntityManager.
+  - `applyMapDimensionsIfChanged()` rebuilt `Map` before `Simulation::start()` (via `resetGame()`) deleted the old EntityManager. *(Since brief 03b `Simulation::start()` tears the old round down first and then resizes the Map itself; the engine only resizes the window afterwards. The generation guard below still makes the order harmless.)*
   - The old `BlockEntity` destructors then call `setBlockAt(x,y,false)` with the *old* map's tile coordinates against the *new* map's array and stride. That can overwrite the new map's walls with EMPTY (an old block at (8,3) hits the east wall of a 9x7 map), or write past the end of the array if the map shrank. *(Correction to the earlier wording, which blamed "the wrong stride": the stride is the new one; the coordinates are the old ones.)*
   - *Fixed by brief 01:* `Map` has a generation counter bumped by every `init()`. `BlockEntity` remembers the generation it was placed in and its destructor skips the write if the map has since been rebuilt.
-- **ESC/quit** is local: it throws `InputException` and flips this machine to the scoreboard (GameEngine.cpp:166-172).
+- **ESC/quit** is local: it throws `InputException` and flips this machine to the scoreboard (`GameEngine::stepTick`: `InputHandler::applyInput()` throws, the catch notes the quit).
 - **`GameSettings::setNumberOfPlayers`** keeps existing slots. `InputHandler::setPointers` writes keyboard assignments back into `GameSettings` (InputHandler.cpp:106).
 - **Debug logging** is compiled in by default (the default build type is Debug), and `MickLogger` writes debug output to `cout` every frame.
 - **`Map::~Map`** uses `delete` rather than `delete[]` (Map.cpp:122).
@@ -300,7 +305,7 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
 
 **`m_currentAnimState` is sim state, not render state.** It drives movement (PlayerCharacterEntity.cpp:741; SimpleMovingEntity.cpp:90-92), and `SimpleBrain` holds a reference to it (`rAnimState`). Only `m_currentAnimFrame` and `m_animCounter` are render-only.
 
-**A second SDL-surface coupling.** `Map::init(SDL_Surface*)` (Map.cpp:37, ~85-92) loads BMPs and converts them against the primary surface. Together with `EntityRendererFactory`'s frame counts, this is why the sim currently needs bitmaps.
+**A second SDL-surface coupling** *(removed by brief 03b)*. `Map::init(SDL_Surface*)` loaded BMPs and converted them against the primary surface, which, with `EntityRendererFactory`'s frame counts, is why the sim needed bitmaps. `Map::init()` now builds the layout only (and `Map::resize()` does so when the size changes, called by `Simulation::start()`), and `MapRenderer::init(surface)` loads the tile pictures.
 
 **The sim reads `GameSettings` all the time.** Examples:
 

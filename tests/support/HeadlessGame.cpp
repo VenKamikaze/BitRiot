@@ -6,8 +6,10 @@
 #include <stdexcept>
 
 #include "AIGameView.h"
+#include "DataReader.h"
+#include <filesystem>
+#include <fstream>
 #include "EntityMessageQueue.h"
-#include "EntityRendererFactory.h"
 #include "GameOverTimer.h"
 #include "GameSettings.h"
 #include "Map.h"
@@ -20,7 +22,6 @@ namespace bitriot_test
 
 namespace
 {
-SDL_Surface* g_surface = nullptr;
 NullSound* g_sound = nullptr;
 } // namespace
 
@@ -51,45 +52,34 @@ void NullSound::playSound(std::string fileName)
 
 void HeadlessEnvironment::SetUp()
 {
-  // SDL_Init(0) initialises no subsystem at all: surfaces are pure CPU memory
-  // and need neither video nor a window. This is what makes the harness usable
-  // on a headless CI box.
-  if (SDL_Init(0) != 0)
+  // The simulation reads data/*.txt relative to the working directory, and
+  // DataReader answers 1 (or "") for a file it cannot open or a constant it cannot
+  // find, so a test run from the wrong directory would not fail: it would play with
+  // 1s. Refuse to start instead.
+  for (const char* file : { "data/entity.txt", "data/player.txt", "data/audio.txt" })
   {
-    throw std::runtime_error(std::string("SDL_Init failed: ") + SDL_GetError());
+    std::ifstream in(file);
+    if (!in.good())
+    {
+      std::cerr << "[bitriot] cannot read " << file << " from " << std::filesystem::current_path().string()
+                << ".\n[bitriot] Run the tests from the repository root, or from a build directory "
+                   "that has the data/ link (building any test target creates it)." << std::endl;
+      std::exit(2);
+    }
   }
 
-  // Dimensions are irrelevant - this surface is only ever used as a *format*
-  // reference for SDL_MapRGB and blit conversion, never rendered to.
-  g_surface = SDL_CreateRGBSurface(0, 640, 480, 32, 0, 0, 0, 0);
-  if (g_surface == nullptr)
-  {
-    throw std::runtime_error(std::string("SDL_CreateRGBSurface failed: ") + SDL_GetError());
-  }
-
-  // Must exist before any entity is constructed: entity ctors call
-  // GameSound::playSound(), which dereferences MickBaseSound::getInstance().
+  // Must exist before any entity is constructed so the sounds they make are
+  // recorded. (Without one the simulation plays into a built-in silent default.)
   g_sound = new NullSound();
 
-  Map::getInstance()->init(g_surface);
-
-  // Loads every entity bitmap. Throws if an asset is missing, which is the
-  // clearest possible signal that the working directory is wrong.
-  EntityRendererFactory::getInstance()->initSurfaces(g_surface);
+  // The static map (walls and pillars); a round resizes it itself.
+  Map::getInstance()->init();
 }
 
 void HeadlessEnvironment::TearDown()
 {
   // Deliberately leaks g_sound: the game's singletons (EntityFactory, GameSound)
-  // may still hold references and are themselves never torn down. Freeing the
-  // surface is likewise skipped - Map and every EntityRenderer hold surfaces
-  // derived from it and outlive this call.
-  SDL_Quit();
-}
-
-SDL_Surface* HeadlessEnvironment::surface()
-{
-  return g_surface;
+  // may still hold references and are themselves never torn down.
 }
 
 NullSound* HeadlessEnvironment::sound()
@@ -148,6 +138,8 @@ void HeadlessGameTest::setRoundSeed(uint64_t seed)
 
 void HeadlessGameTest::SetUp()
 {
+  m_dataErrorsAtStart = DataReader::getInstance()->errorCount();
+
   // MickLogger's DEBUG level is compile-time enabled in Debug builds and is
   // extremely chatty. Swallow std::cout for the duration of the test; cerr is
   // left alone so warnings and errors still surface, and GoogleTest's own
@@ -182,6 +174,16 @@ void HeadlessGameTest::TearDown()
   }
 
   m_sim.reset();
+
+  // A data file that could not be read, or a constant that is not in its file,
+  // answered a default instead of the real value. That is never what a test means.
+  DataReader* data = DataReader::getInstance();
+  if (data->errorCount() != m_dataErrorsAtStart)
+  {
+    ADD_FAILURE() << (data->errorCount() - m_dataErrorsAtStart)
+                  << " DataReader lookup(s) failed during this test and returned a default; the last was: "
+                  << data->lastError();
+  }
 
   if (m_savedCout != nullptr)
   {
@@ -218,7 +220,7 @@ void HeadlessGameTest::resetSingletons()
 
   // Rebuilds the static wall/pillar layout at the current size and clears any
   // blocks a previous test seeded.
-  Map::getInstance()->init(HeadlessEnvironment::surface());
+  Map::getInstance()->init();
 
   // Drops EntityInfo left over from a previous test. DynamicMap's constructor
   // does this too, but a test that never calls startRound() would otherwise
@@ -270,7 +272,7 @@ void HeadlessGameTest::setMapSize(int width, int height)
   std::GameSettings::getInstance()->setMapHeight(height);
   Map::MAP_WIDTH = width;
   Map::MAP_HEIGHT = height;
-  Map::getInstance()->init(HeadlessEnvironment::surface());
+  Map::getInstance()->init();
   AIGameView::getInstance()->setMapSize(width, height);
 }
 

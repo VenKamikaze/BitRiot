@@ -81,7 +81,8 @@ inline std::string trimmed(const std::string& s)
 //
 // What a text scan cannot see: `auto` initialised from a function that returns a
 // double, and implicit int <-> float conversions at a call (an int passed to a
-// float parameter). Those need an object-level check; see brief 03b's follow-up.
+// float parameter). Those are caught by the object-level check on the compiled
+// bitriot_sim archive (tests/SimLibraryTest.cpp).
 inline std::vector<std::string> floatingPointLines(const std::string& source)
 {
   static const std::regex floating(

@@ -6,9 +6,11 @@
 
 #include "support/HeadlessGame.h"
 
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <new>
+#include <thread>
 
 #include "AIGameView.h"
 #include "BlockEntity.h"
@@ -118,7 +120,7 @@ TEST_F(RoundHygieneTest, GameOverTimerIgnoresWallClockTime)
 
   // Real time passing without sim ticks must not move the countdown: the sim
   // clock only advances when the loop passes a new tick number to advance().
-  SDL_Delay(50);
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
   EXPECT_FALSE(timer->getTimerCompleted(clock));
 
   for (int i = 1; i < n; i++)

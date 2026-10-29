@@ -6,11 +6,13 @@
 #define _GAMEENTITYCLASS
 
 
-#include "EntityRendererFactory.h"
+#include "EntityAnim.h"
+#include "EntityEnum.h"
 #include "EntityMessageQueue.h"
 #include <assert.h>
 #include "GameSound.h"
 #include "Fixed.h"
+#include "Map.h"
 #include "StateHash.h"
 
 class GameEntity
@@ -98,6 +100,16 @@ class GameEntity
     {
       return m_groupType;
     }
+    // Which sprite-sheet row (EntityAnim::ANIM_STATE) and column the entity is
+    // showing. The renderer reads these; only the simulation changes them.
+    inline int animState() const
+    {
+      return m_currentAnimState;
+    }
+    inline int animFrame() const
+    {
+      return m_currentAnimFrame;
+    }
 
     // Where the sprite's top-left corner is drawn on the play field, in pixels.
     // An offset of -1..+1 is half a tile either side of the tile's origin; the
@@ -138,9 +150,10 @@ class GameEntity
     // virtual functions that don't always need overriding
     virtual void moveInDirection(DIRECTION d); // returns false if can't move completely in direction
 
-    EntityRenderer * getEntityRenderer(); // gets animation surface pointer from factory
+    // Advances the render-bookkeeping animation frame, wrapping at the number of
+    // frames the type's sprite sheet has (EntityAnim::frameCount, a table: the
+    // simulation needs no bitmaps). Drawing an entity is WorldRenderer's job.
     virtual void incAnimFrame();
-    bool render(SDL_Surface* dest); // renders entity to destination surface
 
     // Feeds this entity's simulation state into the state hash (see the "State
     // hash specification" in Simulation.h): the fields below that every entity

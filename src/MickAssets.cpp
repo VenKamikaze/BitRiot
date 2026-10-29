@@ -33,7 +33,16 @@ string MickAssets::getPortraitBitmapFilename(int playerIndex, MickAssets::Player
   }
   ss << "face.bmp";
   MickLogger::getInstance()->debug(nullptr, ss.str().c_str());
-  assert(MickAssets::checkAssetAvailable(ss.str().c_str()));
+  // The simulation's GameSettings asks for these names when it builds the roster,
+  // before any window exists, and a headless or cross-compiled build may not carry
+  // assets/ at all. So a missing portrait is a warning here, not an assert (which in
+  // a Debug build aborted the process); the menu that draws it reports its own load
+  // failure.
+  if (!MickAssets::checkAssetAvailable(ss.str().c_str()))
+  {
+    std::string message = std::string("Portrait bitmap not found: ").append(ss.str());
+    MickLogger::getInstance()->warn(nullptr, message);
+  }
   return ss.str();
 }
 

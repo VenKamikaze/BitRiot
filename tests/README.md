@@ -6,18 +6,51 @@ device, no menu system, and no stubbed-out game logic.
 ```
 cd build && cmake .. && cmake --build . -j8
 ctest --output-on-failure          # or: ./tests/bitriot_tests
+./tests/bitriot_sim_tests          # the simulation tests alone (see below)
 ```
 
-The tests run in well under a second, so there is no reason not to run them on
-every change.
+The tests run in a few seconds, so there is no reason not to run them on every
+change.
+
+There are **two test executables** (brief 03b), built from one set of simulation
+tests:
+
+| Executable | Links | Contains |
+| --- | --- | --- |
+| `bitriot_sim_tests` | `bitriot_sim` and GoogleTest only: no SDL, no RmlUi, no OpenGL | every simulation test (round lifecycle, AI, win conditions, fixed-point maths, `Simulation`, the state hash, the guards, `Map`, the sound and rumble seams) |
+| `bitriot_tests` | the whole game (`bitriot_core`) | the same simulation tests, plus the ones that need the game: `ScoreboardLayoutTest`, `ScoreboardRandomTest`, `FrameLoopTest`/`TickPacerTest`, `RenderSideTest` |
+
+The simulation tests are compiled once (an object library) and linked into both.
+`bitriot_sim_tests` linking at all is a proof that the simulation needs no SDL; it
+also plays real rounds, so it proves the simulation *runs* with nothing else in the
+process. Run both when you touch the simulation. A test that needs a surface, a
+renderer, RmlUi or a device belongs in `CORE_TEST_SOURCES` in `tests/CMakeLists.txt`.
+
+**Without the game's dependencies:** configure with `-DBITRIOT_BUILD_GAME=OFF` and
+CMake never looks for SDL2, SDL2_mixer/ttf/image, OpenGL or RmlUi and builds only
+`bitriot_sim` and `bitriot_sim_tests` (GoogleTest is still needed). That is the
+configuration for a headless, Emscripten or cross-compiled build, and it was checked
+in an environment where those packages cannot be found.
+
+**Where the tests run from.** The simulation reads `data/*.txt` relative to the
+working directory. Building any test target (or `BitRiot`) creates `data` and
+`assets` links in the build directory (the `bitriot_runtime_links` target), so
+`./tests/bitriot_sim_tests` works from `build/` after building only that target;
+`ctest` runs from the source root. The harness refuses to start if
+`data/entity.txt`, `player.txt` or `audio.txt` cannot be read, and **fails any test
+during which a `DataReader` lookup failed** (a missing constant or file answers `1`
+or `""` in the game, which used to make a wrong working directory look like a few
+odd failures). The check lives in `HeadlessGameTest`, so a plain `TEST` (no fixture) is not covered by it.
+
+`NoAssetsTest` changes the working directory and makes a directory under the system temp dir holding a *copy* of `data/` (not a symlink, which needs privileges on Windows); its name includes the process id and the clock, because `getpid()` is constant under Emscripten. `TearDown()` restores the directory and removes the copy even if an assertion failed; only an abort (the old portrait `assert`) can leave a `bitriot_noassets_*` directory behind.
 
 ## How it works
 
-BitRiot's simulation touches SDL only through *surfaces* — `Map::init()` and
-`EntityRendererFactory::initSurfaces()` load bitmaps and colour-convert them
-against a "primary" surface, and nothing in the entity/AI/collision code needs
-a window or a renderer. A bare `SDL_CreateRGBSurface()` after `SDL_Init(0)`
-satisfies all of it.
+BitRiot's simulation touches no SDL at all (since brief 03b it is the
+`bitriot_sim` library: no bitmaps, no surfaces, no SDL header; the animation frame
+counts are a table, `Map` is only a layout, and sound and rumble go through
+interfaces with silent defaults). So the harness needs no window, no renderer and
+no surface: the process needs only a recording sound backend and a data directory.
 
 That is what makes this harness cheap: nothing is mocked, and tests exercise
 the same code the game loop calls. Since brief 03a that includes round setup and
@@ -34,17 +67,20 @@ element positions and sizes. That is what `support/RmlLayoutHarness.*` provides,
 and it turns "are the scoreboard columns aligned?" into an assertion instead of
 a screenshot.
 
-Two things do have to be supplied:
+Two things are supplied:
 
-- **A sound backend.** Entity constructors call `GameSound::playSound()`, and
-  `MickBaseSound::getInstance()` would otherwise be null. `NullSound` registers
-  itself as the backend and records requested sounds (see `soundLog()`) instead
-  of playing them.
+- **A recording sound backend.** Entity constructors call `GameSound::playSound()`.
+  With no backend installed that goes to a built-in silent default
+  (`MickBaseSound::getInstance()` is never null), but `NullSound` registers itself
+  as the backend and records requested sounds (see `soundLog()`), so a test can
+  assert that an action made a noise.
 - **Singleton resets.** See below.
 
-CMake was restructured so this could work: everything except `main.cpp` now
-builds into a `bitriot_core` static library, which both `BitRiot` and
-`bitriot_tests` link. The whole project is pinned to C++17 (`CMAKE_CXX_STANDARD`, extensions
+CMake was restructured so this could work: the simulation builds into a
+`bitriot_sim` static library (its sources are the `SIM_SOURCES` list in the
+top-level `CMakeLists.txt`), everything that draws, plays, reads a device or shows a
+menu builds into `bitriot_core`, which links `bitriot_sim`, and `BitRiot` is just
+`main.cpp` plus those. The whole project is pinned to C++17 (`CMAKE_CXX_STANDARD`, extensions
 off, in the top-level `CMakeLists.txt`) so every compiler agrees; GoogleTest ≥ 1.17
 requires it anyway.
 
@@ -72,7 +108,7 @@ Useful fixture members:
 | --- | --- |
 | `configurePlayers(n)` | Set roster size; resets every slot to AI, own team, no device |
 | `setTeams({...})` | 0-based alliance team per slot |
-| `setMapSize(w, h)` | Resize map (must be odd); rebuilds `Map` and `AIGameView`. `Simulation::start` will not do this for you |
+| `setMapSize(w, h)` | Sets the size the next `startRound()` uses (GameSettings, the `Map` statics) and rebuilds `Map` and `AIGameView` now. `startRound()` / `Simulation::start` give the Map the config's size themselves since brief 03b, so this is only needed to prepare a Map before the round (a test of what a resize does to the old round) |
 | `setBlockPercentage(p)` | Block density of the next `startRound()`. **The harness default is 0**, not the game's 55, so scenario tests keep open ground; use the game's value in tests about real rounds |
 | `startRound()` | `Simulation::start()` with a `MatchConfig` built from `GameSettings`: a character per slot at its fixed start tile, the pool, blocks. Call twice to test "play again" |
 | `sim()` | The test's `Simulation` (`step()`, `tick()`, `roundOver()`, `winner()`, `stateHash()`, ...). `em()` and `pool()` are its entity manager and spawning pool |
@@ -134,7 +170,8 @@ hand it one.
 
 Never call `std::srand`/`std::rand` in a test: they no longer influence the sim.
 
-Do a seed sweep before trusting a new test:
+Do a seed sweep before trusting a new test (and run it for `bitriot_sim_tests` too
+when you touched the simulation):
 
 ```bash
 for s in $(seq 1 200); do BITRIOT_TEST_SEED=$s ./tests/bitriot_tests >/dev/null 2>&1 || echo "seed $s"; done
@@ -221,7 +258,66 @@ offset and velocity, so there is no floating point in sim code and
   compiles and silently truncates to 0. `-Wall` does not flag it; the library is
   built with `-Wfloat-conversion`, which does, so keep the build free of those
   warnings. The source guard cannot see an `auto` that carries a double, or an
-  int converted to a float parameter either.
+  int converted to a float parameter either; `SimLibraryTest`'s object-level check
+  (it disassembles `libbitriot_sim.a` and fails on any floating-point instruction)
+  does.
+
+## The simulation library and its guards
+
+`SimLibraryTest.cpp` and `FixedPointGuardTest.cpp` keep `bitriot_sim` what it is
+meant to be. Both read **the `bitriot_sim` target's own source list**, which CMake
+writes to `bitriot_sim_sources.txt` in the build directory at generate time
+(`BITRIOT_SIM_SOURCES_FILE`), so "the simulation" cannot drift from what is built.
+The scan covers those sources and every project header they include.
+
+- **No floating point in the text** (`FixedPointSourceGuardTest`): there is no
+  allowlist any more. A file that needs a float belongs in `bitriot_core`. Until brief
+  04a it also reads `InputHandler.{h,cpp}` and `GameEngine.{h,cpp}`
+  (`coreFilesThatStillMutateTheSimulation()` in `support/SimSources.h`), which are core
+  files that still move players and drive the tick.
+- **No floating point in the machine code** (`TheCompiledSimulationHoldsNoFloatingPointInstruction`):
+  `objdump -d` of the archive, checked for SSE/AVX scalar and packed float
+  arithmetic, conversions and x87 (x86-64) or the listed float mnemonics (aarch64: the
+  arithmetic, compare, convert and round instructions, and `fmov` only with an
+  immediate, because GCC also uses `fmov dN, xM` to move integers; untested against
+  real GCC aarch64 output).
+  It sees what the text scan cannot (`auto` carrying a double, an int converted at a
+  float parameter, a float hidden by a macro). It needs binutils' `objdump` and
+  fails, not skips, if it is missing or the architecture has no patterns.
+- **No SDL, RmlUi or OpenGL in the source** (`TheSimulationSourcesNameNoSdlRmlUiOrOpenGL`):
+  no such `#include`, none of the project's own render/device/UI headers, no SDL
+  type or function.
+- **No SDL library loaded** (`TheSimulationOnlyExecutableHasNoSdlOrUiLibraryLoaded`):
+  in `bitriot_sim_tests`, on Linux.
+- The seams: sound falls back to a silent default and a destroyed backend
+  unregisters; rumble goes through `RumbleSink` (integer strength, discarding default);
+  the animation frame counts are `EntityAnim::frameCount()`.
+
+## The render side
+
+`RenderSideTest.cpp` (core executable): the frame counts in `src/EntityAnim.cpp`
+agree with every loaded bitmap (all types, all teams, all male/female player
+sheets); every frame the simulation can show is drawn and the next is not; drawing
+the world twice gives the same picture and leaves `stateHash()` alone; and
+`TheWorldIsDrawnPixelForPixelAsItWasBeforeTheSplit` pins the picture of three
+rounds at five ticks each (a digest of the blitted world, no text). Those digests
+were taken from the code *before* brief 03b, so they show the renderer is
+unchanged. Regenerate with
+`BITRIOT_PIXEL_DUMP=1 ./tests/bitriot_tests --gtest_filter='RenderSideTest.TheWorldIs*'`
+only after checking a deliberate change to a bitmap or to the drawing order.
+
+## The frame loop
+
+`FrameLoopTest.cpp` (core executable) drives `TickPacer` and `FrameLoop` with a fake
+clock: no SDL, no real time. It covers N x 33 ms giving N steps, time that is not a
+whole tick carrying over, a slow frame catching up, a long gap capped (5 ticks),
+`canStep()` holding ticks back without blocking events or drawing and the held time
+being paid back only up to the cap, `extraTicks()` (up to 2 more steps a frame, gated
+like any other, not touching the backlog), a frame that starts a round not owing its
+set-up time, nothing stepping outside a round, a step that
+ends the round stopping the frame's other steps, the order (events, steps, one
+render), the sleep hint, and a clock that wraps. `GameEngine`'s own part (the hooks)
+cannot run headlessly: see the known gaps.
 
 ## Singleton state — read this before adding tests
 
@@ -260,13 +356,17 @@ rebuilt before the old `EntityManager` goes) skips its write into the new map.
 
 - `GameEngine` cannot be driven headlessly (it needs the renderer, `InfoPanel`
   and the menu). Since 03a the world setup and the tick live in `Simulation`,
-  which the tests do drive, so what is left unchecked is the glue: that
-  `GameEngine::resetGame()` builds its `MatchConfig` from `GameSettings` and
-  hands it to `Simulation::start()`, that `runEngine()` applies input, calls
-  `step()` and loads the scoreboard when `roundOver()`, and the scoreboard game
-  length (`Simulation::tick()` x `NORMAL_TICKS_SPEED`). These were checked by
-  hand (brief 03a's Outcome: a scratch autoplay hook under `xvfb-run`, which
-  compared the engine's per-tick state hashes with the harness's).
+  which the tests do drive, and since 03b the pacing lives in `FrameLoop`, which
+  the tests drive with a fake clock, so what is left unchecked is the glue: that
+  `GameEngine::resetGame()` builds its `MatchConfig` from `GameSettings`, hands it to
+  `Simulation::start()` and then resizes the window to the Map; that `stepTick()`
+  applies input, calls `step()` and notes the round end (or ESC); that
+  `renderFrame()` loads the scoreboard on the round's last frame and ends a round
+  on ESC when `canStep()` held the tick back; and the scoreboard game length
+  (`Simulation::tick()` x `NORMAL_TICKS_SPEED`). These were checked by hand
+  (briefs 03a and 03b: a scratch autoplay hook under `xvfb-run`, which compared the
+  engine's per-tick state hashes with the harness's, and exercised ESC and a held
+  tick).
 - There is no automated AddressSanitizer job. To run one by hand, outside the
   source tree:
 
@@ -302,7 +402,7 @@ level as well as the unit ones.
 
 `runRoundToCompletion(maxFrames)` drives a round with `Simulation::step()` — win
 check at the *top* of the tick, then `pool.update()`, then `runFrame()`, exactly
-`GameEngine::runEngine()`'s order — until `roundOver()`, which is **60 ticks
+`GameEngine`'s tick order (`stepTick()`) — until `roundOver()`, which is **60 ticks
 after the end condition first holds** and after the whole of that tick (see the
 round-end semantics at the top of `src/Simulation.h`). It never asserts; it
 returns a `RoundOutcome` with `ended`, `frames`, `ticks`, `playersAlive`,
@@ -346,7 +446,8 @@ files, run, swap back.
 
 ## Coverage today
 
-246 tests across fifteen files:
+306 tests in `bitriot_tests` (258 of them also in `bitriot_sim_tests`), across the
+files below:
 
 - `WinConditionTest.cpp` — free-for-all, team and co-op round-end rules,
   including the co-op "board cleared and pool exhausted" win and the
@@ -421,11 +522,10 @@ files, run, swap back.
   searches). Where fixed-point differs from float the test says why next to the
   expected value. `BITRIOT_FIXED_DUMP=1` prints the digests for regenerating them.
 - `FixedPointGuardTest.cpp` - no `float`, `double`, floating literal, `<cmath>` or
-  libm call in any `src/` file that is not on its allowlist (each entry has a
-  reason; a new file counts as simulation code until listed). The scan, and the
-  line-level exception for the rumble call in `PlayerCharacterEntity.cpp`
-  (removed by brief 04b), are tested too. Shared scanning helpers are in
-  `support/SourceScan.h`.
+  libm call in any file of the `bitriot_sim` target or a header it includes (no
+  allowlist), and that the guard reads the simulation and not the renderer. The scan
+  itself is tested too. Shared scanning helpers are in `support/SourceScan.h` and
+  `support/SimSources.h`.
 
 - `SimulationTest.cpp` - `Simulation`, `MatchConfig` and the state hash (brief
   03a; suites `SimulationTest`, `SingletonResetTest`, `StateHashTest`,
@@ -442,7 +542,22 @@ files, run, swap back.
   per-type counters; not `m_currentAnimFrame`, the cosmetic RNG or local
   devices); the FNV-1a vectors; and golden digests of four pinned rounds.
 
-Not covered: rendering (rasterisation), input and device assignment, and
+- `SimLibraryTest.cpp` - the simulation library (brief 03b): the SDL/UI source scan,
+  the object-level floating-point scan (and the tests of both scanners), the
+  sim-only executable having no SDL library loaded, a full round with blocks, sound
+  with no backend installed, rumble through `RumbleSink`, and the animation frame
+  table (`EntityAnimTest`).
+- `MapTest.cpp` - `Map` with no surface: the layout, reads outside it are WALL,
+  writes outside it are ignored, the stride follows the built size, `resize()`
+  rebuilds only when the size changes.
+- `FrameLoopTest.cpp` (core executable) - `TickPacer` and `FrameLoop` on a fake clock.
+- `RenderSideTest.cpp` (core executable) - frame counts against the loaded bitmaps,
+  drawing is read-only, the world is pixel-for-pixel what it was before 03b.
+- `ScoreboardRandomTest.cpp` (core executable) - the scoreboard's win text draws one
+  cosmetic value and no sim value (moved out of `SimRandomTest.cpp`, which is built
+  into the simulation-only executable and cannot link the UI).
+
+Not covered: rendering (rasterisation beyond the pinned digests), the HUD text, input and device assignment, and
 specific weapon behaviours and most AI behaviours. Input would need real refactoring to test;
 weapon and AI behaviour is testable with this harness today and is the obvious
 next area to extend. The other RmlUi menus (`playerselect.rml`,

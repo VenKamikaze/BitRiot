@@ -29,7 +29,6 @@
 
 #include "GameOverTimer.h"
 #include "GameSettings.h"
-#include "RmlUI/binders/ScoreBoardBinder.h"
 #include "SimRandom.h"
 
 namespace bitriot_test
@@ -342,22 +341,6 @@ TEST_F(SimRoundTest, ADamageEffectDrawsOneCosmeticValueAndNoSimValue)
 
   EXPECT_EQ(SimRandom::sim().nextU32(), simBefore.nextU32());
   cosmeticBefore.nextU32(); // the one frame pick
-  EXPECT_EQ(SimRandom::cosmetic().nextU32(), cosmeticBefore.nextU32());
-}
-
-TEST_F(SimRoundTest, TheScoreboardWinTextDrawsOneCosmeticValueAndNoSimValue)
-{
-  configurePlayers(2);
-  useTestMap();
-  startRound();
-
-  SimRandom simBefore = SimRandom::sim();
-  SimRandom cosmeticBefore = SimRandom::cosmetic();
-
-  std::ScoreBoardBinder::mapScoreBoardData(player(1), em().getRoundPlayerRoster(), 1);
-
-  EXPECT_EQ(SimRandom::sim().nextU32(), simBefore.nextU32());
-  cosmeticBefore.nextU32();
   EXPECT_EQ(SimRandom::cosmetic().nextU32(), cosmeticBefore.nextU32());
 }
 

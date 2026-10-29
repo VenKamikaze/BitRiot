@@ -23,7 +23,15 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
 
     void setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerCharacters, DynamicMap * dynamicMap, InfoPanel * panel);
 
-    void processKeyboardInput();
+    // Reads pending device and window events into the held/released key and pad
+    // state (the quit key, a controller plug, the join selector included). The frame
+    // loop calls it once per frame, whether or not a tick is about to run. Returns
+    // true if any event was read.
+    bool pumpEvents();
+    // Applies the held/released input to the human players, once per stepped tick.
+    // Throws InputException(GOT_QUIT) if the quit key was seen. (Brief 04a turns
+    // this into a sampled bitmask handed to Simulation::step.)
+    void applyInput();
     int getPlayerIdForKey(KEY k); // get the playerId associated with this key.
     int getPlayerIdForAction1Button(KEY k); // get player id for action1 button press, or -1 if no match
     int getPlayerIdForAction2Button(KEY k); // get player id for action1 button press, or -1 if no match
@@ -49,7 +57,7 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
     // borrow without risking collision with a real keyboard player's set.
     // Each controller-attached player instead gets a private per-player
     // button table here, written by GameRunningSDLInput::setControllerInput
-    // and read by processKeyboardInput - so any number of simultaneous pads
+    // and read by applyInput - so any number of simultaneous pads
     // can drive input with no shared-state collision risk.
     void setControllerButtonState(int playerId, ButtonName button, bool down);
 

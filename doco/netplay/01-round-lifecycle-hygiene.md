@@ -93,8 +93,8 @@ The 200-seed sweep has 1 failing seed (62) both before and after: `FullRoundTest
 **Follow-ups**
 
 - Brief 03a's `start` list says it must reset "`EntityFactory` ids and `GameOverTimer`". Both are now reset by `EntityManager`'s constructor. 03a will need to keep that behaviour when `Simulation` takes over construction.
-- `Map::staticTileAt`/`setStaticTileAt` still have no bounds check. The generation guard removes the one known out-of-range writer; any other caller is still unprotected.
-- During the countdown the sim still runs, and the round-end tick still runs input, pool and `runFrame` after flipping to `MENU_RUNNING` (code-facts §1, §12). Unchanged; belongs with 03b.
+- `Map::staticTileAt`/`setStaticTileAt` still have no bounds check. The generation guard removes the one known out-of-range writer; any other caller is still unprotected. *(Done by 03b: out-of-range reads are WALL and writes are ignored.)*
+- During the countdown the sim still runs, and the round-end tick still runs input, pool and `runFrame` after flipping to `MENU_RUNNING` (code-facts §1, §12). Unchanged; belongs with 03b. *(03b: nothing steps after the round-ending step, so the "round-end tick runs input after the flip" part is moot; the countdown still runs the sim, on purpose.)*
 - (Done in the fix round) `~GameTimer` is now protected and `~GameOverTimer` is an empty private destructor, so nothing can delete the singleton; the old recursive destructor is gone.
 - **03a: two per-round tick counters.** `GameEngine::m_gameTicks` and `GameTimer::currentTick` both count sim ticks. `Simulation` should own one tick and derive both the scoreboard length and the countdown from it.
 - **03a: countdown semantics.** "60 ticks" assumes the end condition keeps holding. `GameTimer::advance()` latches on the first tick it holds; if it stops holding and later holds again, the round ends on that later tick with no fresh countdown. This is the same as the old behaviour and was deliberately left alone (out of scope: "changing when the end condition is evaluated").

@@ -20,6 +20,9 @@ class MickBaseSound
     MickBaseSound();
     virtual ~MickBaseSound();
 
+    // The installed backend, or - if none is installed - a built-in silent one, so
+    // simulation code can play sounds without checking and without linking SDL_mixer.
+    // Never null.
     static MickBaseSound* getInstance();
 
     virtual void initAudio() = 0;

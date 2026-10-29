@@ -45,6 +45,10 @@ class GameRunningSDLInput : public MickBaseInput, public std::enable_shared_from
     int getKeyboardSetForActionKey(SDL_Keycode key); // keyboard-set index for an action keypress, or -1 (player-select keyboard-join)
 
     void updateEventQueue();
+    // How many SDL events updateEventQueue() has polled since the last call to this
+    // (which resets it). Lets the engine tell a frame where something may have
+    // changed on screen (a join indicator, say) from one where nothing did.
+    int takeEventCount() { int n = m_eventsPolled; m_eventsPolled = 0; return n; }
 
     static std::shared_ptr<GameRunningSDLInput> getInstance();
     static bool rumbleController(SDL_JoystickID joystickID, float strength, Uint32 length);
@@ -63,6 +67,7 @@ class GameRunningSDLInput : public MickBaseInput, public std::enable_shared_from
 
   private:
     SDL_Event event;
+    int m_eventsPolled = 0;
     std::set<KEY> keysCurrentlyDown;
     std::set<KEY> keysRecentlyReleased;
 

@@ -29,6 +29,7 @@ DataReader * DataReader::getInstance()
 
 bool DataReader::displayAnyErrors()
 {
+  m_errorCount++;
   printf("Error in DataReader: %s", m_errorString.c_str());
   return true;
   /*if (m_windowHandle != NULL)

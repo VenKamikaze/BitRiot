@@ -10,7 +10,7 @@ EffectEntity::EffectEntity(int uniqueID, EntityType effectType, int atX, int atY
   m_type = effectType;
   m_origAnimCounter = DataReader::getInstance()->getIntFromFile("BASE_EFFECT_ANIM_COUNT", "data/entity.txt");
 
-  m_currentAnimState = EntityRenderer::IDLE;
+  m_currentAnimState = EntityAnim::IDLE;
   m_currentAnimFrame = 0;
 
   switch (m_type)
