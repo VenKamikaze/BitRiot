@@ -17,8 +17,8 @@ tests:
 
 | Executable | Links | Contains |
 | --- | --- | --- |
-| `bitriot_sim_tests` | `bitriot_sim` and GoogleTest only: no SDL, no RmlUi, no OpenGL | every simulation test (round lifecycle, AI, win conditions, fixed-point maths, `Simulation`, the state hash, the guards, `Map`, the sound and rumble seams) |
-| `bitriot_tests` | the whole game (`bitriot_core`) | the same simulation tests, plus the ones that need the game: `ScoreboardLayoutTest`, `ScoreboardRandomTest`, `FrameLoopTest`/`TickPacerTest`, `RenderSideTest` |
+| `bitriot_sim_tests` | `bitriot_sim` and GoogleTest only: no SDL, no RmlUi, no OpenGL | every simulation test (round lifecycle, AI, win conditions, fixed-point maths, `Simulation`, the state hash, `step(inputs)` and its apply rules, the guards, `Map`, the sound and rumble seams) |
+| `bitriot_tests` | the whole game (`bitriot_core`) | the same simulation tests, plus the ones that need the game: `ScoreboardLayoutTest`, `ScoreboardRandomTest`, `FrameLoopTest`/`TickPacerTest`, `RenderSideTest`, `InputSamplerTest` (the sampler and the key/pad routing) |
 
 The simulation tests are compiled once (an object library) and linked into both.
 `bitriot_sim_tests` linking at all is a proof that the simulation needs no SDL; it
@@ -111,7 +111,7 @@ Useful fixture members:
 | `setMapSize(w, h)` | Sets the size the next `startRound()` uses (GameSettings, the `Map` statics) and rebuilds `Map` and `AIGameView` now. `startRound()` / `Simulation::start` give the Map the config's size themselves since brief 03b, so this is only needed to prepare a Map before the round (a test of what a resize does to the old round) |
 | `setBlockPercentage(p)` | Block density of the next `startRound()`. **The harness default is 0**, not the game's 55, so scenario tests keep open ground; use the game's value in tests about real rounds |
 | `startRound()` | `Simulation::start()` with a `MatchConfig` built from `GameSettings`: a character per slot at its fixed start tile, the pool, blocks. Call twice to test "play again" |
-| `sim()` | The test's `Simulation` (`step()`, `tick()`, `roundOver()`, `winner()`, `stateHash()`, ...). `em()` and `pool()` are its entity manager and spawning pool |
+| `sim()` | The test's `Simulation` (`step()` / `step(inputs)`, `tick()`, `roundOver()`, `winner()`, `stateHash()`, `inputState(slot)`, ...). `em()` and `pool()` are its entity manager and spawning pool |
 | `runFrames(n)` | `n` bare `EntityManager::runFrame()` calls — AI, message queue, collisions. **No tick, no win check, no countdown, no spawning pool**: the world moves and nothing else does. Use `sim().step()` for real ticks |
 | `player(n)` | The `PlayerCharacterEntity` for playerNumber `n` (1-based; 0 is the CPU) |
 | `killPlayer(n)` | Flip the alive flag. Win-condition tests should not depend on damage numbers |
@@ -214,11 +214,17 @@ EXPECT_NE(sim().stateHash(), before);
     behind each field.
   - **The golden digests** (`PinnedRoundsKeepTheirHashes`) play four pinned rounds
     to their natural end and compare a digest of every tick's hash. They pin the
-    hash *and the way the simulation plays*.
+    hash *and the way the simulation plays*. All four are bots; a fifth pinned
+    round (`APinnedRoundWithScriptedHumanInputKeepsItsHashes`) has two humans driven
+    by scripted `TickInputs` (`support/ScriptedInput.h`), so the apply rules are
+    pinned across compilers too. It moves with the rules, the script generator or
+    the hash; regenerate it with the same `BITRIOT_HASH_DUMP=1` run.
 - **When the digests move.** Any change that alters how a seeded round plays moves
   them, whether or not the hash changed: a bot's behaviour, a rule, a number in
-  `data/*.txt`, how many random numbers a round draws, a new hashed field (and
-  brief 04a's input state). A moved digest is then expected, not a bug, but the
+  `data/*.txt`, how many random numbers a round draws, a new hashed field (brief
+  04a's per-slot input state moved all four, and the tick counts stayed the same,
+  which is how to tell a hash-only change: leave the new section out of `hashInto`
+  and the old dump comes back byte for byte). A moved digest is then expected, not a bug, but the
   commit must **say so** ("moves the golden digests: bots now ...") so a reviewer
   can tell it from a determinism fault, and a digest that moves in a commit that
   should not change play is a real regression. The schema list and the
@@ -262,6 +268,36 @@ offset and velocity, so there is no floating point in sim code and
   (it disassembles `libbitriot_sim.a` and fails on any floating-point instruction)
   does.
 
+## Input
+
+Input is two stages (brief 04a), and each is tested on its own.
+
+- **Apply** (`InputApplyTest.cpp`, both executables): scripted `TickInputs` go
+  straight into `Simulation::step(inputs)`; no SDL, no devices. The fixture
+  (`startHumans()`, `tick(slot, PlayerInput)`) makes human players on the default map
+  with no monsters. Build a `PlayerInput` from `held({...})` /
+  `heldAndReleased({...}, {...})`. **Slot is playerNumber - 1** (slot 0 is `player(1)`).
+  The rules being tested are the table at the top of `src/TickInputs.h`. One test
+  (`OnEveryInputTheOldRulesHandledWell...`) replays gestures against a copy of the old
+  `processPlayerButtons` state machine (sticky releases and all) to show that the
+  rules are unchanged apart from the documented tap rule; the script generators are in
+  `support/ScriptedInput.h` (`randomInputs`, `gestureInputs`), seeded by a small
+  generator of the tests' own, so a script is the same on every platform.
+  `Simulation::inputState(slot)` shows the held action and selection.
+- **Sample** (`InputSamplerTest.cpp`, the core executable only: the sampler is local,
+  not simulation): button events go into `InputSampler::setButton(slot, button, down)`
+  and `sample()` / `sampleTick(localSlotMask)` read them out. A tap is RELEASED with HELD
+  clear; edges are per sample and never sticky. The cadence tests use `FrameLoop` with
+  a fake clock and a sampling step hook to show a tick held back by `canStep()` (and a
+  catch-up frame) loses no press or release. `InputHandlerRoutingTest` builds an
+  `InputHandler` (no SDL events needed) around a started round and feeds
+  `keyboardEvent()` / `setControllerButtonState()` to check which key or pad button
+  drives which slot, ending with keys -> `sampleTick()` -> `sim().step()` -> a moved
+  player and a placed egg.
+- A test of an action wants a human player: `GameSettings::setPlayerAI(slot, false)`
+  before `startRound()`. `player(n)` returns null once that player is dead (its entity
+  is gone); `sim().roster()` keeps everyone.
+
 ## The simulation library and its guards
 
 `SimLibraryTest.cpp` and `FixedPointGuardTest.cpp` keep `bitriot_sim` what it is
@@ -271,10 +307,11 @@ writes to `bitriot_sim_sources.txt` in the build directory at generate time
 The scan covers those sources and every project header they include.
 
 - **No floating point in the text** (`FixedPointSourceGuardTest`): there is no
-  allowlist any more. A file that needs a float belongs in `bitriot_core`. Until brief
-  04a it also reads `InputHandler.{h,cpp}` and `GameEngine.{h,cpp}`
-  (`coreFilesThatStillMutateTheSimulation()` in `support/SimSources.h`), which are core
-  files that still move players and drive the tick.
+  allowlist any more. A file that needs a float belongs in `bitriot_core`. (Until brief
+  04a it also read `InputHandler` and `GameEngine`, which then moved players and drove
+  the tick; input is a sampled byte per slot now and they are presentation code, so that
+  list is gone. `TheGuardReadsTheSimulationAndNotTheRenderer` checks `TickInputs.h` is
+  read and the input layer is not.)
 - **No floating point in the machine code** (`TheCompiledSimulationHoldsNoFloatingPointInstruction`):
   `objdump -d` of the archive, checked for SSE/AVX scalar and packed float
   arithmetic, conversions and x87 (x86-64) or the listed float mnemonics (aarch64: the
@@ -360,13 +397,16 @@ rebuilt before the old `EntityManager` goes) skips its write into the new map.
   the tests drive with a fake clock, so what is left unchecked is the glue: that
   `GameEngine::resetGame()` builds its `MatchConfig` from `GameSettings`, hands it to
   `Simulation::start()` and then resizes the window to the Map; that `stepTick()`
-  applies input, calls `step()` and notes the round end (or ESC); that
+  samples the devices, calls `step(inputs)`, copies the selections to the `InfoPanel`
+  and notes the round end (or ESC); that
   `renderFrame()` loads the scoreboard on the round's last frame and ends a round
   on ESC when `canStep()` held the tick back; and the scoreboard game length
   (`Simulation::tick()` x `NORMAL_TICKS_SPEED`). These were checked by hand
   (briefs 03a and 03b: a scratch autoplay hook under `xvfb-run`, which compared the
   engine's per-tick state hashes with the harness's, and exercised ESC and a held
-  tick).
+  tick; brief 04a: the same hook pushed real SDL key events, logged each tick's
+  `TickInputs` bits and hash, and a harness replay of those inputs matched every
+  hash).
 - There is no automated AddressSanitizer job. To run one by hand, outside the
   source tree:
 

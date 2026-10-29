@@ -3,6 +3,8 @@
 #include <stdexcept>
 #include <string>
 
+#include "DynamicMap.h"
+
 #include "AIGameView.h"
 #include "EntityFactory.h"
 #include "EntityMessageQueue.h"
@@ -141,6 +143,7 @@ void Simulation::start(const MatchConfig& config)
   m_tick = 0;
   m_roundOver = false;
   m_roundEndedAtTick = 0;
+  m_slotInput = std::array<SlotInputState, std::GameSettings::MAX_PLAYERS>();
 
   // 2. The config becomes the settings the sim reads.
   std::GameSettings* settings = std::GameSettings::getInstance();
@@ -313,14 +316,25 @@ void Simulation::seedBlocks()
   m_entityManager->processMessageQueue();
 }
 
-void Simulation::step()
+void Simulation::step(const TickInputs& inputs)
 {
   if (!started())
   {
     throw std::logic_error("Simulation::step: call start() first");
   }
+  if (!inputs.control.empty())
+  {
+    // Control events (a join, a takeover, an unplug) arrive with brief 04b. Failing
+    // loudly beats dropping one on the floor and desyncing.
+    throw std::logic_error("Simulation::step: control events are not supported yet");
+  }
 
   m_tick++;
+
+  // Human input first (the control events, when there are any, come before it):
+  // players move and lay items here, before the win check and the AI, as the
+  // engine always applied input before its tick.
+  applyInputs(inputs);
 
   // Top of the tick: the win check and the game-over countdown. During the
   // countdown the sim keeps running (and, in the real game, an AI player can
@@ -342,6 +356,153 @@ void Simulation::step()
   {
     m_roundOver = true;
     m_roundEndedAtTick = m_tick;
+  }
+}
+
+const Simulation::SlotInputState& Simulation::inputState(int slot) const
+{
+  if (slot < 0 || slot >= std::GameSettings::MAX_PLAYERS)
+  {
+    throw std::out_of_range("Simulation::inputState: slot " + std::to_string(slot) + " is outside 0.."
+                            + std::to_string(std::GameSettings::MAX_PLAYERS - 1) + " (slot = playerNumber - 1)");
+  }
+  return m_slotInput[slot];
+}
+
+void Simulation::applyInputs(const TickInputs& inputs)
+{
+  const int slots = m_config.numPlayers() < std::GameSettings::MAX_PLAYERS ? m_config.numPlayers()
+                                                                          : std::GameSettings::MAX_PLAYERS;
+  for (int slot = 0; slot < slots; slot++)
+  {
+    applySlotInput(slot, inputs.slot[slot]);
+  }
+}
+
+// The rules table is at the top of TickInputs.h; this is that table.
+void Simulation::applySlotInput(int slot, PlayerInput in)
+{
+  // The roster is in creation order, which is slot order, and holds the dead too.
+  std::shared_ptr<PlayerCharacterEntity> player;
+  for (const std::shared_ptr<PlayerCharacterEntity>& candidate : m_entityManager->getRoundPlayerRoster())
+  {
+    if (candidate && candidate->getPlayerNumber() == slot + 1)
+    {
+      player = candidate;
+      break;
+    }
+  }
+  if (!player || !player->isAlive() || player->isControlledByAI())
+  {
+    return; // nobody here to drive: a bot, a dead player, or a slot with no player
+  }
+
+  SlotInputState& st = m_slotInput[slot];
+  DynamicMap* dynamicMap = m_entityManager->getDynamicMap();
+
+  // Ends the hold; lays the selection first if the tile is free.
+  const auto place = [&]()
+  {
+    if (dynamicMap->tileHasStaticEntity(player->getTileX(), player->getTileY()) == false)
+    {
+      player->createEntity(st.spawnSelection);
+    }
+    st.action1Down = false;
+    st.action2Down = false;
+    st.spawnSelection = BLOCK;
+  };
+
+  if (!st.action1Down && !st.action2Down)
+  {
+    // Idle: movement, then the action that begins a hold.
+    if (in.held(PlayerInput::UP))
+    {
+      player->moveInDirection(UP);
+      player->incAnimFrame();
+    }
+    else if (in.held(PlayerInput::DOWN))
+    {
+      player->moveInDirection(DOWN);
+      player->incAnimFrame();
+    }
+    else if (in.held(PlayerInput::LEFT))
+    {
+      player->moveInDirection(LEFT);
+      player->incAnimFrame();
+    }
+    else if (in.held(PlayerInput::RIGHT))
+    {
+      player->moveInDirection(RIGHT);
+      player->incAnimFrame();
+    }
+
+    if (in.held(PlayerInput::ACTION1) || in.released(PlayerInput::ACTION1))
+    {
+      st.action1Down = true;
+      st.spawnSelection = BLOCK;
+      if (in.released(PlayerInput::ACTION1))
+      {
+        place(); // the tap rule: pressed and released inside this tick
+      }
+    }
+    else if (in.held(PlayerInput::ACTION2) || in.released(PlayerInput::ACTION2))
+    {
+      st.action2Down = true;
+      st.spawnSelection = EGG1;
+      if (in.released(PlayerInput::ACTION2))
+      {
+        place(); // the tap rule
+      }
+    }
+  }
+  else if (st.action1Down)
+  {
+    if (in.held(PlayerInput::UP))
+    {
+      st.spawnSelection = BOMB;
+    }
+    else if (in.held(PlayerInput::DOWN))
+    {
+      st.spawnSelection = BLOCK;
+    }
+    else if (in.held(PlayerInput::LEFT))
+    {
+      st.spawnSelection = MINE;
+    }
+    else if (in.held(PlayerInput::RIGHT))
+    {
+      st.spawnSelection = ROCKET_SPIN;
+    }
+
+    if (in.released(PlayerInput::ACTION1))
+    {
+      place();
+    }
+  }
+  else
+  {
+    // action2Down
+    if (in.held(PlayerInput::UP))
+    {
+      st.spawnSelection = EGG3;
+    }
+    else if (in.held(PlayerInput::DOWN))
+    {
+      st.spawnSelection = EGG5;
+    }
+    else if (in.held(PlayerInput::LEFT))
+    {
+      st.spawnSelection = EGG2;
+    }
+    else if (in.held(PlayerInput::RIGHT))
+    {
+      st.spawnSelection = EGG4;
+    }
+
+    if (in.released(PlayerInput::ACTION2))
+    {
+      place();
+    }
   }
 }
 
@@ -417,6 +578,15 @@ void Simulation::hashInto(StateHasher& h) const
 
   // 6: messages still waiting
   EntityMessageQueue::getInstance()->hashState(h);
+
+  // 6b: the per-slot input state (which action each human holds, and what it has
+  // selected). Slots past the player count are always the default and left out.
+  for (int slot = 0; slot < settings->getNumberOfPlayers() && slot < std::GameSettings::MAX_PLAYERS; slot++)
+  {
+    h.flag(m_slotInput[slot].action1Down, "input.action1Down");
+    h.flag(m_slotInput[slot].action2Down, "input.action2Down");
+    h.i32(m_slotInput[slot].spawnSelection, "input.spawnSelection");
+  }
 
   // 7: the static map
   Map* map = Map::getInstance();

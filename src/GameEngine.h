@@ -50,8 +50,9 @@ class GameEngine
     // changing or going away); otherwise the overlay would be composited over the
     // previous frame's text, or left behind.
     void requestRedraw() { m_drawNeeded = true; }
-    // One tick: applies human input, then Simulation::step(), and notes when that
-    // tick ended the round (or ESC was seen). Does not draw.
+    // One tick: samples the local devices into a TickInputs, hands it to
+    // Simulation::step(), and notes when that tick ended the round (or ESC was
+    // seen). Does not draw.
     void stepTick();
     // Everything that is not a tick, once per frame: the menu, round set-up, or the
     // world and HUD. Switches to the scoreboard when stepTick() ended the round.
@@ -86,6 +87,9 @@ class GameEngine
     shared_ptr<InputHandler> m_pInputHandler = nullptr;
     //PlayerCharacterEntity* m_pPlayers[NUM_TEAMS];
     vector<shared_ptr<PlayerCharacterEntity>> m_pPlayers;
+
+    // Copies each slot's held-action selection from the sim to the InfoPanel.
+    void presentSelections();
 
     // Scoreboard game length: the simulation's tick count x NORMAL_TICKS_SPEED.
     int gameLengthSeconds() const;

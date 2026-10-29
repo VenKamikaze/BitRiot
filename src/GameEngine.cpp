@@ -105,7 +105,7 @@ void GameEngine::resetGame()
   m_pPanel = new InfoPanel(m_surface, numPlayers, genders);
   GameRunningSDLInput::getInstance()->resetInputEvents();
   initPlayerCharacters(numPlayers, genders);
-  m_pInputHandler->setPointers(m_pPlayers, m_sim.entityManager().getDynamicMap(), m_pPanel);
+  m_pInputHandler->setPointers(m_pPlayers, m_pPanel);
   m_pPanel->setPlayerPointers(m_pPlayers);
   m_drawNeeded = true; // a new HUD and (maybe) a new back buffer: nothing is drawn yet
 }
@@ -150,31 +150,25 @@ void GameEngine::stepTick()
   // One sim tick. Both the game-over countdown and the scoreboard's game
   // length count ticks, never wall-clock time.
 
-  // Human input is applied to the player entities before the step. (Brief
-  // 04a turns this into step(inputs).) ESC ends the round on this machine
-  // only: the rest of the tick still runs, as it always has.
-  bool quitRequested = false;
+  // ESC ends the round on this machine only: the rest of the tick still runs, as
+  // it always has. It is a local flag, not a sim input (and not an exception).
+  const bool quitRequested = m_pInputHandler->quitRequested();
   std::shared_ptr<PlayerCharacterEntity> winnerAtQuit;
-  try
+  if (quitRequested)
   {
-    m_pInputHandler->applyInput();
-  }
-  catch(const InputException &e)
-  {
-    if(e.gotQuit())
-    {
-      quitRequested = true;
-      winnerAtQuit = m_sim.currentWinner();
-    }
+    winnerAtQuit = m_sim.currentWinner();
   }
 
-  // The win check and game-over countdown (a timed delay during which we
-  // continue to update and runFrame for a few seconds; useful when all
-  // human players are dead but AI is still alive, in case a human player
-  // wants to take over the AI), the spawning pool and runFrame. The round
-  // is over only once this whole step has run.
-  m_sim.step();
+  // The local devices become this tick's inputs: a byte per human slot, sampled
+  // once per stepped tick (so a tick held back by canStep() loses no key press), and
+  // handed to the simulation, which applies them and then runs the tick: the win
+  // check and game-over countdown (a timed delay during which we continue to update
+  // and runFrame for a few seconds; useful when all human players are dead but AI is
+  // still alive, in case a human player wants to take over the AI), the spawning
+  // pool and runFrame. The round is over only once this whole step has run.
+  m_sim.step(m_pInputHandler->sampleTick());
   m_ticksThisFrame++;
+  presentSelections();
 
   if (m_sim.roundOver())
   {
@@ -185,6 +179,24 @@ void GameEngine::stepTick()
   {
     m_roundEnding = true;
     m_scoreboardWinner = winnerAtQuit;
+  }
+}
+
+void GameEngine::presentSelections()
+{
+  // The HUD shows the item a held action has selected, taken from the sim's per-slot
+  // state (the InputHandler no longer holds it). Nothing is shown while no action is
+  // held (PLAYER_CHARACTER is the "no selection" marker).
+  if (!m_pPanel)
+  {
+    return;
+  }
+  const int slots = (int) m_pPlayers.size() < std::GameSettings::MAX_PLAYERS ? (int) m_pPlayers.size()
+                                                                              : std::GameSettings::MAX_PLAYERS;
+  for (int slot = 0; slot < slots; slot++)
+  {
+    const Simulation::SlotInputState& st = m_sim.inputState(slot);
+    m_pPanel->setSelection((st.action1Down || st.action2Down) ? st.spawnSelection : PLAYER_CHARACTER, slot + 1);
   }
 }
 

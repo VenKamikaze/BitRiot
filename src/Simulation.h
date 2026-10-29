@@ -10,7 +10,7 @@
  *   Simulation sim;                 // one per process
  *   sim.start(config);              // build the world from a MatchConfig
  *   while (!sim.roundOver())
- *     sim.step();                   // one tick
+ *     sim.step(inputs);             // one tick; inputs is a TickInputs (TickInputs.h)
  *   uint64_t h = sim.stateHash();   // after any tick
  *
  * ONE PER PROCESS. The simulation still runs on process-lifetime singletons (Map,
@@ -41,9 +41,14 @@
  *
  * It does not touch InfoPanel, the renderer, input or the menu.
  *
- * step() RUNS EXACTLY THIS, once per tick (tick n is the n-th step since start):
+ * step(inputs) RUNS EXACTLY THIS, once per tick (tick n is the n-th step since start):
  *
  *   1. the tick counter becomes n;
+ *   1b. the tick's control events (none until brief 04b; step() throws if given any)
+ *      and then its human input: for each slot in order, that slot's PlayerInput is
+ *      applied to its player (movement, item selection, placement), using the
+ *      per-slot input state the sim keeps. The rules are the table at the top of
+ *      TickInputs.h. Bits for a slot whose player is an AI, dead or missing are ignored;
  *   2. TOP OF THE TICK: end = EntityManager::oneOrZeroPlayersRemain(pool can spawn
  *      more); over = GameOverTimer::advance(n, end). The first tick `end` holds
  *      starts a countdown of GameOverTimer::GAME_OVER_COUNTDOWN_TICKS (60) ticks;
@@ -68,12 +73,15 @@
  * round that is already over is allowed and keeps it over; nothing the first end
  * recorded changes.
  *
- * INPUT SEAM. Human input is still applied by GameEngine to the player entities
- * before it calls step(). Brief 04a replaces this with step(inputs), and adds the
- * per-slot input state to the state hash.
+ * INPUT. Nothing outside step() touches a player entity: the local layer (InputSampler,
+ * InputHandler) turns devices into a TickInputs once per stepped tick and hands it to
+ * step(inputs); a replay or a remote peer hands it the same bytes. step() with no
+ * argument is step(TickInputs()): no human pressed anything (all-AI rounds, tests).
+ * The per-slot input state (is an action held, and which item is selected) lives
+ * here, in the sim, and is part of the state hash.
  *
  * ---------------------------------------------------------------------------
- * STATE HASH SPECIFICATION (version 1)
+ * STATE HASH SPECIFICATION (version 2)
  *
  * stateHash() is the desync detector: two peers whose simulations have stepped
  * the same number of ticks from the same MatchConfig must return the same value.
@@ -82,7 +90,7 @@
  * are integers or Q16.16 `fixed_t` raw bits; nothing goes through float or double.
  * "y then x" means: for y = 0..height-1, for x = 0..width-1.
  *
- *   0. i32  STATE_HASH_VERSION (1)
+ *   0. i32  STATE_HASH_VERSION (2)
  *   1. u64  tick;  u8 roundOver
  *   2. the settings the sim reads, as GameSettings holds them:
  *        i32 mapWidth, i32 mapHeight, i32 numPlayers,
@@ -95,6 +103,8 @@
  *   6. the pending message queue: count, then front to back for each message:
  *        i32 type, ref(sender), i32 typeToCreate, teamToCreate, toX, toY, fromX,
  *        fromY, flags, offsetX, offsetY, targetX, targetY
+ *   6b. the per-slot input state (version 2; brief 04a), for slot 0..numPlayers-1:
+ *        u8 action1Down, u8 action2Down, i32 spawnSelection (an EntityType)
  *   7. the static map, y then x: u8 tile (WALL, EMPTY or BLOCK)
  *   8. the entities, count then each in entityList order (ascending id), every
  *      entity as:
@@ -166,8 +176,10 @@
  *   - local-only choices: a player's attachedController, genders, portraits;
  *   - derived or recorded results: the round roster, winner(), the block
  *     percentage after start() (its effect is in the map and entities);
- *   - the input layer's per-slot state (InputHandler's held-action and spawn
- *     selection maps). That is sim state for a human player and brief 04a adds it.
+ *   - the sampled input itself (PlayerInput bits): a tick's input is not state, it is
+ *     its effect, and the effect (a move, a hold, a placed item) is hashed;
+ *   - the device side (which keyboard set or pad drives a slot, the sampler's held and
+ *     released edges): local.
  *
  * The message queue (6) and the tile lists (9, 10) are in the hash although the
  * brief did not list the queue: a tick ends with messages still waiting (the
@@ -178,20 +190,23 @@
 #ifndef _SIMULATION_H
 #define _SIMULATION_H
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "EntityEnum.h"
 #include "EntityManager.h"
 #include "MatchConfig.h"
 #include "PlayerCharacterEntity.h"
 #include "SpawningPool.h"
+#include "TickInputs.h"
 
 class Simulation
 {
   public:
-    static const int32_t STATE_HASH_VERSION = 1;
+    static const int32_t STATE_HASH_VERSION = 2;
 
     Simulation();
     ~Simulation();
@@ -205,8 +220,10 @@ class Simulation
     void start(const MatchConfig& config);
 
     // One tick (see the top of this file). Throws std::logic_error if start() has
-    // not been called.
-    void step();
+    // not been called, or if `inputs` carries control events (brief 04b).
+    void step(const TickInputs& inputs);
+    // A tick in which no human pressed anything.
+    void step() { step(TickInputs()); }
 
     // The state hash (specification above). Valid any time after start().
     uint64_t stateHash() const;
@@ -250,6 +267,18 @@ class Simulation
 
     const MatchConfig& config() const { return m_config; }
 
+    // What the sim remembers of a slot's input between ticks: whether an action is
+    // held and which item it has selected. SLOT is playerNumber - 1 (0 to
+    // MAX_PLAYERS - 1; anything else throws std::out_of_range). Hashed. The
+    // InfoPanel is fed from this.
+    struct SlotInputState
+    {
+      bool action1Down = false;
+      bool action2Down = false;
+      EntityType spawnSelection = BLOCK; // BLOCK whenever neither action is down
+    };
+    const SlotInputState& inputState(int slot) const;
+
     // Number of Simulation objects alive in this process (0 or 1).
     static int instancesAlive();
 
@@ -259,6 +288,8 @@ class Simulation
     void checkSingletonsAreFresh() const;
     void spawnPlayers();
     void seedBlocks();
+    void applyInputs(const TickInputs& inputs);
+    void applySlotInput(int slot, PlayerInput input);
 
     std::unique_ptr<EntityManager> m_entityManager;
     std::unique_ptr<SpawningPool> m_spawningPool;
@@ -267,6 +298,7 @@ class Simulation
     bool m_roundOver = false;
     uint64_t m_roundEndedAtTick = 0;
     std::shared_ptr<PlayerCharacterEntity> m_winner;
+    std::array<SlotInputState, std::GameSettings::MAX_PLAYERS> m_slotInput;
 };
 
 #endif /* _SIMULATION_H */

@@ -172,10 +172,10 @@ void GameRunningSDLInput::setControllerInput(SDL_JoystickID joystickID, Uint8 bu
     return;
   }
 
-  int i = attachedPlayer->getID();
+  const int slot = attachedPlayer->getPlayerNumber() - 1; // the sampler's slot: playerNumber - 1
   bool pressed=state==SDL_PRESSED;
 
-  // Drive the entity directly via a private per-player button table (see
+  // Feed the slot's button straight to the input sampler (see
   // InputHandler::setControllerButtonState) instead of translating through
   // the keyboard m_keyMap/keysCurrentlyDown machinery: every KEY_ enum value
   // already corresponds to a real physical key (GameRunningSDLInput::setupKeymap),
@@ -214,7 +214,7 @@ void GameRunningSDLInput::setControllerInput(SDL_JoystickID joystickID, Uint8 bu
 
   if (matched)
   {
-    m_pInputHandler->setControllerButtonState(i, buttonName, pressed);
+    m_pInputHandler->setControllerButtonState(slot, buttonName, pressed);
   }
 }
 
@@ -232,6 +232,7 @@ void GameRunningSDLInput::updateEventQueue()
       //newEvents.push(myevent);
 
       setKeyState(myevent.key, false);
+      m_pInputHandler->keyboardEvent(myevent.key, false);
 
       //printf("keyup: %d, sdl: %d\n", myevent.key, event.key.keysym.sym);
     }
@@ -263,6 +264,7 @@ void GameRunningSDLInput::updateEventQueue()
       }
 
       setKeyState(myevent.key, true);
+      m_pInputHandler->keyboardEvent(myevent.key, true);
     }
     else if (event.type == SDL_CONTROLLERBUTTONDOWN || event.type == SDL_CONTROLLERBUTTONUP)
     {

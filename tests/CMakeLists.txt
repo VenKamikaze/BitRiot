@@ -30,6 +30,7 @@ set(SIM_TEST_SOURCES
   SimulationTest.cpp
   SimLibraryTest.cpp
   MapTest.cpp
+  InputApplyTest.cpp
 )
 
 set(CORE_TEST_SOURCES
@@ -38,6 +39,7 @@ set(CORE_TEST_SOURCES
   ScoreboardRandomTest.cpp
   FrameLoopTest.cpp
   RenderSideTest.cpp
+  InputSamplerTest.cpp
 )
 
 add_library(bitriot_sim_test_objs OBJECT ${SIM_TEST_SOURCES})

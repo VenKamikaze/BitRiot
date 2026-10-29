@@ -19,19 +19,14 @@ InputHandler::~InputHandler()
 }
 
 void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerCharacters,
-                               DynamicMap * dynamicMap, InfoPanel * panel)
+                               InfoPanel * panel)
 {
   //m_numPlayers = playerCharacters.size();
   p_players = playerCharacters;
-  p_dynamicMap = dynamicMap;
   p_infoPanel = panel;
 
-  m_action1Down.clear();
-  m_action2Down.clear();
-  m_spawnSelection.clear();
   m_keyMap.clear();
-  m_controllerDown.clear();
-  m_controllerReleased.clear();
+  m_sampler.clear(); // a new round starts with every button up and no edge pending
   // Phase 2.7: each game starts with no in-progress join selectors. The
   // InfoPanel is recreated per game so its indicators reset alongside.
   m_pendingJoins.clear();
@@ -58,17 +53,11 @@ void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerC
 
   for(const auto& player: playerCharacters)
   {
-    // getID() is an entity id from EntityFactory's counter (restarted each round
-    // by EntityManager's constructor), NOT a player slot.
-    // It is only safe here as an opaque key for the
-    // m_keyMap / m_action* maps (consistent with applyInput). The
-    // canonical model is indexed by player slot, which is getPlayerNumber() (1-based).
-    const int id = player->getID();                   // opaque unique entity id (map key)
-    const int canonicalIndex = player->getPlayerNumber() - 1; // 0-based player slot -> model index
-
-    m_action1Down.insert(std::pair<int, bool>(id, false));
-    m_action2Down.insert(std::pair<int, bool>(id, false));
-    m_spawnSelection.insert(std::pair<int, EntityType>(id, BLOCK));
+    // m_keyMap and the sampler are keyed by SLOT, which is getPlayerNumber() - 1
+    // (getID() is an entity id, from EntityFactory's counter, and means nothing
+    // here). The canonical model in GameSettings is indexed by the same slot.
+    const int slot = player->getPlayerNumber() - 1;
+    const int canonicalIndex = slot;
 
     // Keyboard sets go only to human players without a controller: AI players
     // are never driven by the keyboard, and controller players use the pad.
@@ -109,7 +98,7 @@ void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerC
 
     if(keyboardSetIndex >= 0 && keyboardSetIndex < (int) m_availableKeySets.size())
     {
-      m_keyMap[id] = m_availableKeySets.at(keyboardSetIndex);
+      m_keyMap[slot] = m_availableKeySets.at(keyboardSetIndex);
       // This slot reached here only if it is a human with no controller, i.e. a
       // keyboard player. Show a persistent (player-coloured) keyboard badge so
       // the InfoPanel indicates who is on keyboard - same JOIN_READY state a
@@ -122,7 +111,7 @@ void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerC
     }
     else
     {
-      MickLogger::getInstance()->debug(this, string("setPointers: player ").append(to_string(id))
+      MickLogger::getInstance()->debug(this, string("setPointers: slot ").append(to_string(slot))
         .append(" has out-of-range keyboard set index ").append(to_string(keyboardSetIndex)).append(" - no keys assigned"));
     }
   }
@@ -199,6 +188,7 @@ void InputHandler::takeOverSlotWithController(int team, int controllerId)
   {
     player->attachedController = controllerId;
     player->m_controlledByAI = false; // FIXME duplication as we already have a playerAI flag in gamesettings...
+    m_sampler.clearSlot(player->getPlayerNumber() - 1); // nothing the slot's last device left behind
     MickLogger::getInstance()->debug(this, string("Controller ").append(to_string(controllerId))
       .append(" took over player slot: ").append(to_string(team)));
   }
@@ -206,9 +196,9 @@ void InputHandler::takeOverSlotWithController(int team, int controllerId)
 
 // Take over the chosen 1-based slot with a keyboard set (Phase 2.7). Giving the
 // (ex-AI) entity a keyMap entry is what makes it respond to that keyboard set;
-// applyInput then drives it like any other human keyboard player. The
-// action1/action2/spawn maps already hold an entry for every entity (seeded for
-// all players, AI included, in setPointers). Live entity only - see above.
+// the sampler then reads it like any other human keyboard player. (The simulation
+// keeps the per-slot action state for every slot, AI included.) Live entity only -
+// see above.
 void InputHandler::takeOverSlotWithKeyboard(int team, int keyboardSetIndex)
 {
   shared_ptr<PlayerCharacterEntity> player = findPlayerByTeam(team);
@@ -216,7 +206,8 @@ void InputHandler::takeOverSlotWithKeyboard(int team, int keyboardSetIndex)
   {
     player->attachedController = -1;
     player->m_controlledByAI = false;
-    m_keyMap[player->getID()] = m_availableKeySets.at(keyboardSetIndex);
+    m_keyMap[player->getPlayerNumber() - 1] = m_availableKeySets.at(keyboardSetIndex);
+    m_sampler.clearSlot(player->getPlayerNumber() - 1);
     MickLogger::getInstance()->debug(this, string("Keyboard set ").append(to_string(keyboardSetIndex))
       .append(" took over player slot: ").append(to_string(team)));
   }
@@ -471,7 +462,7 @@ void InputHandler::detachController(int controllerId)
       // Phase 2.6: on unplug, only a player WITHOUT a keymap should revert to CPU.
       // A controller take-over (now via the Phase 2.7 selector, AI-only) leaves
       // the entity with no m_keyMap entry, so on unplug it would be
-      // attachedController==-1 AND non-AI -> not skipped by applyInput
+      // attachedController==-1 AND non-AI -> not skipped by the sampler
       // but has no keys -> frozen. Reverting it to AI lets
       // PlayerCharacterEntity::update() resume the bot (self-heals empty
       // goal/instruction lists; keys off the flag at PlayerCharacterEntity.cpp:68).
@@ -482,161 +473,46 @@ void InputHandler::detachController(int controllerId)
       // We deliberately do NOT write the canonical model (GameSettings): it is the
       // menu seed the next round re-seeds from, so a mid-game hot-join must not
       // persist into the next "Play again".
-      if (m_keyMap.find(player->getID()) == m_keyMap.end())
+      if (m_keyMap.find(player->getPlayerNumber() - 1) == m_keyMap.end())
       {
         player->m_controlledByAI = true;
       }
+      m_sampler.clearSlot(player->getPlayerNumber() - 1); // a pad that is gone holds no button down
     }
   }
 }
 
 
-void InputHandler::processPlayerButtons(shared_ptr<PlayerCharacterEntity> player,
-    const std::function<bool(ButtonName)>& isDown,
-    const std::function<bool(ButtonName)>& isReleased)
+void InputHandler::setControllerButtonState(int slot, ButtonName button, bool down)
 {
-  int i = player->getID();           // opaque unique entity id: m_action* key
-  int slot = player->getPlayerNumber();      // 1-based player slot: InfoPanel row (see setSelection)
-
-  if (m_action1Down[i] == false && m_action2Down[i] == false)
-  {
-    if (isDown(UP_KEY))
-    {
-      player->moveInDirection(UP);
-      player->incAnimFrame();
-    }
-    else if (isDown(DOWN_KEY))
-    {
-      player->moveInDirection(DOWN);
-      player->incAnimFrame();
-    }
-    else if (isDown(LEFT_KEY))
-    {
-      player->moveInDirection(LEFT);
-      player->incAnimFrame();
-    }
-    else if (isDown(RIGHT_KEY))
-    {
-      player->moveInDirection(RIGHT);
-      player->incAnimFrame();
-    }
-    if (isDown(ACTION1_KEY))
-    {
-      m_action1Down[i] = true;
-    }
-    else if (isDown(ACTION2_KEY))
-    {
-      m_action2Down[i] = true;
-      m_spawnSelection[i] = EGG1;
-    }
-  }
-  else // action1Down == true || action2Down == true
-  {
-    if (m_action1Down[i] == true)
-    {
-      // get action1 + direction
-      if (isDown(UP_KEY))
-      {
-        m_spawnSelection[i] = BOMB;
-        p_infoPanel->setSelection(BOMB, slot);
-      }
-      else if (isDown(DOWN_KEY))
-      {
-        m_spawnSelection[i] = BLOCK;
-        p_infoPanel->setSelection(BLOCK, slot);
-      }
-      else if (isDown(LEFT_KEY))
-      {
-        m_spawnSelection[i] = MINE;
-        p_infoPanel->setSelection(MINE, slot);
-      }
-      else if (isDown(RIGHT_KEY))
-      {
-        m_spawnSelection[i] = ROCKET_SPIN;
-        p_infoPanel->setSelection(ROCKET_SPIN, slot);
-      }
-
-      // for no direction press
-      if (m_spawnSelection[i] == BLOCK)
-      {
-        p_infoPanel->setSelection(BLOCK, slot);
-      }
-
-      if (isReleased(ACTION1_KEY))
-      {
-        // control released this frame, try to place item
-        if (p_dynamicMap->tileHasStaticEntity(player->getTileX(), player->getTileY()) == false)
-        {
-          // TO DO - if trying to place block, check there is an exit
-          player->createEntity(m_spawnSelection[i]);
-        }
-
-        m_action1Down[i] = false;
-        m_spawnSelection[i] = BLOCK;
-        p_infoPanel->setSelection(PLAYER_CHARACTER, slot);
-      }
-      // end if action1Down == true
-    }
-    else
-    {
-      // action2Down == true
-      // get action2 + direction
-      if (isDown(UP_KEY))
-      {
-        m_spawnSelection[i] = EGG3;
-      }
-      else if (isDown(DOWN_KEY))
-      {
-        m_spawnSelection[i] = EGG5;
-      }
-      else if (isDown(LEFT_KEY))
-      {
-        m_spawnSelection[i] = EGG2;
-      }
-      else if (isDown(RIGHT_KEY))
-      {
-        m_spawnSelection[i] = EGG4;
-      }
-
-      p_infoPanel->setSelection(m_spawnSelection[i], slot);
-
-
-      if (isReleased(ACTION2_KEY))
-      {
-        // action2 released this frame, try to place egg
-        if (p_dynamicMap->tileHasStaticEntity(player->getTileX(), player->getTileY()) == false)
-        {
-          player->createEntity(m_spawnSelection[i]);
-        }
-
-        m_action2Down[i] = false;
-        m_spawnSelection[i] = BLOCK;
-        p_infoPanel->setSelection(PLAYER_CHARACTER, slot);
-      }
-
-    }
-  } // end if action1 && action2 down
+  m_sampler.setButton(slot, static_cast<PlayerInput::Button>(button), down);
 }
 
-void InputHandler::setControllerButtonState(int playerId, ButtonName button, bool down)
+void InputHandler::keyboardEvent(KEY k, bool down)
 {
-  bool wasDown = m_controllerDown[playerId][button]; // lazily zero-inits on first touch
-  m_controllerDown[playerId][button] = down;
-  if (wasDown && ! down)
+  // A key of a keyboard set that drives a live human keyboard player. The old
+  // per-tick pass skipped AI players and players with a pad attached (the pad
+  // drives those), and so does this.
+  for (const auto& entry : m_keyMap)
   {
-    m_controllerReleased[playerId][button] = true;
+    const int slot = entry.first;
+    if (slot < 0 || slot >= (int) p_players.size())
+    {
+      continue;
+    }
+    const shared_ptr<PlayerCharacterEntity>& player = p_players.at(slot);
+    if (!player || player->isControlledByAI() || player->attachedController != -1)
+    {
+      continue;
+    }
+    for (int b = UP_KEY; b <= ACTION2_KEY; b++)
+    {
+      if (entry.second[b] == k)
+      {
+        m_sampler.setButton(slot, static_cast<PlayerInput::Button>(b), down);
+      }
+    }
   }
-}
-
-bool InputHandler::consumeControllerReleased(int playerId, ButtonName button)
-{
-  auto it = m_controllerReleased.find(playerId);
-  if (it == m_controllerReleased.end() || ! it->second[button])
-  {
-    return false;
-  }
-  it->second[button] = false; // edge-triggered: only true once, mirrors isKeyReleased()
-  return true;
 }
 
 bool InputHandler::pumpEvents()
@@ -646,52 +522,25 @@ bool InputHandler::pumpEvents()
   return input->takeEventCount() > 0;
 }
 
-void InputHandler::applyInput()
+bool InputHandler::quitRequested() const
 {
-  shared_ptr<MickBaseInput> input = GameRunningSDLInput::getInstance();
+  return GameRunningSDLInput::getInstance()->doQuit();
+}
 
-  if(input->doQuit())
+TickInputs InputHandler::sampleTick()
+{
+  // Every human slot is local today. (A pad or keyboard bound to nobody produces no
+  // events here at all, so a slot that is not driven samples as no buttons.)
+  uint32_t localSlots = 0;
+  for (int slot = 0; slot < (int) p_players.size() && slot < std::GameSettings::MAX_PLAYERS; slot++)
   {
-    MickLogger::getInstance()->debug(this, "Escape pressed in game");
-    throw InputException("Escape pressed", GOT_QUIT);
-  }
-
-  if(input->isAKeyDown() || input->isAKeyReleased())
-  {
-    for(const auto& player : p_players)
+    const shared_ptr<PlayerCharacterEntity>& player = p_players.at(slot);
+    if (player && !player->isControlledByAI())
     {
-      // Skip AI players and controller players: only human keyboard players are
-      // driven here. The attachedController check closes the Phase 2.3
-      // intermediate state where a controller player (still non-AI) would
-      // otherwise respond to both the pad and a keyboard set.
-      if ((!player) || (!player->isAlive()) || (player->isControlledByAI()) || (player->attachedController != -1))
-      {
-        continue;
-      }
-
-      int i = player->getID();
-      processPlayerButtons(player,
-        [&](ButtonName b){ return input->isKeyDown(m_keyMap[i][b]); },
-        [&](ButtonName b){ return input->isKeyReleased(m_keyMap[i][b]); });
+      localSlots |= (1u << slot);
     }
   }
-
-  // Controller-driven players: processed independently of the keyboard gate
-  // above (a controller-only game may see zero real key activity) and of the
-  // shared keysCurrentlyDown/m_keyMap machinery entirely - see the
-  // m_controllerDown/m_controllerReleased comment in InputHandler.h for why.
-  for(const auto& player : p_players)
-  {
-    if ((!player) || (!player->isAlive()) || (player->isControlledByAI()) || (player->attachedController == -1))
-    {
-      continue;
-    }
-
-    int i = player->getID();
-    processPlayerButtons(player,
-      [&](ButtonName b){ return m_controllerDown[i][b]; },
-      [&](ButtonName b){ return consumeControllerReleased(i, b); });
-  }
+  return m_sampler.sampleTick(localSlots);
 }
 
 
