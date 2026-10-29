@@ -27,7 +27,7 @@
 # 1 a variant diverged or failed to build, or the negative control was not caught;
 # 2 setup error (the reference variant cannot be built, bad option).
 #
-# Needs: cmake, a C++17 compiler, git is not needed. Optional, per variant: clang++
+# Needs: cmake and a C++17 compiler (g++, the reference). Optional, per variant: clang++
 # (clang-*), libc++ (clang-libc++), 32-bit multilib (gcc-m32), aarch64-linux-gnu-g++ +
 # qemu-aarch64 (aarch64-*), valgrind, and a pinned Emscripten + Node (wasm-*; install
 # with scripts/setup-emsdk.sh; this script never installs it). The wasm variants find
@@ -94,8 +94,10 @@ VARIANTS=(gcc-O2 gcc-O0 gcc-O3-native-fastmath gcc-initpattern gcc-asan-ubsan gc
           clang-O2 clang-O0 clang-O3-native-fastmath clang-libc++
           gcc-O0-valgrind gcc-O2-malloc-perturb
           aarch64-O2 aarch64-O3-fastmath
-          wasm-O2 wasm-O3-fastmath wasm-exnref-O2)
-declare -A KIND FLAGS LDFLAGS DESC BASE
+          wasm-O2 wasm-O3-fastmath wasm-exnref-O2 wasm-O2-emsdk-node)
+declare -A KIND FLAGS LDFLAGS DESC BASE ONLY_RECORDS
+# Valgrind is ~300x slower than native: it replays the golden record and one small round.
+ONLY_RECORDS[gcc-O0-valgrind]="golden 13x11-6p"
 KIND[gcc-O2]=native-gcc;                 FLAGS[gcc-O2]="-O2 -DNDEBUG";                          DESC[gcc-O2]="GCC -O2 (the reference; what Release builds)"
 KIND[gcc-O0]=native-gcc;                 FLAGS[gcc-O0]="-O0 -g";                                DESC[gcc-O0]="GCC -O0 -g (Debug: asserts on)"
 KIND[gcc-O3-native-fastmath]=native-gcc; FLAGS[gcc-O3-native-fastmath]="-O3 -march=native -ffast-math -DNDEBUG"; DESC[gcc-O3-native-fastmath]="GCC -O3 -march=native -ffast-math"
@@ -115,7 +117,8 @@ KIND[aarch64-O2]=aarch64;                FLAGS[aarch64-O2]="-O2 -DNDEBUG";      
 KIND[aarch64-O3-fastmath]=aarch64;       FLAGS[aarch64-O3-fastmath]="-O3 -ffast-math -DNDEBUG";  DESC[aarch64-O3-fastmath]="aarch64 GCC -O3 -ffast-math under qemu-user"
 KIND[wasm-O2]=wasm;                      FLAGS[wasm-O2]="-O2 -DNDEBUG -fwasm-exceptions";        DESC[wasm-O2]="Emscripten -O2 -fwasm-exceptions (legacy EH, the default), Node"
 KIND[wasm-O3-fastmath]=wasm;             FLAGS[wasm-O3-fastmath]="-O3 -ffast-math -DNDEBUG -fwasm-exceptions"; DESC[wasm-O3-fastmath]="Emscripten -O3 -ffast-math -fwasm-exceptions, Node"
-KIND[wasm-exnref-O2]=wasm;               FLAGS[wasm-exnref-O2]="-O2 -DNDEBUG -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0"; DESC[wasm-exnref-O2]="Emscripten -O2, standard (exnref) wasm EH, emsdk's own Node"
+KIND[wasm-exnref-O2]=wasm;               FLAGS[wasm-exnref-O2]="-O2 -DNDEBUG -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0"; DESC[wasm-exnref-O2]="Emscripten -O2, standard (exnref) wasm EH, Node"
+KIND[wasm-O2-emsdk-node]=same-binary;    BASE[wasm-O2-emsdk-node]=wasm-O2;                      DESC[wasm-O2-emsdk-node]="the wasm-O2 build on the Node that emsdk ships (a newer V8)"
 
 # Where the wasm builds' link flags are set. NODERAWFS: the binary reads the record and
 # data/ straight from the real file system. 1 MiB stack and growable memory, as a wasm
@@ -188,7 +191,7 @@ check_availability() {
         EMSCRIPTEN_VERSION="$(emcc --version 2>/dev/null | head -1 | sed -n 's/.* \([0-9][0-9.]*\) (.*/\1/p')"
         EMSDK_NODE_PATH="${EMSDK_NODE:-}"
         if [ -z "$EMSDK_NODE_PATH" ] || [ ! -x "$EMSDK_NODE_PATH" ]; then
-            AVAIL[wasm-exnref-O2]=0; REASON[wasm-exnref-O2]="emsdk's Node is not available"
+            AVAIL[wasm-O2-emsdk-node]=0; REASON[wasm-O2-emsdk-node]="emsdk's Node is not available"
         fi
     fi
 }
@@ -238,13 +241,12 @@ set_runner() {
     [ "${KIND[$v]}" = same-binary ] && base="${BASE[$v]}"
     case "${KIND[$v]}" in
         aarch64) RUNNER[$v]="qemu-aarch64 -L /usr/aarch64-linux-gnu ${BINPATH[$v]}" ;;
-        wasm)
-            if [ "$v" = wasm-exnref-O2 ]; then RUNNER[$v]="$EMSDK_NODE_PATH ${BINPATH[$v]}"
-            else RUNNER[$v]="$SYSTEM_NODE ${BINPATH[$v]}"; fi ;;
+        wasm) RUNNER[$v]="$SYSTEM_NODE ${BINPATH[$v]}" ;;
         same-binary)
             case "$v" in
                 gcc-O0-valgrind)         RUNNER[$v]="valgrind -q --error-exitcode=99 ${BINPATH[$base]}" ;;
                 gcc-O2-malloc-perturb)   RUNNER[$v]="env MALLOC_PERTURB_=165 ${BINPATH[$base]}" ;;
+                wasm-O2-emsdk-node)      RUNNER[$v]="$EMSDK_NODE_PATH ${BINPATH[$base]}" ;;
             esac ;;
         *) RUNNER[$v]="${BINPATH[$v]}" ;;
     esac
@@ -258,12 +260,19 @@ ms_now() { echo $(( $(date +%s%N) / 1000000 )); }
 # first_diff REF GOT -> "line<TAB>reftext<TAB>gottext" for the first line that differs
 # (a missing line is shown as <end of output>), nothing if the files are identical.
 first_diff() {
-    awk -F'\n' '
+    local res
+    res="$(awk -F'\n' '
         NR == FNR { ref[FNR] = $0; n = FNR; next }
         { if (FNR > n) { print FNR "\t<end of reference>\t" $0; found = 1; exit }
           if ($0 != ref[FNR]) { print FNR "\t" ref[FNR] "\t" $0; found = 1; exit } }
         END { if (!found && FNR < n) print (FNR + 1) "\t" ref[FNR + 1] "\t<end of output>" }
-    ' "$1" "$2"
+    ' "$1" "$2")"
+    # awk sees nothing to compare when the second file is empty.
+    if [ -z "$res" ] && ! cmp -s "$1" "$2"; then
+        res="$(printf '1\t%s\t<empty output>' "$(head -1 "$1")")"
+    fi
+    [ -n "$res" ] && printf '%s\n' "$res"
+    return 0
 }
 
 # describe_diff "line<TAB>ref<TAB>got" -> "tick N (ref 0x.. got 0x..)" or the raw lines
@@ -365,7 +374,10 @@ for v in "${SELECTED[@]}"; do
     fi
     t0="$(ms_now)"
     printf 'building %-26s ' "$v"
-    if build_variant "$v"; then
+    if [ "${KIND[$v]}" = same-binary ] && [ -z "${BINPATH[${BASE[$v]}]:-}" ]; then
+        echo "FAILED (its build, ${BASE[$v]}, is missing)"
+        STATUS[$v]="FAIL"; NOTE[$v]="the ${BASE[$v]} build it runs failed"; FAILED=1
+    elif build_variant "$v"; then
         echo "ok ($(( ($(ms_now) - t0) / 1000 )) s)"
         RAN+=("$v")
     else
@@ -417,6 +429,25 @@ for r in "${RECORDS[@]}"; do
     fi
 done
 ( cd "$root" && ${RUNNER[$ref]} version ) > "$OUT/ref/version.out" 2>/dev/null
+# Exceptions probes: a thrown and caught C++ exception (a missing file, a bad option) must
+# behave the same in every build; it is what -fwasm-exceptions has to get right.
+# The third one is thrown inside the simulation (an event for a slot the round lacks), deep
+# in Simulation::step, and caught in the replayer: a hand-made one-tick record, 2 players.
+z8='\x00\x00\x00\x00\x00\x00\x00\x00'
+printf "BRMR\x01\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00${z8}${z8}\x01\x00\x00\x00\x00\x00\x00\x00\x0d\x00\x0b\x00\x37\x00\x01\x02\x00\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x01\x05\x00" > "$OUT/probe-badslot.brmr"
+PROBES=("replay /no/such/dir/missing.brmr" "run --seed 1 --out $OUT/probe.brmr --config players=9" "replay"
+        "replay --ignore-data-hash $OUT/probe-badslot.brmr")
+run_probes() { # variant outdir
+    local v="$1" dir="$2" i=0 p
+    for p in "${PROBES[@]}"; do
+        # stderr is compared without the DEBUG log lines that builds without NDEBUG print.
+        ( cd "$root" && ${RUNNER[$v]} $p ) > "$dir/probe$i.out" 2> "$dir/probe$i.err.full"
+        echo $? > "$dir/probe$i.rc"
+        grep -E '^(error|warning|note):' "$dir/probe$i.err.full" > "$dir/probe$i.err" || true
+        i=$((i+1))
+    done
+}
+run_probes "$ref" "$OUT/ref"
 echo "reference gcc-O2: $(grep -m1 'build id' "$OUT/ref/version.out"), $(grep -m1 'data hash' "$OUT/ref/version.out"); records: ${RECORDS[*]}"
 echo "golden record: $(grep -m1 '^ticks:' "$OUT/ref/golden.out")"
 
@@ -432,7 +463,9 @@ for v in "${RAN[@]}"; do
         problems+=("version differs (exit $vrc): not the same source/data as the reference: $(first_diff "$OUT/ref/version.out" "$OUT/$v/version.out" | tr '\t' ' ' | cut -c1-120)")
     fi
     firsttick=""
-    for r in "${RECORDS[@]}"; do
+    myrecords=("${RECORDS[@]}")
+    [ -n "${ONLY_RECORDS[$v]:-}" ] && read -ra myrecords <<< "${ONLY_RECORDS[$v]}"
+    for r in "${myrecords[@]}"; do
         run_replay "$v" "${RECFILE[$r]}" "$OUT/$v/$r.out"
         rc=$RC
         [ "$r" = golden ] && GOLDEN_MS[$v]=$ELAPSED_MS
@@ -445,8 +478,15 @@ for v in "${RAN[@]}"; do
             problems+=("$r: output identical but exit code $rc: $(head -c 200 "$OUT/$v/$r.out.err" | tr '\n' ' ')")
         fi
     done
+    run_probes "$v" "$OUT/$v"
+    for i in "${!PROBES[@]}"; do
+        if ! cmp -s "$OUT/ref/probe$i.rc" "$OUT/$v/probe$i.rc" || ! cmp -s "$OUT/ref/probe$i.err" "$OUT/$v/probe$i.err" \
+           || ! cmp -s "$OUT/ref/probe$i.out" "$OUT/$v/probe$i.out"; then
+            problems+=("exception probe '${PROBES[$i]:0:40}': exit $(cat "$OUT/$v/probe$i.rc") (reference $(cat "$OUT/ref/probe$i.rc")), stderr: $(head -c 120 "$OUT/$v/probe$i.err" | tr '\n' ' ')")
+        fi
+    done
     if [ ${#problems[@]} -eq 0 ]; then
-        STATUS[$v]="PASS"; NOTE[$v]="${#RECORDS[@]} records, every tick's hash identical to the reference"
+        STATUS[$v]="PASS"; NOTE[$v]="${#myrecords[@]} records identical on every tick; exceptions behave the same"
     else
         STATUS[$v]="FAIL"; NOTE[$v]="${problems[0]}"
         FAILED=1
@@ -516,5 +556,9 @@ if [ $FAILED = 1 ] || [ $NC_FAILED = 1 ]; then
     echo "GATE FAILED"
     exit 1
 fi
-echo "GATE PASSED"
+if [ $nna -gt 0 ]; then
+    echo "GATE PASSED (every variant that ran matched; $nna not available, see above; --strict would fail on that)"
+else
+    echo "GATE PASSED"
+fi
 exit 0
