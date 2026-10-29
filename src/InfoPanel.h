@@ -14,7 +14,29 @@
 
 class Simulation;
 
-class InfoPanel
+// Where the mid-game join selector shows what it is doing. InfoPanel is the real one;
+// a test installs a recorder (InputHandler::setPointers takes the interface), because
+// InfoPanel needs a surface and fonts.
+class JoinIndicatorView
+{
+  public:
+    virtual ~JoinIndicatorView() {}
+
+    // Phase 2.7: mid-game CPU-takeover join indicator. NOTREADY while the joiner is
+    // choosing a slot, READY once they have taken the character over (persists as a
+    // "device-controlled" badge for the rest of the round).
+    enum JoinState { JOIN_NONE, JOIN_NOTREADY, JOIN_READY };
+
+    // Which kind of device owns the indicator. Controllers keep the existing
+    // per-slot gamecontroller PNGs; keyboards use the single recoloured
+    // keyboard asset (see makeKeyboardIcon).
+    enum JoinDevice { JOIN_DEVICE_CONTROLLER, JOIN_DEVICE_KEYBOARD };
+
+    virtual void setJoinIndicator(int team, JoinState state,
+                                  JoinDevice device = JOIN_DEVICE_CONTROLLER) = 0; // team is 1-based
+};
+
+class InfoPanel : public JoinIndicatorView
 {
   public:
     InfoPanel(SDL_Surface* backbuf, int numPlayers, std::vector<bool>* malePlayers);
@@ -36,19 +58,10 @@ class InfoPanel
     // a read-only view, set once per round. Without one no selection is shown.
     void setSimulation(const Simulation* sim);
 
-    // Phase 2.7: mid-game CPU-takeover join indicator. Drawn to the right of the
-    // targeted player's portrait. NOTREADY while the joiner is choosing a slot,
-    // READY once they have taken the character over (persists as a
-    // "device-controlled" badge for the rest of the round).
-    enum JoinState { JOIN_NONE, JOIN_NOTREADY, JOIN_READY };
-
-    // Which kind of device owns the indicator. Controllers keep the existing
-    // per-slot gamecontroller PNGs; keyboards use the single recoloured
-    // keyboard asset (see makeKeyboardIcon).
-    enum JoinDevice { JOIN_DEVICE_CONTROLLER, JOIN_DEVICE_KEYBOARD };
-
+    // The join indicator (JoinIndicatorView, above). Drawn to the right of the
+    // targeted player's portrait.
     void setJoinIndicator(int team, JoinState state,
-                          JoinDevice device = JOIN_DEVICE_CONTROLLER); // team is 1-based
+                          JoinDevice device = JOIN_DEVICE_CONTROLLER) override; // team is 1-based
 
     void renderSurfaceTo(SDL_Surface* dest, int x, int y);
 
