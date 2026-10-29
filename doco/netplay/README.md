@@ -22,7 +22,7 @@ Each brief (`NN-*.md`) is one unit of work, sized for a single implement → rev
 | 03a | [`Simulation`, `MatchConfig` and state hash](03a-simulation-and-state-hash.md) | BitRiot | 01, 02, 02b | done (play-test pending) |
 | 03b | [Surface-free sim library and frame loop](03b-surface-free-sim-and-frame-loop.md) | BitRiot | 03a | done (play-test pending) |
 | 04a | [Input sampling and `step(inputs)`](04a-input-sampling.md) | BitRiot | 03b | done (play-test pending) |
-| 04b | [Control events, rumble and UI plumbing](04b-control-events.md) | BitRiot | 04a | todo |
+| 04b | [Control events, rumble and UI plumbing](04b-control-events.md) | BitRiot | 04a | done (play-test pending) |
 | 05 | [Match record, replay and `bitriot_headless`](05-replay-and-determinism.md) | BitRiot | 03b, 04b | todo |
 | 05b | [Cross-platform determinism gate](05b-cross-platform-gate.md) | BitRiot | 05 | todo |
 | 06 | [vnet core: API, loopback and native UDP](https://github.com/VenKamikaze/vnet/blob/claude/doco/06-vnet-core.md) | vnet | — | tracked in vnet |
@@ -38,7 +38,7 @@ Each brief (`NN-*.md`) is one unit of work, sized for a single implement → rev
 
 **Parallel tracks:**
 
-- **Determinism:** 01 → 02 → 02b → 03a → 03b (done) → 04a (done) → 04b → 05 → 05b.
+- **Determinism:** 01 → 02 → 02b → 03a → 03b (done) → 04a (done) → 04b (done) → 05 → 05b.
 - **vnet:** 06, 10 and 11 are all done (vnet `claude` 26f4b0f, version 0.3.0).
 - **WASM:** 09 is ready now (03b is in), in parallel with 04a.
 

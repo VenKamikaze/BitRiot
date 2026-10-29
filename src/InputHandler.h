@@ -43,8 +43,9 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
     // The input of the human slots for the tick being stepped now, one PlayerInput
     // per slot (SLOT = playerNumber - 1), for Simulation::step(). Call it once per
     // stepped tick: it consumes the released edges accumulated since the last call.
-    // The local slot mask is every human slot, as every human is local today; a
-    // netplay client would restrict it to its own players.
+    // The local slot mask is m_localSlots: every human slot today (every human is
+    // local), changed by the takeovers and unplugs below; a netplay client would keep
+    // only its own players in it.
     TickInputs sampleTick();
     // The control events (ControlEvent, TickInputs.h) produced since the last call -
     // a join confirmed, a keyboard takeover, a controller unplugged - ride in
