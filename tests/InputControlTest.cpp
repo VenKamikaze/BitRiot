@@ -41,6 +41,18 @@ class FakeRumble : public ControllerRumble
     std::vector<Call> calls;
 };
 
+// Records what the join selector asks the HUD to show (InfoPanel needs a surface).
+class RecordingView : public JoinIndicatorView
+{
+  public:
+    struct Call { int team; JoinState state; JoinDevice device; };
+    void setJoinIndicator(int team, JoinState state, JoinDevice device) override
+    {
+      calls.push_back({team, state, device});
+    }
+    std::vector<Call> calls;
+};
+
 class InputControlTest : public HeadlessGameTest
 {
   protected:
@@ -61,7 +73,7 @@ class InputControlTest : public HeadlessGameTest
       startRound();
       m_handler = std::make_unique<InputHandler>();
       m_handler->setRumble(&m_rumble);
-      m_handler->setPointers(allPlayers(), nullptr);
+      m_handler->setPointers(allPlayers(), &m_view);
     }
 
     std::vector<std::shared_ptr<PlayerCharacterEntity>> allPlayers()
@@ -90,6 +102,7 @@ class InputControlTest : public HeadlessGameTest
 
     std::unique_ptr<InputHandler> m_handler;
     FakeRumble m_rumble;
+    RecordingView m_view;
 };
 
 // ---------------------------------------------------------------------------
@@ -172,6 +185,63 @@ TEST_F(InputControlTest, KeysDoNotDriveASlotThatHasAPadEvenIfItHasKeys)
   m_handler->detachController(PAD);
   m_handler->keyboardEvent(KEY_UP, true);
   EXPECT_TRUE(m_handler->sampleTick().slot[1].held(PlayerInput::UP));
+}
+
+// ---------------------------------------------------------------------------
+// The join indicators (the HUD side of the selector), with a panel set
+// ---------------------------------------------------------------------------
+
+TEST_F(InputControlTest, ARoundStartShowsTheKeyboardBadgeOfTheKeyboardHuman)
+{
+  startRound4();
+  ASSERT_EQ(m_view.calls.size(), 1u) << "slot 0 is the only human on keys";
+  EXPECT_EQ(m_view.calls[0].team, 1);
+  EXPECT_EQ(m_view.calls[0].state, JoinIndicatorView::JOIN_READY);
+  EXPECT_EQ(m_view.calls[0].device, JoinIndicatorView::JOIN_DEVICE_KEYBOARD);
+}
+
+TEST_F(InputControlTest, TheSelectorShowsOpenMoveConfirmAndCancelOnThePanel)
+{
+  startRound4();
+  m_view.calls.clear();
+
+  m_handler->processJoinControllerEvent(NEW_PAD, SDL_CONTROLLER_BUTTON_START); // opens on team 3
+  ASSERT_EQ(m_view.calls.size(), 1u);
+  EXPECT_EQ(m_view.calls[0].team, 3);
+  EXPECT_EQ(m_view.calls[0].state, JoinIndicatorView::JOIN_NOTREADY);
+  EXPECT_EQ(m_view.calls[0].device, JoinIndicatorView::JOIN_DEVICE_CONTROLLER);
+
+  m_handler->processJoinControllerEvent(NEW_PAD, SDL_CONTROLLER_BUTTON_DPAD_DOWN); // moves to team 4
+  ASSERT_EQ(m_view.calls.size(), 3u);
+  EXPECT_EQ(m_view.calls[1].team, 3);
+  EXPECT_EQ(m_view.calls[1].state, JoinIndicatorView::JOIN_NONE);
+  EXPECT_EQ(m_view.calls[2].team, 4);
+  EXPECT_EQ(m_view.calls[2].state, JoinIndicatorView::JOIN_NOTREADY);
+
+  m_handler->processJoinControllerEvent(NEW_PAD, SDL_CONTROLLER_BUTTON_START); // confirms
+  ASSERT_EQ(m_view.calls.size(), 4u);
+  EXPECT_EQ(m_view.calls[3].team, 4);
+  EXPECT_EQ(m_view.calls[3].state, JoinIndicatorView::JOIN_READY);
+
+  m_view.calls.clear();
+  m_handler->processJoinKeyboardEvent(KEY_RCTRL); // a keyboard joiner opens...
+  m_handler->processJoinKeyboardEvent(KEY_RSHIFT); // ...and cancels
+  ASSERT_EQ(m_view.calls.size(), 2u);
+  EXPECT_EQ(m_view.calls[0].device, JoinIndicatorView::JOIN_DEVICE_KEYBOARD);
+  EXPECT_EQ(m_view.calls[0].state, JoinIndicatorView::JOIN_NOTREADY);
+  EXPECT_EQ(m_view.calls[1].state, JoinIndicatorView::JOIN_NONE);
+}
+
+TEST_F(InputControlTest, ASelectorConfirmedOnABotThatDiedClearsItsIndicator)
+{
+  startRound4();
+  m_handler->processJoinControllerEvent(NEW_PAD, SDL_CONTROLLER_BUTTON_START);
+  destroyPlayer(3);
+  m_view.calls.clear();
+  m_handler->processJoinControllerEvent(NEW_PAD, SDL_CONTROLLER_BUTTON_START);
+  ASSERT_EQ(m_view.calls.size(), 1u);
+  EXPECT_EQ(m_view.calls[0].team, 3);
+  EXPECT_EQ(m_view.calls[0].state, JoinIndicatorView::JOIN_NONE);
 }
 
 TEST_F(InputControlTest, CancellingASelectorProducesNothing)
@@ -454,7 +524,7 @@ TEST_F(InputControlTest, ANewRoundForgetsPendingEventsAndMidRoundMappings)
   joinWithPad(NEW_PAD);
   m_handler->detachController(PAD);
   startRound();
-  m_handler->setPointers(allPlayers(), nullptr);
+  m_handler->setPointers(allPlayers(), &m_view);
   EXPECT_TRUE(m_handler->sampleTick().control.empty());
   EXPECT_EQ(m_handler->controllerForSlot(2), -1);
   EXPECT_EQ(m_handler->controllerForSlot(1), PAD) << "the menu's choice is seeded again";

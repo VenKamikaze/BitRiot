@@ -180,6 +180,7 @@ A `-DBITRIOT_BUILD_GAME=OFF` configure (no SDL, RmlUi or OpenGL looked for) stil
 
 **Deviations from the brief**
 
+- **Human input is applied in slot order, 0 to n-1** (review finding). The old `applyInput()` ran the keyboard humans first and then the pad humans, so a pad human in a lower slot and a keyboard human in a higher slot, both placing an item on the same tick, now get their entity ids in the opposite order to before (ids are not hashed absolutely, but the order shows in `entityList` order and so in anything that walks it). Slot order is what a replay and a remote peer can reproduce, so it is the rule.
 - `step()` with no argument is kept next to `step(const TickInputs&)` (the brief only names the latter) so bot-only code and the existing tests (which call `sim().step()` throughout) do not have to build an empty `TickInputs`.
 - `ControlEvent` is an empty placeholder, and a non-empty `control` makes `step()` throw until 04b. The brief said the vector "stays empty until 04b"; this makes that enforced.
 - `InputSampler` is in `bitriot_core`, not `bitriot_sim` (it is the local half; a headless binary does not need it). Its tests are therefore in the core executable only. `TickInputs.h` is in the simulation.
