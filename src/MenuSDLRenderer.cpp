@@ -95,6 +95,11 @@ void MenuSDLRenderer::clearScoreBoard()
   }
 }
 
+void MenuSDLRenderer::closeAllMenus()
+{
+  context->UnloadAllDocuments();
+}
+
 void MenuSDLRenderer::handleWindowResize()
 {
   int windowWidth, windowHeight;

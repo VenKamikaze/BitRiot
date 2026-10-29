@@ -32,6 +32,9 @@ class MickSDLRenderer : public MickBaseRenderer<SDL_Window, SDL_Renderer, SDL_Su
     // is freed).
     void resize(int contentWidth, int contentHeight);
     static MickSDLRenderer* getInstance();
+    // nullptr if the renderer was never created (its constructor threw): lets the
+    // caller report the failure and shut down instead of tripping getInstance()'s assert.
+    static MickSDLRenderer* getInstanceIfCreated();
 
     // When true, the game view is letterboxed to preserve its native aspect ratio
     // in pushCpuBufferToHardwareBuffer; when false it stretches to fill the window.

@@ -52,20 +52,26 @@ RmlUiSDL2Renderer::RmlUiSDL2Renderer(SDL_Renderer* renderer, SDL_Window* screen)
 // Called by RmlUi when it wants to render geometry that it does not wish to optimise.
 void RmlUiSDL2Renderer::RenderGeometry(Rml::Vertex* vertices, int num_vertices, int* indices, int num_indices, const Rml::TextureHandle texture, const Rml::Vector2f& translation)
 {
-    SDL_GetRendererOutputSize(mRenderer, &mRenderer_w, &mRenderer_h);
     SDL_Texture *sdl_texture = (SDL_Texture *) texture;
-
-    SDL_Rect r;
-    r.x = (int)translation.x;
-    r.y = (int)translation.y;
-    r.w = mRenderer_w - r.x;
-    r.h = mRenderer_h - r.y;
-    //std::MickLogger::getInstance()->debug(this, std::string("rect: r.x,r.y,r.w,r.h").append(std::to_string(r.x)).append(",").append(std::to_string(r.y)).append(",").append(std::to_string(r.w)).append(",").append(std::to_string(r.h)) );
-
-    SDL_RenderSetViewport(mRenderer, &r);
 
     if (sdl_texture) {
         SDL_SetTextureBlendMode(sdl_texture, SDL_BLENDMODE_BLEND);
+    }
+
+    // RmlUi gives the vertices relative to an origin and the origin's translation
+    // separately. Add them here, so the geometry is drawn in window coordinates and
+    // the clip rectangle (which RmlUi also gives in window coordinates) can be
+    // applied as it is. This used to translate by setting the renderer's viewport
+    // to the origin, but SDL takes a clip rectangle relative to the viewport, and
+    // its GL and GLES2 renderers do not re-apply the clip rectangle when only the
+    // viewport changes. (Whole pixels, as the viewport's integer origin was, so
+    // text stays crisp.)
+    const float tx = (float)(int)translation.x;
+    const float ty = (float)(int)translation.y;
+    m_translated.assign(vertices, vertices + num_vertices);
+    for (Rml::Vertex& vertex : m_translated) {
+        vertex.position.x += tx;
+        vertex.position.y += ty;
     }
 
     int sz = sizeof(vertices[0]);
@@ -73,37 +79,38 @@ void RmlUiSDL2Renderer::RenderGeometry(Rml::Vertex* vertices, int num_vertices, 
     int off2 = offsetof(Rml::Vertex, colour);
     int off3 = offsetof(Rml::Vertex, tex_coord);
     SDL_RenderGeometryRaw(mRenderer, sdl_texture, 
-            (float *)((Uint8 *) vertices + off1), sz,
-            (SDL_Color *)((Uint8 *) vertices + off2), sz,
-            (float *)((Uint8 *) vertices + off3), sz,
+            (float *)((Uint8 *) m_translated.data() + off1), sz,
+            (SDL_Color *)((Uint8 *) m_translated.data() + off2), sz,
+            (float *)((Uint8 *) m_translated.data() + off3), sz,
             num_vertices, indices, num_indices, 4);
+}
 
-    SDL_RenderSetViewport(mRenderer, nullptr); // reset viewport
+// Hands the current scissor state to SDL.
+void RmlUiSDL2Renderer::ApplyScissor()
+{
+    SDL_RenderSetClipRect(mRenderer, mScissorEnabled ? &mRectScisor : nullptr);
 }
 
 // Called by RmlUi when it wants to enable or disable scissoring to clip content.		
 void RmlUiSDL2Renderer::EnableScissorRegion(bool enable)
 {
-    if (enable) {
-        SDL_RenderSetClipRect(mRenderer, &mRectScisor);
-    } else {
-        SDL_RenderSetClipRect(mRenderer, nullptr);
-    }
+    mScissorEnabled = enable;
+    ApplyScissor();
 }
 
 // Called by RmlUi when it wants to change the scissor region.		
 void RmlUiSDL2Renderer::SetScissorRegion(int x, int y, int width, int height)
 {
-    int rendererWidth, rendererHeight;
-    //SDL_GetWindowSize(mScreen, &rendererWidth, &rendererHeight);
-    SDL_GetRendererOutputSize(mRenderer, &rendererWidth, &rendererHeight);
-    //SDL_RenderGetLogicalSize(mRenderer, &rendererWidth, &rendererHeight);
+    // RmlUi's origin is the top left corner of the window, as is SDL's (the GL
+    // samples flip Y only because glScissor counts from the bottom left). RmlUi
+    // calls EnableScissorRegion(true) and then this, so the new rectangle has to be
+    // applied here: applying it only when scissoring is enabled left every
+    // clipped element drawn with the previous element's rectangle.
     mRectScisor.x = x;
-    mRectScisor.y = rendererHeight - (y + height);
+    mRectScisor.y = y;
     mRectScisor.w = width;
     mRectScisor.h = height;
-    //std::MickLogger::getInstance()->debug(this, std::string("mRectScisor: r.x,r.y,r.w,r.h").append(std::to_string(mRectScisor.x)).append(",").append(std::to_string(mRectScisor.y)).append(",").append(std::to_string(mRectScisor.w)).append(",").append(std::to_string(mRectScisor.h)) );
-
+    ApplyScissor();
 }
 
 // Called by RmlUi when a texture is required by the library.		

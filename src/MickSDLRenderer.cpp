@@ -32,24 +32,53 @@ void MickSDLRenderer::init(WindowMetadata windowMetadata)
   {
     std::string msg = "Failed to SDL_InitSubSystem video!";
     MickLogger::getInstance()->error(this, msg);
-    throw new runtime_error(msg);
+    throw runtime_error(msg);
   }
 
+  const Uint32 windowFlags = (windowMetadata.initFlags & ASK_FULLSCREEN) ? SDL_WINDOW_FULLSCREEN_DESKTOP : SDL_WINDOW_RESIZABLE;
   m_windowHandle = SDL_CreateWindow(windowMetadata.windowTitle.c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                                windowMetadata.windowWidth, windowMetadata.windowHeight, (windowMetadata.initFlags & ASK_FULLSCREEN) ? SDL_WINDOW_FULLSCREEN_DESKTOP : SDL_WINDOW_RESIZABLE );
+                                windowMetadata.windowWidth, windowMetadata.windowHeight, windowFlags);
   if (m_windowHandle == nullptr)
   {
     std::string msg = "Failed to create sdl_window!";
     MickLogger::getInstance()->error(this, msg);
-    throw new runtime_error(msg);
+    throw runtime_error(msg);
   }
 
   m_rendererHandle = SDL_CreateRenderer(m_windowHandle, -1, 0);
   if (m_rendererHandle == nullptr)
   {
-    std::string msg = "Failed to create sdl_renderer!";
+    // No accelerated renderer (in a browser: WebGL is disabled or failed to start;
+    // natively: no usable GPU driver). Everything the game draws goes through
+    // SDL_Renderer, which has a software implementation, so fall back to it rather
+    // than give up. The window is made again first: creating the failed renderer
+    // may have changed it (SDL re-creates a window for a GL driver).
+    MickLogger::getInstance()->warn(this, std::string("Could not create an accelerated renderer (")
+        .append(SDL_GetError()).append("); trying the software renderer."));
+    SDL_DestroyWindow(m_windowHandle);
+    m_windowHandle = SDL_CreateWindow(windowMetadata.windowTitle.c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+                                windowMetadata.windowWidth, windowMetadata.windowHeight, windowFlags);
+    if (m_windowHandle != nullptr)
+    {
+      // (Override: a user's SDL_RENDER_DRIVER environment variable must not
+      // decide a fallback.)
+      SDL_SetHintWithPriority(SDL_HINT_RENDER_DRIVER, "software", SDL_HINT_OVERRIDE);
+      m_rendererHandle = SDL_CreateRenderer(m_windowHandle, -1, 0);
+    }
+  }
+  if (m_rendererHandle == nullptr)
+  {
+    std::string msg = std::string("Failed to create sdl_renderer! ").append(SDL_GetError());
     MickLogger::getInstance()->error(this, msg);
-    throw new runtime_error(msg);
+    // The constructor is about to throw, so the destructor will not run: release
+    // what this attempt made.
+    if (m_windowHandle != nullptr)
+    {
+      SDL_DestroyWindow(m_windowHandle);
+      m_windowHandle = nullptr;
+    }
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    throw runtime_error(msg);
   }
 
   SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
@@ -63,7 +92,7 @@ void MickSDLRenderer::init(WindowMetadata windowMetadata)
   {
     std::string msg = "Failed to create primary SDL texture!";
     MickLogger::getInstance()->error(this, msg);
-    throw new runtime_error(msg);
+    throw runtime_error(msg);
   }
 
   int depth = 0;
@@ -80,7 +109,7 @@ void MickSDLRenderer::init(WindowMetadata windowMetadata)
   {
     std::string msg = "Failed to create primary SDL surface!";
     MickLogger::getInstance()->error(this, msg);
-    throw new runtime_error(msg);
+    throw runtime_error(msg);
   }
   // update blitting RECT
   SDL_Rect clientArea;
@@ -116,7 +145,7 @@ void MickSDLRenderer::resize(int contentWidth, int contentHeight)
   {
     std::string msg = "Failed to recreate primary SDL texture on resize!";
     MickLogger::getInstance()->error(this, msg);
-    throw new runtime_error(msg);
+    throw runtime_error(msg);
   }
 
   // Recreate the back-buffer surface at the new size, preserving bit depth.
@@ -137,7 +166,7 @@ void MickSDLRenderer::resize(int contentWidth, int contentHeight)
   {
     std::string msg = "Failed to recreate primary SDL surface on resize!";
     MickLogger::getInstance()->error(this, msg);
-    throw new runtime_error(msg);
+    throw runtime_error(msg);
   }
 
   SDL_Rect clientArea;
@@ -210,10 +239,19 @@ void MickSDLRenderer::destructVideo()
 MickSDLRenderer::~MickSDLRenderer()
 {
   destructVideo();
+  if (sInstance == this)
+  {
+    sInstance = nullptr;
+  }
 }
 
 MickSDLRenderer* MickSDLRenderer::getInstance()
 {
   assert(sInstance);
+  return sInstance;
+}
+
+MickSDLRenderer* MickSDLRenderer::getInstanceIfCreated()
+{
   return sInstance;
 }

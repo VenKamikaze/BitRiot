@@ -11,10 +11,14 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 #set(CMAKE_BUILD_TYPE Release)
 if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Debug)
+  if(EMSCRIPTEN)
+    # The web build ships to a browser: size and speed matter, and Debug would also
+    # switch the debug logging and the RmlUi debugger on.
+    set(CMAKE_BUILD_TYPE Release)
+  else()
+    set(CMAKE_BUILD_TYPE Debug)
+  endif()
 endif()
-
-set(OpenGL_GL_PREFERENCE "GLVND")
 
 set(RMLUI_STATIC false)
 set(RMLUI_DIR ${BitRiot_SOURCE_DIR}/ext/RmlUi)
@@ -35,19 +39,25 @@ endif()
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${BitRiot_SOURCE_DIR}/cmake")
 
 # The game (window, audio, menus, the frame loop, bitriot_core and the BitRiot
-# executable) needs SDL2, SDL2_mixer/ttf/image, OpenGL and RmlUi. The simulation
+# executable) needs SDL2, SDL2_mixer/ttf/image and RmlUi (and no OpenGL: the menus
+# and the game both draw through SDL_Renderer). The simulation
 # library bitriot_sim and its tests need none of them, so a headless or cross build
 # (an Emscripten bitriot_headless, an aarch64 sysroot without SDL) configures with
 #   -DBITRIOT_BUILD_GAME=OFF
 # and never looks for them. GoogleTest is still needed for bitriot_sim_tests.
-option(BITRIOT_BUILD_GAME "Build the game (needs SDL2, SDL2_mixer/ttf/image, OpenGL and RmlUi), not just bitriot_sim" ON)
+option(BITRIOT_BUILD_GAME "Build the game (needs SDL2, SDL2_mixer/ttf/image and RmlUi), not just bitriot_sim" ON)
 
-if(BITRIOT_BUILD_GAME)
+if(BITRIOT_BUILD_GAME AND EMSCRIPTEN)
+  # The web build (brief 09, `emcmake cmake -S . -B build-wasm`): SDL2 and friends
+  # are Emscripten ports (compiler flags, no find_package) and RmlUi is built from
+  # the ext/RmlUi/RmlUi submodule. cmake/EmscriptenGame.cmake sets the flags and the
+  # SDL2_*/RMLUI_* variables the native branch below gets from find_package.
+  include(EmscriptenGame)
+elseif(BITRIOT_BUILD_GAME)
   find_package(SDL2 REQUIRED)
   find_package(SDL2_mixer REQUIRED)
   find_package(SDL2_ttf REQUIRED)
   find_package(SDL2_image REQUIRED)
-  find_package(OpenGL REQUIRED)
   find_package(RmlUi REQUIRED)
   find_package(PkgConfig)
 
@@ -257,7 +267,6 @@ target_include_directories(bitriot_core PUBLIC
   ${SDL2IMAGE_INCLUDE_DIR}
   ${RMLUI_HEADERS}
   ${PROJECT_SOURCE_DIR}
-  ${OPENGL_INCLUDE_DIR}
   ${PROJECT_SOURCE_DIR}/src
 )
 
@@ -290,10 +299,15 @@ if(MINGW)
     ${SDL2_TTF_LIBRARY}
     ${SDL2IMAGE_LIBRARY}
     ${RMLUI_LIBRARIES}
-    ${OPENGL_LIBRARIES}
     shlwapi
   )
   target_link_options(BitRiot PRIVATE -mwindows)
+elseif(EMSCRIPTEN)
+  # SDL2, SDL_image/ttf/mixer and FreeType arrive through the port flags that
+  # cmake/EmscriptenGame.cmake adds to every compile and link; only RmlUi is a
+  # library. data/ and assets/ are preloaded into the page's file system.
+  target_link_libraries(bitriot_core PUBLIC ${RMLUI_LIBRARIES})
+  bitriot_configure_web_target(BitRiot)
 else()
   target_link_libraries(bitriot_core PUBLIC
     ${SDL2_LIBRARY}
@@ -302,7 +316,6 @@ else()
     ${SDL2IMAGE_LIBRARY}
     ${RMLUI_LIBRARIES}
     freetype
-    ${OPENGL_LIBRARIES}
   )
 
   add_dependencies(BitRiot bitriot_runtime_links)

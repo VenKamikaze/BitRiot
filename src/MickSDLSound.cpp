@@ -22,6 +22,10 @@ MickSDLSound::MickSDLSound() : MickBaseSound()
 
 MickSDLSound::~MickSDLSound()
 {
+  if (s_instance == this)
+  {
+    s_instance = NULL; // getInstance() must not hand out a deleted object
+  }
   map<string, MickSoundFile>::iterator it;
   for ( it = cachedSounds.begin() ; it != cachedSounds.end(); it++ )
   {
@@ -65,8 +69,17 @@ void MickSDLSound::initAudio()
   //Initialize SDL_mixer
   if( Mix_OpenAudio( 44100, MIX_DEFAULT_FORMAT, 2, 4096 ) == -1 )
   {
+#ifdef __EMSCRIPTEN__
+    // A browser with no usable audio output (or one that refuses it) must not stop
+    // the game from starting: play on in silence. playSound() is a no-op until
+    // `initialised` is set.
+    MickLogger::getInstance()->warn(this, std::string("Could not open audio, playing without sound: ").append(Mix_GetError()));
+    SDL_QuitSubSystem(SDL_INIT_AUDIO);
+    return;
+#else
     exception e;
     throw e;
+#endif
   }
 
   initialised = true;
@@ -90,7 +103,10 @@ void MickSDLSound::playSound(string fileName)
 
   if(initialised)
   {
-    Mix_PlayChannel(-1, sound.sound, 0);
+    if(Mix_PlayChannel(-1, sound.sound, 0) >= 0)
+    {
+      m_soundsPlayed++;
+    }
   }
 }
 
