@@ -8,6 +8,7 @@
 //   Module._bitriot_tick()             the simulation's tick count (see GameEngine::simTick)
 //   Module._bitriot_game_state()       GameSettings::GAME_STATE as an int
 //   Module._bitriot_start_ai_match(n)  start a round of n CPU players; 1 if it started
+//   Module._bitriot_sounds_played()    sounds the mixer has accepted (audio reached SDL_mixer)
 //   Module._bitriot_joystick_count()   SDL_NumJoysticks()
 //
 // and through Module.bitriotFatal(message) / Module.bitriotQuit() callbacks that the

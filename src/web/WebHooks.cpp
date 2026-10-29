@@ -10,6 +10,7 @@
 #include "GameEngine.h"
 #include "GameSettings.h"
 #include "MickLogger.h"
+#include "MickSDLSound.h"
 
 namespace
 {
@@ -86,6 +87,11 @@ EMSCRIPTEN_KEEPALIVE int bitriot_game_state()
 EMSCRIPTEN_KEEPALIVE int bitriot_start_ai_match(int numPlayers)
 {
   return (s_engine && s_engine->startAllAiMatch(numPlayers)) ? 1 : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE int bitriot_sounds_played()
+{
+  return (int) MickSDLSound::getInstance()->soundsPlayed();
 }
 
 EMSCRIPTEN_KEEPALIVE int bitriot_joystick_count()
