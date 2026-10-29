@@ -112,7 +112,7 @@ These are the user's conventions for this repo.
   ```bash
   cmake -S . -B build && cmake --build build -j8 && ./build/tests/bitriot_tests
   ```
-  Since 03b there is also `./build/tests/bitriot_sim_tests`, the simulation tests linked against `bitriot_sim` and GoogleTest alone (no SDL); run both when you touch the simulation.
+  Since 03b there is also `./build/tests/bitriot_sim_tests`, the simulation tests linked against `bitriot_sim` and GoogleTest alone (no SDL); run both when you touch the simulation. Configure with `-DBITRIOT_BUILD_GAME=OFF` to build only `bitriot_sim` and `bitriot_sim_tests` without SDL, OpenGL or RmlUi installed (the headless, wasm and cross builds).
 
 **Network limits in the cloud container.** Checked Oct 2026, under the environment's *limited* network policy.
 

@@ -33,7 +33,8 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
   1. `pumpEvents()`: read device and window events (during a round only);
   2. `TickPacer::advance(now)`: add real time to a backlog, capped at 5 ticks' worth (a stall is forgiven, not fast-forwarded); outside a round the pacer is restarted every frame, so time spent in a menu is never owed;
   3. while a whole tick (`GameSettings::NORMAL_TICKS_SPEED` = 33 ms) is owed, up to 5 per frame, and `simulating()` and `canStep()` allow it: `step()`. `canStep()` is the netplay veto (absent locally = always yes); `simulating()` is re-checked after every step so a step that ends the round stops the frame;
-  4. `render()` once. Rendering never steps, and a frame owing three ticks runs three steps and draws once.
+  3b. optionally `extraTicks()`: up to 2 more steps beyond the clock's (netplay catch-up), under the same two gates, not touching the backlog;
+  4. `render()` once. Rendering never steps, and a frame owing three ticks runs three steps and draws once. A frame that started outside a round and ended inside one (`GAME_INIT`) restarts the pacer after `render()`, so round set-up time is not owed as ticks.
   The clock is SDL's performance counter in ms (`clockMs()` in main.cpp), not `SDL_GetTicks()`: on Linux `SDL_GetTicks()` can step 1 ms at second boundaries, which made one frame in thirty arrive a millisecond early with no tick due.
 - **`GameEngine`** exposes the pieces as `frameHooks()`; `runEngine()` is gone. They switch on the global `GameSettings::gameState`:
   - `MENU_RUNNING`: `renderFrame()` calls `menuSystem->showMenu()`. This pumps SDL events itself and calls RmlUi Update/Render (MenuSDLRenderer.cpp). Not simulating, so no tick.
@@ -41,7 +42,7 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
   - `GAME_RUNNING`:
     - `pumpEvents()` (frame start): `InputHandler::pumpEvents()` polls SDL (`GameRunningSDLInput::updateEventQueue`).
     - `stepTick()` (zero or more per frame): `InputHandler::applyInput()` (throws `InputException(GOT_QUIT)` if ESC was seen; caught in `stepTick`), then `Simulation::step()` (tick++, the win check and `GameOverTimer::advance(tick, ...)` at the top, then `SpawningPool::update()`, then `EntityManager::runFrame()`; see Simulation.h). If `roundOver()` (or ESC was seen) it sets `m_roundEnding` and the loop stops stepping.
-    - `renderFrame()`: ESC seen on a frame that ran no tick (held by `canStep()`) ends the round too. If a round is ending, state goes to `MENU_RUNNING` and the scoreboard loads (the state after the whole last step); then the world (`WorldRenderer::renderWorld`) and the HUD are drawn and `pushCpuBufferToHardwareBuffer()` runs. The menu takes over on the next frame, as it always did.
+    - `renderFrame()` draws the world and HUD onto the CPU surface only if a tick ran, the round is ending, an event was read this frame or the surface is new, and always pushes the surface to the texture (the renderer's back buffers alternate); ESC seen on a frame that ran no tick (held by `canStep()`) ends the round too. If a round is ending, state goes to `MENU_RUNNING` and the scoreboard loads (the state after the whole last step); then the world (`WorldRenderer::renderWorld`) and the HUD are drawn and `pushCpuBufferToHardwareBuffer()` runs. The menu takes over on the next frame, as it always did.
   - `GAME_QUIT`: `renderFrame()` returns false.
 - **The round is over only after the whole step has run**: pool and `runFrame` run on the tick it ends. The scoreboard therefore sees the state after that final step (the winner itself is fixed at the top of the tick). Nothing steps after that: the old "round-end tick still runs input after flipping to `MENU_RUNNING`" (brief 01's follow-up) is moot. **During the countdown the sim still runs** (intentional: AI takeover is allowed), and ESC still lets its tick finish.
 - **Exceptions are control flow.**
@@ -178,7 +179,7 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 - `isKeyDown` means the key is held.
 - `isKeyReleased` is a sticky pending release that the first read consumes. Controllers work the same way.
 - Keyboard players are processed only when some key is down or released.
-- **Quirk:** a tap shorter than one tick is lost, but its release stays pending.
+- **Quirk:** a tap shorter than one tick is lost, but its release stays pending. *(Since 03b the window is the time between two `applyInput()` calls, which is one tick normally but several on a catch-up frame; there, a release seen in the window applies on the first tick, losing that tick's last held step, and a press and release between two applies loses the press but keeps the release. Brief 04a's sampler should record edges per tick.)*
 - Directions use else-if precedence: up, then down, then left, then right.
 - Actions: press to select, release to place.
 
@@ -295,7 +296,7 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
   - `applyMapDimensionsIfChanged()` rebuilt `Map` before `Simulation::start()` (via `resetGame()`) deleted the old EntityManager. *(Since brief 03b `Simulation::start()` tears the old round down first and then resizes the Map itself; the engine only resizes the window afterwards. The generation guard below still makes the order harmless.)*
   - The old `BlockEntity` destructors then call `setBlockAt(x,y,false)` with the *old* map's tile coordinates against the *new* map's array and stride. That can overwrite the new map's walls with EMPTY (an old block at (8,3) hits the east wall of a 9x7 map), or write past the end of the array if the map shrank. *(Correction to the earlier wording, which blamed "the wrong stride": the stride is the new one; the coordinates are the old ones.)*
   - *Fixed by brief 01:* `Map` has a generation counter bumped by every `init()`. `BlockEntity` remembers the generation it was placed in and its destructor skips the write if the map has since been rebuilt.
-- **ESC/quit** is local: it throws `InputException` and flips this machine to the scoreboard (GameEngine.cpp:166-172).
+- **ESC/quit** is local: it throws `InputException` and flips this machine to the scoreboard (`GameEngine::stepTick`: `InputHandler::applyInput()` throws, the catch notes the quit).
 - **`GameSettings::setNumberOfPlayers`** keeps existing slots. `InputHandler::setPointers` writes keyboard assignments back into `GameSettings` (InputHandler.cpp:106).
 - **Debug logging** is compiled in by default (the default build type is Debug), and `MickLogger` writes debug output to `cout` every frame.
 - **`Map::~Map`** uses `delete` rather than `delete[]` (Map.cpp:122).

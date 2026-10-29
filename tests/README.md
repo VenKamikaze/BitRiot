@@ -26,6 +26,22 @@ also plays real rounds, so it proves the simulation *runs* with nothing else in 
 process. Run both when you touch the simulation. A test that needs a surface, a
 renderer, RmlUi or a device belongs in `CORE_TEST_SOURCES` in `tests/CMakeLists.txt`.
 
+**Without the game's dependencies:** configure with `-DBITRIOT_BUILD_GAME=OFF` and
+CMake never looks for SDL2, SDL2_mixer/ttf/image, OpenGL or RmlUi and builds only
+`bitriot_sim` and `bitriot_sim_tests` (GoogleTest is still needed). That is the
+configuration for a headless, Emscripten or cross-compiled build, and it was checked
+in an environment where those packages cannot be found.
+
+**Where the tests run from.** The simulation reads `data/*.txt` relative to the
+working directory. Building any test target (or `BitRiot`) creates `data` and
+`assets` links in the build directory (the `bitriot_runtime_links` target), so
+`./tests/bitriot_sim_tests` works from `build/` after building only that target;
+`ctest` runs from the source root. The harness refuses to start if
+`data/entity.txt`, `player.txt` or `audio.txt` cannot be read, and **fails any test
+during which a `DataReader` lookup failed** (a missing constant or file answers `1`
+or `""` in the game, which used to make a wrong working directory look like a few
+odd failures).
+
 ## How it works
 
 BitRiot's simulation touches no SDL at all (since brief 03b it is the
@@ -253,10 +269,16 @@ writes to `bitriot_sim_sources.txt` in the build directory at generate time
 The scan covers those sources and every project header they include.
 
 - **No floating point in the text** (`FixedPointSourceGuardTest`): there is no
-  allowlist any more. A file that needs a float belongs in `bitriot_core`.
+  allowlist any more. A file that needs a float belongs in `bitriot_core`. Until brief
+  04a it also reads `InputHandler.{h,cpp}` and `GameEngine.{h,cpp}`
+  (`coreFilesThatStillMutateTheSimulation()` in `support/SimSources.h`), which are core
+  files that still move players and drive the tick.
 - **No floating point in the machine code** (`TheCompiledSimulationHoldsNoFloatingPointInstruction`):
   `objdump -d` of the archive, checked for SSE/AVX scalar and packed float
-  arithmetic, conversions and x87 (x86-64) or the `f*`/`scvtf` family (aarch64).
+  arithmetic, conversions and x87 (x86-64) or the listed float mnemonics (aarch64: the
+  arithmetic, compare, convert and round instructions, and `fmov` only with an
+  immediate, because GCC also uses `fmov dN, xM` to move integers; untested against
+  real GCC aarch64 output).
   It sees what the text scan cannot (`auto` carrying a double, an int converted at a
   float parameter, a float hidden by a macro). It needs binutils' `objdump` and
   fails, not skips, if it is missing or the architecture has no patterns.
@@ -288,7 +310,9 @@ only after checking a deliberate change to a bitmap or to the drawing order.
 clock: no SDL, no real time. It covers N x 33 ms giving N steps, time that is not a
 whole tick carrying over, a slow frame catching up, a long gap capped (5 ticks),
 `canStep()` holding ticks back without blocking events or drawing and the held time
-being paid back only up to the cap, nothing stepping outside a round, a step that
+being paid back only up to the cap, `extraTicks()` (up to 2 more steps a frame, gated
+like any other, not touching the backlog), a frame that starts a round not owing its
+set-up time, nothing stepping outside a round, a step that
 ends the round stopping the frame's other steps, the order (events, steps, one
 render), the sleep hint, and a clock that wraps. `GameEngine`'s own part (the hooks)
 cannot run headlessly: see the known gaps.
@@ -420,7 +444,7 @@ files, run, swap back.
 
 ## Coverage today
 
-296 tests in `bitriot_tests` (257 of them also in `bitriot_sim_tests`), across the
+306 tests in `bitriot_tests` (258 of them also in `bitriot_sim_tests`), across the
 files below:
 
 - `WinConditionTest.cpp` — free-for-all, team and co-op round-end rules,
