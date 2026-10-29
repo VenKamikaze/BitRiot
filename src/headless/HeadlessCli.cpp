@@ -44,11 +44,14 @@ void printHelp(std::ostream& out)
   out << "bitriot_headless: Bit Riot's simulation with no window, audio or bitmaps.\n"
          "\n"
          "usage:\n"
-         "  bitriot_headless replay <file> [--hashes] [--ignore-data-hash]\n"
+         "  bitriot_headless replay <file> [--hashes] [--ignore-data-hash] [--perturb-at TICK]\n"
          "      Play the record back and check every checkpoint. Exit 0 if all agree,\n"
          "      1 at the first tick that does not (it is named), 3 if the record was made\n"
          "      on different game data, 2 if the file is bad. --hashes also prints the\n"
-         "      state hash of every tick.\n"
+         "      state hash of every tick. --perturb-at is a test-only negative control for\n"
+         "      the cross-platform gate (05b): after tick TICK-1 it adds one unit (1/65536)\n"
+         "      to the x offset of the first block (no step moves one), so the replay must\n"
+         "      fail at exactly tick TICK (exit 1) if the record has a checkpoint there.\n"
          "  bitriot_headless run --out <file> [--config SPEC] [--seed N] [--script FILE]\n"
          "                       [--max-ticks N] [--checkpoint-every K] [--no-rle]\n"
          "      Play a fresh round (AI players, plus the inputs and control events of the\n"
@@ -182,10 +185,19 @@ uint64_t parseCount(const std::string& text, const std::string& what, uint64_t m
 
 int cmdReplay(const std::vector<std::string>& args, std::ostream& out, std::ostream& err)
 {
-  const Args a = parseArgs(args, 1, {}, { "hashes", "ignore-data-hash" });
+  const Args a = parseArgs(args, 1, { "perturb-at" }, { "hashes", "ignore-data-hash" });
   if (a.positional.size() != 1)
   {
     throw UsageError("replay takes one record file");
+  }
+  uint64_t perturbAt = 0;
+  if (a.has("perturb-at"))
+  {
+    perturbAt = parseNumber(a.get("perturb-at"), "--perturb-at");
+    if (perturbAt < 1)
+    {
+      throw UsageError("--perturb-at must be at least 1 (the tick that should diverge)");
+    }
   }
   MatchRecord record;
   try
@@ -207,11 +219,51 @@ int cmdReplay(const std::vector<std::string>& args, std::ostream& out, std::ostr
   Simulation sim;
   ReplayOptions options;
   options.checkDataHash = !a.flag("ignore-data-hash");
-  if (a.flag("hashes"))
+  bool perturbed = false;
+  if (a.flag("hashes") || perturbAt != 0)
   {
-    options.onTick = [&out](uint64_t tick, uint64_t hash) { out << "hash " << tick << " " << hex(hash) << "\n"; };
+    const bool print = a.flag("hashes");
+    options.onTick = [&out, &sim, &perturbed, perturbAt, print](uint64_t tick, uint64_t hash)
+    {
+      if (print)
+      {
+        out << "hash " << tick << " " << hex(hash) << "\n";
+      }
+      if (perturbAt != 0 && tick + 1 == perturbAt && !perturbed)
+      {
+        // The negative control: one unit of one offset, between two ticks, as if one
+        // platform had rounded a single value differently.
+        // A block is the target: the simulation never moves it, so nothing can
+        // quietly absorb the change (a player's offset is pulled back to the tile's
+        // centre by the next step). If there is no block, the first entity.
+        const auto& entities = sim.entityManager().getDynamicMap()->entityList;
+        std::shared_ptr<GameEntity> target;
+        for (const auto& entry : entities)
+        {
+          if (target == nullptr)
+          {
+            target = entry.second;
+          }
+          if (entry.second->getType() == BLOCK)
+          {
+            target = entry.second;
+            break;
+          }
+        }
+        if (target != nullptr)
+        {
+          target->setOffsetX(target->getOffsetX() + 1);
+          perturbed = true;
+        }
+      }
+    };
   }
   const ReplayResult r = replayRecord(record, sim, options);
+  if (perturbAt != 0 && !perturbed)
+  {
+    err << "error: --perturb-at " << perturbAt << ": the replay never reached tick " << (perturbAt - 1) << ", or it had no entity to perturb\n";
+    return EXIT_USAGE;
+  }
   switch (r.status)
   {
     case ReplayResult::OK:
