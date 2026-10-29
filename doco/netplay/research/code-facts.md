@@ -6,6 +6,8 @@ A fact check of the current code, made for the briefs in `doco/netplay/`. File:l
 
 *Brief 03b (Oct 2026) split the simulation into its own CMake library, `bitriot_sim`, with no SDL at all, and replaced the busy-wait loop with `FrameLoop` (`src/FrameLoop.*`, `src/TickPacer.*`) and a split `GameEngine` (`pumpEvents` / `stepTick` / `renderFrame`). §1, §2, §4, §9, §10 and §12 are updated; refs marked "(before 03b)" no longer exist.*
 
+*Brief 04a (Oct 2026) split input into a local sampler and a deterministic apply: `Simulation::step(const TickInputs&)` moves players, and the per-slot input state lives in the sim and in the state hash (version 2). §1, §5, §6, §10, §11 and §12 are updated; refs marked "(before 04a)" no longer exist.*
+
 An earlier design chat analysed the April-2022 code. Where this file disagrees with that chat, this file wins.
 
 **Corrections to the earlier analysis**
@@ -41,13 +43,13 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
   - `GAME_INIT`: `renderFrame()` clears the scoreboard and calls `resetGame()`. No tick runs. `resetGame()` builds a `MatchConfig` from `GameSettings` with `pickRoundSeed()`, calls `Simulation::start(config)` (which builds the Map at the config's size), then `resizeWindowIfMapChanged()` (window, back buffer and texture, and `MapRenderer::init` against the new surface), then the presentation side: the `InfoPanel`, `resetInputEvents`, each player's controller and team sprite, `InputHandler::setPointers`. The tick counter is `Simulation::tick()`.
   - `GAME_RUNNING`:
     - `pumpEvents()` (frame start): `InputHandler::pumpEvents()` polls SDL (`GameRunningSDLInput::updateEventQueue`).
-    - `stepTick()` (zero or more per frame): `InputHandler::applyInput()` (throws `InputException(GOT_QUIT)` if ESC was seen; caught in `stepTick`), then `Simulation::step()` (tick++, the win check and `GameOverTimer::advance(tick, ...)` at the top, then `SpawningPool::update()`, then `EntityManager::runFrame()`; see Simulation.h). If `roundOver()` (or ESC was seen) it sets `m_roundEnding` and the loop stops stepping.
+    - `stepTick()` (zero or more per frame): reads the local quit flag (`InputHandler::quitRequested()`; ESC is a flag, not an exception any more), samples the devices (`InputHandler::sampleTick()` returns a `TickInputs`, one `PlayerInput` byte per human slot) and calls `Simulation::step(inputs)` (tick++, the inputs applied to the players, then the win check and `GameOverTimer::advance(tick, ...)`, then `SpawningPool::update()`, then `EntityManager::runFrame()`; see Simulation.h and TickInputs.h), then copies each slot's held-action selection to the `InfoPanel` (`presentSelections()`). If `roundOver()` (or ESC was seen) it sets `m_roundEnding` and the loop stops stepping. *(Before 04a: `InputHandler::applyInput()` moved the players directly and threw `InputException(GOT_QUIT)` on ESC.)*
     - `renderFrame()` draws the world and HUD onto the CPU surface only if a tick ran, the round is ending, an event was read this frame or the surface is new, and always pushes the surface to the texture (the renderer's back buffers alternate); ESC seen on a frame that ran no tick (held by `canStep()`) ends the round too. If a round is ending, state goes to `MENU_RUNNING` and the scoreboard loads (the state after the whole last step); then the world (`WorldRenderer::renderWorld`) and the HUD are drawn and `pushCpuBufferToHardwareBuffer()` runs. The menu takes over on the next frame, as it always did.
   - `GAME_QUIT`: `renderFrame()` returns false.
 - **The round is over only after the whole step has run**: pool and `runFrame` run on the tick it ends. The scoreboard therefore sees the state after that final step (the winner itself is fixed at the top of the tick). Nothing steps after that: the old "round-end tick still runs input after flipping to `MENU_RUNNING`" (brief 01's follow-up) is moot. **During the countdown the sim still runs** (intentional: AI takeover is allowed), and ESC still lets its tick finish.
-- **Exceptions are control flow.**
-  - ESC throws `InputException(GOT_QUIT)` (`InputHandler::applyInput`), caught in `GameEngine::stepTick` and main.cpp.
-  - There are 16 `throw` sites in src. WASM builds therefore need `-fexceptions` or `-fwasm-exceptions`.
+- **Exceptions.**
+  - ESC no longer throws (brief 04a): it is the flag `InputHandler::quitRequested()` (`GameRunningSDLInput::doQuit()`), checked by `GameEngine::stepTick` and `renderFrame`. `InputException.h` is gone.
+  - There are still 17 `throw` sites in src (the renderer-init failures, the menu, the sound and asset loaders, and `Simulation`'s `logic_error`/`invalid_argument`/`out_of_range` checks). WASM builds therefore need `-fexceptions` or `-fwasm-exceptions`.
 - **What a WASM main-loop inversion touches:** main.cpp's loop locals, the per-frame try/catch and teardown (they move to a quit path), and `frame()` itself is already the callback; the `SDL_Delay(sleepHintMs())` goes (the browser paces).
 
 ## 2. Randomness and other nondeterminism
@@ -151,7 +153,7 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 - `DynamicMap::entityList` is a `map<int, shared_ptr<GameEntity>>` (DynamicMap.h:20), iterated in id order in `runAI`.
 - Updates only post FIFO messages (a `std::queue`), which are processed after all updates.
 - **Exceptions to that rule:**
-  - Human input moves players directly, before `runAI`.
+  - Human input moves players directly, before `runAI` (since 04a that is `Simulation::step`'s input phase, `applySlotInput`).
   - `onCollision` mutates health and `m_playerNumber` immediately (egg steal, EggEntity.cpp:89).
 - **Per-tile lists** (`entityMap[x][y]` and the AIGameView per-tile lists) are in insertion order. The AI takes the first match, which is deterministic.
 - **Collisions** run row-major over the map interior, over all ordered pairs (EntityManager.cpp ~346-386). Messages posted there are processed on the next tick.
@@ -172,23 +174,29 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 - Slots 5-6 are controller-only. The maximum is 6 players.
 - Controllers: A/X = action1, B/Y = action2, d-pad = directions, START = join. Analog sticks are unused (GameRunningSDLInput.cpp:186-218).
 
-**Sampling and applying are fused** *(03b split the pump out: `InputHandler::pumpEvents()` polls SDL once per frame; `applyInput()` is what runs once per stepped tick)*. `applyInput()` (formerly the tail of `processKeyboardInput()`; the SDL poll is `GameRunningSDLInput::updateEventQueue`, GameRunningSDLInput.cpp:221-291) applies the input through `processPlayerButtons(player, isDown, isReleased)` (:494-619). That function already takes `std::function` predicates, which is the natural seam for a bitmask.
+**Sampling and applying are separate** *(brief 04a; before it they were fused in `InputHandler::applyInput()`, with the sim state in `InputHandler`)*
 
-**Semantics**
+- **Sample (local).** `InputHandler::pumpEvents()` polls SDL once per frame (`GameRunningSDLInput::updateEventQueue`). Every key event of a keyboard set that drives a live human, and every button of the pad attached to a slot, becomes `InputSampler::setButton(slot, button, down)` (`InputHandler::keyboardEvent` / `setControllerButtonState`). `InputHandler::sampleTick()` (once per **stepped** tick) returns a `TickInputs`. `InputSampler` (src/InputSampler.*, SDL-free) keeps, per slot, the buttons currently down and the action-release edges since the last sample; a sample consumes the edges.
+- **Apply (deterministic).** `Simulation::step(const TickInputs&)` applies a slot's `PlayerInput` to its player (`applySlotInput`), with per-slot state it owns (`action1Down`, `action2Down`, `spawnSelection`; `Simulation::inputState(slot)`; in the state hash). The rules are the table at the top of `src/TickInputs.h`. Bits for a slot whose player is an AI, dead or missing are ignored.
+- **A `PlayerInput` is one byte:** held UP, DOWN, LEFT, RIGHT, ACTION1, ACTION2 (bits 0-5) and the release edges ACTION1_RELEASED, ACTION2_RELEASED (bits 6, 7). **Slot = playerNumber - 1.** A tap (pressed and released between two samples) is RELEASED with HELD clear; the sim reads it as press-then-release when the action was not down (the "tap rule": places BLOCK for ACTION1, EGG1 for ACTION2).
+- Buttons: UP, DOWN, LEFT, RIGHT, ACTION1, ACTION2 (`PlayerInput::Button`; `InputHandler::ButtonName` has the same values).
+- Four fixed keyboard sets (`InputHandler::setAvailableKeys`):
+  - WASD + LCtrl/LShift
+  - arrows + RCtrl/RShift
+  - KP8/5/4/6 + KP+/KP-
+  - IJKL + [ ]
+- Slots 5-6 are controller-only. The maximum is 6 players. Controllers: A/X = action1, B/Y = action2, d-pad = directions, START = join. Analog sticks are unused.
+- `m_keyMap` (slot -> the six keys of its set) is keyed by **slot**, no longer by entity id (before 04a: entity id).
+- **Local slot mask.** `InputSampler::sampleTick(mask)` reports only the slots in the mask and drops the other slots' pending edges. `InputHandler::sampleTick()` passes every human slot (today all humans are local); netplay (07) passes only its own players.
+- **Cadence.** Events accumulate in the sampler every frame; a sample is taken only when a tick is stepped, so a tick held back by `canStep()` loses no press, and a catch-up frame reports a release on its first tick only (held buttons are held on every tick). The old global `isAKeyDown()||isAKeyReleased()` gate is gone (it never changed sim behaviour).
+- **What changed from the old behaviour** (every other rule is the same, see TickInputs.h):
+  1. *The same-tick tap.* A press and release inside one tick used to be lost; its release stayed pending and ended the next hold of that action on its first tick (the "stale release"). Now the tap places the default and releases are per tick.
+  2. On a catch-up frame (several ticks owed) a release is reported on the first tick's sample only and not repeated, and a press-and-release between two samples is not lost (rule 1); the old code applied a release seen anywhere in the window on the first tick and lost a press-and-release entirely.
+- `GameRunningSDLInput`'s key sets (`keysCurrentlyDown` / `keysRecentlyReleased`, `isKeyDown`, `isKeyReleased`) are still maintained for the `MickBaseInput` interface, but nothing in gameplay reads them any more.
 
-- `isKeyDown` means the key is held.
-- `isKeyReleased` is a sticky pending release that the first read consumes. Controllers work the same way.
-- Keyboard players are processed only when some key is down or released.
-- **Quirk:** a tap shorter than one tick is lost, but its release stays pending. *(Since 03b the window is the time between two `applyInput()` calls, which is one tick normally but several on a catch-up frame; there, a release seen in the window applies on the first tick, losing that tick's last held step, and a press and release between two applies loses the press but keeps the release. Brief 04a's sampler should record edges per tick.)*
-- Directions use else-if precedence: up, then down, then left, then right.
-- Actions: press to select, release to place.
+**Sim state formerly in InputHandler** *(moved by 04a)*: `m_action1Down`, `m_action2Down` and `m_spawnSelection` were keyed by entity id; they are now `Simulation::SlotInputState` per slot, reset by `start()`, hashed.
 
-**Human sim state lives in InputHandler**, keyed by entity id: `m_action1Down`, `m_action2Down` and `m_spawnSelection` (InputHandler.h:64-66).
-
-`processPlayerButtons` also calls:
-
-- `p_infoPanel->setSelection` (UI)
-- `p_dynamicMap->tileHasStaticEntity` (a sim read)
+`processPlayerButtons` called `p_infoPanel->setSelection` (UI) and `p_dynamicMap->tileHasStaticEntity` (a sim read). Now the sim does the second itself; the first is `GameEngine::presentSelections()`, which copies each slot's selection to the panel after every step (while an action is held it shows that selection, otherwise `PLAYER_CHARACTER`, the "no selection" marker; the HUD now updates on the press tick instead of one tick later).
 
 **Hotplug**
 
@@ -199,7 +207,7 @@ An earlier design chat analysed the April-2022 code. Where this file disagrees w
 
 1. `processJoinKeyboardEvent` / `processJoinControllerEvent` (:375-461), called from inside the event pump.
 2. `openJoin` / `navigateJoin` / `confirmJoin` (:268-363).
-3. `takeOverSlotWithController` / `takeOverSlotWithKeyboard` (:195-223) set the public field `m_controlledByAI=false` (PlayerCharacterEntity.h:69).
+3. `takeOverSlotWithController` / `takeOverSlotWithKeyboard` set the public field `m_controlledByAI=false` (PlayerCharacterEntity.h:69) and (04a) clear the slot's sampler state; they are brief 04b's to turn into control events.
 
 The old AI goal and instruction lists persist across the switch.
 
@@ -285,7 +293,7 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
 
 - ~~A per-round seed or PRNG object.~~ Done by brief 02: `GameSettings::setRoundSeed()` / `pickRoundSeed()` (03a: the reseed itself moved into `Simulation::start()`), harness `setRoundSeed()`, `BITRIOT_TEST_SEED` as the base seed.
 - ~~A state-hash function.~~ Done by 03a: `Simulation::stateHash()`.
-- An input-injection path. `InputHandler::applyInput` hard-wires the `GameRunningSDLInput` singleton. (Brief 04a.)
+- ~~An input-injection path. `InputHandler::applyInput` hard-wires the `GameRunningSDLInput` singleton.~~ Done by 04a: tests drive `Simulation::step(TickInputs)` directly (`tests/InputApplyTest.cpp`, with `tests/support/ScriptedInput.h`), and `InputHandler`'s device-to-slot routing is testable without SDL events (`tests/InputSamplerTest.cpp`).
 - ~~A headless `GameEngine` tick; the harness duplicated the spawn positions and seeded no blocks.~~ Done by 03a: the harness starts rounds with `Simulation::start()` and steps `Simulation::step()`, the code `GameEngine` runs. It defaults to 0% blocks so older scenario tests keep open ground. `GameEngine` itself still cannot run headlessly (renderer, `InfoPanel`, menu), but it is now only glue around `Simulation`.
 - Two sims in one process, which the singletons rule out.
 - ~~A sim without bitmaps.~~ Done by brief 03b: `GameEntity::incAnimFrame` reads `EntityAnim::frameCount()` (a table in `src/EntityAnim.cpp`, kept in agreement with the bitmaps by `RenderSideTest`), `Map` has no surfaces, and the harness creates no surface. `bitriot_sim_tests` links `bitriot_sim` alone and plays real rounds.
@@ -296,7 +304,7 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
   - `applyMapDimensionsIfChanged()` rebuilt `Map` before `Simulation::start()` (via `resetGame()`) deleted the old EntityManager. *(Since brief 03b `Simulation::start()` tears the old round down first and then resizes the Map itself; the engine only resizes the window afterwards. The generation guard below still makes the order harmless.)*
   - The old `BlockEntity` destructors then call `setBlockAt(x,y,false)` with the *old* map's tile coordinates against the *new* map's array and stride. That can overwrite the new map's walls with EMPTY (an old block at (8,3) hits the east wall of a 9x7 map), or write past the end of the array if the map shrank. *(Correction to the earlier wording, which blamed "the wrong stride": the stride is the new one; the coordinates are the old ones.)*
   - *Fixed by brief 01:* `Map` has a generation counter bumped by every `init()`. `BlockEntity` remembers the generation it was placed in and its destructor skips the write if the map has since been rebuilt.
-- **ESC/quit** is local: it throws `InputException` and flips this machine to the scoreboard (`GameEngine::stepTick`: `InputHandler::applyInput()` throws, the catch notes the quit).
+- **ESC/quit** is local: a flag (`InputHandler::quitRequested()`, set by `GameRunningSDLInput`), no longer an exception. `GameEngine::stepTick` reads it, still runs the tick (with that tick's input applied, which the old exception skipped) and flips this machine to the scoreboard; `renderFrame()` also checks it on a frame that ran no tick.
 - **`GameSettings::setNumberOfPlayers`** keeps existing slots. `InputHandler::setPointers` writes keyboard assignments back into `GameSettings` (InputHandler.cpp:106).
 - **Debug logging** is compiled in by default (the default build type is Debug), and `MickLogger` writes debug output to `cout` every frame.
 - **`Map::~Map`** uses `delete` rather than `delete[]` (Map.cpp:122).
@@ -319,15 +327,15 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
 
 **The round-end tick.** On the tick the GameOverTimer completes, pool and `runFrame` still run (and, in the engine, so does that tick's input): the round is over only after the whole step (03a pinned this down in `Simulation`; the engine used to flip the state to `MENU_RUNNING` part-way through the tick). An ESC quit behaves the same way. `winner()` is fixed at the top of the end tick; the roster and scoreboard stats are those after the step.
 
-**Action input rules today** (InputHandler.cpp ~494-619):
+**Action input rules** (the old `processPlayerButtons`, now `Simulation::applySlotInput`; the full table is at the top of `src/TickInputs.h`):
 
-- `isReleased` is only checked inside the matching action-down branch (~:565, ~:604).
-- Holding an action blocks movement, and turns directions into item or egg selection.
-- An ACTION2 press selects EGG1 immediately.
-- A release with no prior down state is ignored.
-- Keyboard players are processed only when `isAKeyDown()||isAKeyReleased()` (~:653). This gate changes only when the UI updates, not sim behaviour.
+- A release is only acted on inside the matching action's hold. ACTION1 released while ACTION2 is down, and vice versa, is ignored (and so is the other action's press during a hold). If the other action is still held when a hold ends, its hold starts on the *next* tick.
+- Holding an action blocks movement, and turns directions into item or egg selection (A1: UP bomb, DOWN block, LEFT mine, RIGHT rocket spinner; A2: UP EGG3, DOWN EGG5, LEFT EGG2, RIGHT EGG4). The selection sticks when the direction is let go; the direction held on the release tick still counts.
+- An ACTION2 press selects EGG1 immediately; an ACTION1 hold with no direction places BLOCK (both verified against `PlayerCharacterEntity::createEntity`).
+- *(Before 04a)* A release with no prior down state was ignored *and kept pending*. Now: with no hold on, a RELEASED bit is a tap (press then release in that tick) and places the default.
+- The old `isAKeyDown()||isAKeyReleased()` gate changed only when the UI updated, not sim behaviour; it is gone.
 
-**`InputHandler::setPointers`** (~:93-112) gives keyboard sets to every human slot, and writes those assignments back into `GameSettings`.
+**`InputHandler::setPointers`** (~:21-129) gives keyboard sets to every human slot (by `attachedKeyboardId`, seeding the lowest free set), and writes those assignments back into `GameSettings`. It also clears the sampler. Brief 07 must exclude remote humans from this assignment.
 
 **`MickSDLRenderer` throws pointers.** It does `throw new runtime_error(msg)` (MickSDLRenderer.cpp:35-143), so `catch (const exception&)` never catches them, and a renderer-init failure aborts without a useful message.
 
@@ -335,7 +343,7 @@ There is no networking code at all: no SDL_net, sockets, enet or Emscripten. REA
 
 **`main` parses options with `getopt("fb")`.** Long options need `getopt_long`.
 
-**`InputHandler`'s id-keyed maps** are cleared in `setPointers`, so resetting entity ids per round is safe for them.
+**`InputHandler` holds no per-player game state** (04a). Its `m_keyMap` and the `InputSampler` are keyed by slot (playerNumber - 1) and rebuilt/cleared in `setPointers`, so resetting entity ids per round no longer matters to them.
 
 **libstdc++ vs libc++** (Emscripten uses libc++): no known divergence.
 

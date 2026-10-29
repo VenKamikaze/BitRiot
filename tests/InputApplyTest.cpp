@@ -322,7 +322,16 @@ TEST_F(InputApplyTest, NothingIsPlacedOnATileWithAStaticEntityButTheHoldEnds)
 TEST_F(InputApplyTest, ReleasingWhileStillHoldingTheButtonStillPlaces)
 {
   // HELD and RELEASED together (released and pressed again inside the window) during a
-  // hold: the release counts, then the next tick's HELD begins a fresh hold.
+  // hold: the release counts, then the next tick's HELD begins a fresh hold. For A1:
+  startHumans();
+  tick(0, held({PlayerInput::ACTION1}));
+  tick(0, heldAndReleased({PlayerInput::ACTION1}, {PlayerInput::ACTION1}));
+  EXPECT_EQ(countType(BLOCK), 1);
+  EXPECT_FALSE(state(0).action1Down);
+  tick(0, held({PlayerInput::ACTION1}));
+  EXPECT_TRUE(state(0).action1Down);
+
+  // and for A2:
   startHumans();
   tick(0, held({PlayerInput::ACTION2}));
   tick(0, heldAndReleased({PlayerInput::ACTION2}, {PlayerInput::ACTION2}));
@@ -731,6 +740,24 @@ struct OldRules
     return false;
   }
 };
+
+TEST(OldRulesTest, TheOldRulesLostATapAndLeftItsReleasePendingToEndALaterHold)
+{
+  // What brief 04a fixed, shown on the model of the old code. A press and release
+  // between two applies is never seen held (no tick has the key down), and the
+  // release is only looked at inside a hold, so the old code did nothing with it and
+  // left it pending. The next real press then began a hold and the first tick of that
+  // hold found the stale release and placed at once: an item the player did not mean
+  // to place, a tick after a press they were still holding.
+  OldRules old;
+  old.tick(0);                       // nothing held at the tick the tap fell between...
+  old.pending[PlayerInput::ACTION1] = true; // ...but the device recorded the release
+  EXPECT_FALSE(old.a1) << "the tap placed nothing";
+  old.tick(PlayerInput::heldBit(PlayerInput::ACTION1)); // a real press, still held
+  EXPECT_TRUE(old.a1);
+  old.tick(PlayerInput::heldBit(PlayerInput::ACTION1)); // its first tick as a hold
+  EXPECT_FALSE(old.a1) << "the stale release ended the hold while the button was still down";
+}
 
 TEST_F(InputApplyTest, OnEveryInputTheOldRulesHandledWellTheNewRulesGiveTheSameStates)
 {

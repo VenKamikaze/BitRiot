@@ -64,7 +64,7 @@ Use `-sUSE_SDL=2`, `-sUSE_SDL_IMAGE=2 -sSDL2_IMAGE_FORMATS='["png"]'`, `-sUSE_SD
 
 ### 3. Compiler and link flags
 
-- Exceptions: `-fwasm-exceptions`, matching 05b. ESC no longer throws after 04a, but 16 other `throw` sites remain.
+- Exceptions: `-fwasm-exceptions`, matching 05b. ESC no longer throws (04a), but 17 other `throw` sites remain (code-facts §1).
 - `-sALLOW_MEMORY_GROWTH=1`.
 - No pthreads, so no COOP/COEP headers are needed.
 
