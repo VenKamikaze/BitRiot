@@ -18,8 +18,8 @@ Each brief (`NN-*.md`) is one unit of work, sized for a single implement → rev
 |---|---|---|---|---|
 | 01 | [Round lifecycle hygiene](01-round-lifecycle-hygiene.md) | BitRiot | — | done |
 | 02 | [Seeded simulation RNG](02-sim-rng.md) | BitRiot | 01 | done |
-| 02b | [Fixed-point simulation maths](02b-fixed-point-sim.md) | BitRiot | 01, 02 | done (play-test pending) |
-| 03a | [`Simulation`, `MatchConfig` and state hash](03a-simulation-and-state-hash.md) | BitRiot | 01, 02, 02b | done (play-test pending) |
+| 02b | [Fixed-point simulation maths](02b-fixed-point-sim.md) | BitRiot | 01, 02 | done |
+| 03a | [`Simulation`, `MatchConfig` and state hash](03a-simulation-and-state-hash.md) | BitRiot | 01, 02, 02b | done |
 | 03b | [Surface-free sim library and frame loop](03b-surface-free-sim-and-frame-loop.md) | BitRiot | 03a | done (play-test pending) |
 | 04a | [Input sampling and `step(inputs)`](04a-input-sampling.md) | BitRiot | 03b | done (play-test pending) |
 | 04b | [Control events, rumble and UI plumbing](04b-control-events.md) | BitRiot | 04a | done (play-test pending) |

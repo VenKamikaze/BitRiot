@@ -3,7 +3,7 @@
 - **Repo:** BitRiot
 - **Branch:** `netplay/02b-fixed-point`
 - **Depends on:** 01, 02
-- **Status:** done (play-test pending)
+- **Status:** done
 
 ## Goal
 
@@ -248,4 +248,4 @@ To play before the merge, use `--branch netplay/02b-fixed-point` in the AFTER cl
 4. **Bots:** they still path around blocks and bomb through them (same A\* routes as before; a step can finish a tick earlier or later).
 5. Anything that looks one pixel off at a tile boundary is the expected quantisation, not a bug.
 
-**Play-test result:** *(pending)*
+**Play-test result (29 Oct 2026, user, Arch Linux):** went fine. Two rounds, one keyboard player against three CPU players, on `claude` at or after f430398 (02b–05 and vnet 14 merged). Movement speed and feel matched; nothing noticeable from the fixed-point conversion. **Play-test passed.**
