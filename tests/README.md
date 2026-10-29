@@ -17,14 +17,16 @@ tests:
 
 | Executable | Links | Contains |
 | --- | --- | --- |
-| `bitriot_sim_tests` | `bitriot_sim` and GoogleTest only: no SDL, no RmlUi, no OpenGL | every simulation test (round lifecycle, AI, win conditions, fixed-point maths, `Simulation`, the state hash, `step(inputs)` and its apply rules, the guards, `Map`, the sound seam, `step(inputs)` with control events, `hitThisTick`) |
-| `bitriot_tests` | the whole game (`bitriot_core`) | the same simulation tests, plus the ones that need the game: `ScoreboardLayoutTest`, `ScoreboardRandomTest`, `FrameLoopTest`/`TickPacerTest`, `RenderSideTest`, `InputSamplerTest` (the sampler and the key/pad routing), `InputControlTest` (join, takeover, unplug and rumble through the input layer, with a fake rumble device) |
+| `bitriot_sim_tests` | `bitriot_sim` (plus the small `bitriot_headless_cli` library) and GoogleTest only: no SDL, no RmlUi, no OpenGL | every simulation test (round lifecycle, AI, win conditions, fixed-point maths, `Simulation`, the state hash, `step(inputs)` and its apply rules, the guards, `Map`, the sound seam, `step(inputs)` with control events, `hitThisTick`, and since brief 05 the match record, replay, golden round, data hash, build id and `bitriot_headless` tests) |
+| `bitriot_tests` | the whole game (`bitriot_core`) | the same simulation tests, plus the ones that need the game: `ScoreboardLayoutTest`, `ScoreboardRandomTest`, `FrameLoopTest`/`TickPacerTest`, `RenderSideTest`, `InputSamplerTest` (the sampler and the key/pad routing), `InputControlTest` (join, takeover, unplug and rumble through the input layer, with a fake rumble device), `GameOptionsTest` (the game's `getopt_long` command line, `--record`) |
 
 The simulation tests are compiled once (an object library) and linked into both.
 `bitriot_sim_tests` linking at all is a proof that the simulation needs no SDL; it
 also plays real rounds, so it proves the simulation *runs* with nothing else in the
 process. Run both when you touch the simulation. A test that needs a surface, a
 renderer, RmlUi or a device belongs in `CORE_TEST_SOURCES` in `tests/CMakeLists.txt`.
+
+The CLI tests start the real `bitriot_headless` binary (both test executables depend on that target, so building either builds it) from the repository root, where `data/` is.
 
 **Without the game's dependencies:** configure with `-DBITRIOT_BUILD_GAME=OFF` and
 CMake never looks for SDL2, SDL2_mixer/ttf/image, OpenGL or RmlUi and builds only
@@ -249,9 +251,73 @@ EXPECT_NE(sim().stateHash(), before);
   compared tick by tick. The same digests must pass on every compiler. Check a
   change is deliberate before regenerating: a digest that moves for no reason is a
   determinism bug.
+  A change that moves the digests moves the golden match record too (next section):
+  regenerate both in the same commit and say so for both.
 - Hashing is read-only and needs no tick, so a test can hash a world it has just
   edited. To change a protected field, use the pointer-to-member trick in
   `SimulationTest.cpp` (`struct Access`).
+
+## Match records, replay and the golden round
+
+Brief 05 added the record of a round (`src/MatchRecord.*`, the byte format in
+[`doco/netplay/match-record-format.md`](../doco/netplay/match-record-format.md)), the replayer
+(`src/MatchReplay.*`) and `bitriot_headless` (`src/headless/`). Their tests:
+
+| File | What it pins |
+| --- | --- |
+| `MatchRecordTest.cpp` | the bytes, written out by hand from the specification (header, a tick, an RLE run); parse then serialise is byte-identical (plain, RLE, 40 random records, a run longer than 65535, an empty record); every truncation is refused; every single bit flip either is refused or reads back to the same bytes; each header check; counts that cannot be true are refused before anything is allocated; non-maximal runs and out-of-order checkpoints are refused; what the format cannot hold is refused on write |
+| `ReplayTest.cpp` | a seeded round with scripted humans is recorded and replays to the same hash **on every tick** (and from the serialised bytes); the checkpoint policy (tick 0, every K, the last); the header (build id, data hash, hash version, config); recording does not change the round; **mismatch detection**: a corrupted input is named at its tick (checkpoint every tick) or its window (every K), a corrupted checkpoint, a different seed, other game data, another hash version, an unplayable config, an event for a slot the round lacks (the tick is named), a wrong round-end flag; replay can stop part-way; a record is a script for another run |
+| `GoldenRecordTest.cpp` | the golden record (below) |
+| `DataHashTest.cpp` | the data hash is the documented FNV over the sorted items; the sim's named constants are in it; comments, blank lines, line order, spacing, leading zeros and CRLF do not move it, and any changed value, name, added or removed constant does; an unreadable file is an error; **eager loading**: `start()` refuses unreadable data and leaves the running round alone, and after `start()` the files are not read again; CRLF data files load |
+| `BuildIdTest.cpp` | this binary's id is the generated one; the id's inputs are the simulation's files and nothing else; the generator, run on small trees, follows includes through headers and directories, changes with any reached file, ignores unreached ones and line endings, does not rewrite an unchanged file, and fails loudly on a missing file |
+| `HeadlessCliTest.cpp` | the **real binary**: `replay` of the golden record, mismatch naming the tick, the data-mismatch exit code, bad files, `run` writing a record that replays, a record as a script (re-running the golden record from its own inputs reproduces it), `dump`, every usage error, `help`/`version`, no SDL in `ldd`; and **two processes started together print identical output** (`replay --hashes`, `dump`, `run`) |
+
+### The golden record
+
+`tests/data/golden-round.brmr` is **one complete round** (2,768 ticks, 39,791 bytes, a
+checkpoint on every tick) on a 13x11 map (the smallest the menu offers) with 55% blocks
+and the NPC spawner on. Four players: two humans driven by a script and two bots. The
+script (`tests/support/GoldenScript.h`) walks the humans and has each use ACTION1 and
+ACTION2 with no direction and with each of the four directions, in a shuffled order that
+visits all ten before it repeats; at tick 400 a bot is taken over by a human, at 700 it is
+given back, and at 1500 player 1 leaves. `GoldenRecordTest` checks that the round reaches
+its natural end, that every one of the ten gestures was made, that the humans laid every
+kind of item (blocks, all five eggs, bombs, mines, rocket spinners), that rockets flew,
+explosions, hatched robots, drones, wall eaters and egg thieves, energy drops and
+power-ups appeared, that the bots ran 175 A* path searches, and that both humans played
+for 800 ticks. `BITRIOT_GOLDEN_STATS=1` prints those numbers.
+
+`TheGoldenRecordReplaysOnEveryTick` **breaks on purpose** on any change to how the
+simulation plays, as the pinned digests do (and fails in the same builds: it passes
+identically in Debug and Release, GCC and Clang). The record is the more sensitive of the
+two: a hash on every tick, and humans and control events in the mix.
+
+**Regenerating the golden record** (deliberately, after a legitimate change to the
+simulation, the AI, the data files or the hash; first confirm the change is the reason
+it moved, exactly as for the digests above):
+
+```bash
+cd build
+BITRIOT_REGEN_GOLDEN=1 ./tests/bitriot_sim_tests --gtest_filter='GoldenRecordTest.*'
+git diff --stat ../tests/data        # one binary file changed
+./tests/bitriot_sim_tests            # and everything passes with the new file
+```
+
+That plays `GoldenScript.h`'s script on the current simulation and rewrites the file. To
+keep a record's *inputs* and only redo its checkpoints (for instance after a change that
+moves the round without moving what the humans do), the binary can do it:
+`bitriot_headless run --script tests/data/golden-round.brmr --checkpoint-every 1 --out
+tests/data/golden-round.brmr`.
+
+**The commit message must call out the regeneration** ("regenerates the golden record:
+bots now ..."), next to the line about the digests, so a reviewer can tell a deliberate
+change from a determinism fault. A golden record that changes in a commit that should not
+change play is a regression. The record's header names the build that wrote it
+(`bitriot_headless replay` shows it); the test does not compare build ids, only the data
+hash, so the file outlives unrelated source edits.
+
+The golden digests in `SimulationTest` are unchanged by brief 05, and recording does not
+move them: it reads the simulation and nothing else.
 
 ## Fixed-point maths
 
@@ -516,8 +582,9 @@ files, run, swap back.
 
 ## Coverage today
 
-306 tests in `bitriot_tests` (258 of them also in `bitriot_sim_tests`), across the
-files below:
+499 tests in `bitriot_tests` (397 of them also in `bitriot_sim_tests`), across the
+files below (the counts here are as of brief 05; the per-file lists of the later briefs
+are in their own sections above):
 
 - `WinConditionTest.cpp` — free-for-all, team and co-op round-end rules,
   including the co-op "board cleared and pool exhausted" win and the
@@ -620,6 +687,9 @@ files below:
 - `MapTest.cpp` - `Map` with no surface: the layout, reads outside it are WALL,
   writes outside it are ignored, the stride follows the built size, `resize()`
   rebuilds only when the size changes.
+- `MatchRecordTest.cpp`, `ReplayTest.cpp`, `GoldenRecordTest.cpp`, `DataHashTest.cpp`,
+  `BuildIdTest.cpp`, `HeadlessCliTest.cpp` (brief 05) - see "Match records, replay and the
+  golden round" above. `GameOptionsTest.cpp` (core executable) - the game's command line.
 - `FrameLoopTest.cpp` (core executable) - `TickPacer` and `FrameLoop` on a fake clock.
 - `RenderSideTest.cpp` (core executable) - frame counts against the loaded bitmaps,
   drawing is read-only, the world is pixel-for-pixel what it was before 03b.

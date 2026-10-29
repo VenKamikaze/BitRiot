@@ -99,6 +99,18 @@ TEST(HeadlessCliTest, ReplayOfTheGoldenRecordMatches)
   EXPECT_TRUE(contains(r.out, "replay: OK, ")) << r.out;
   EXPECT_TRUE(contains(r.out, "round over: yes")) << r.out;
   EXPECT_TRUE(contains(r.out, "checkpoints verified")) << r.out;
+
+  // stdout is only the result. The simulation's logger writes DEBUG lines (Debug builds)
+  // to std::cout; the binary sends those to stderr so that stdout is the same on every
+  // build (05b diffs it).
+  std::istringstream lines(r.out);
+  std::string line;
+  while (std::getline(lines, line))
+  {
+    const bool known = line.rfind("record: ", 0) == 0 || line.rfind("config: ", 0) == 0 || line.rfind("ticks: ", 0) == 0
+        || line.rfind("replay: ", 0) == 0;
+    EXPECT_TRUE(known) << "unexpected line on stdout: " << line;
+  }
 }
 
 TEST(HeadlessCliTest, ReplayNamesTheFirstDivergingTick)

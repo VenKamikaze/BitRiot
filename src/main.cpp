@@ -270,6 +270,11 @@ int main(int argc, char* argv[])
   // Un-init section
   try
   {
+    if(engine)
+    {
+      engine->finishRecording(); // the window was closed mid-round: keep what was played
+    }
+
     if(TTF_WasInit())
     {
       TTF_Quit(); //Quit SDL_ttf

@@ -27,7 +27,8 @@ GameEngine::GameEngine(SDL_Surface* back, shared_ptr<InputHandler> inputHandler)
 
 GameEngine::~GameEngine()
 {
-  finishRecording(); // the window was closed mid-round: keep what was played
+  // (A round still being recorded is written by main() through finishRecording()
+  // before the engine goes: this runs during static destruction, too late to hash.)
   uninitialise();
 }
 

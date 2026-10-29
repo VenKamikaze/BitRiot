@@ -38,6 +38,9 @@ class GameEngine
     // Recording only reads the simulation (the inputs it was given, a state hash every
     // 30 ticks); it cannot change a round.
     void setRecordDirectory(const std::string& directory) { m_recordDir = directory; }
+    // Writes the round being recorded, if any, and stops recording it. The engine does
+    // it when a round ends; main() calls it when the game is closed mid-round.
+    void finishRecording();
 
     // The pieces of a frame, for FrameLoop (see FrameLoop.h for the order they run
     // in). GameEngine no longer has a one-call-does-everything entry point: a frame
@@ -90,7 +93,6 @@ class GameEngine
     std::string m_recordDir;
     std::unique_ptr<MatchRecorder> m_recorder; // a round is being recorded
     void startRecording();
-    void finishRecording(); // writes the file and stops; no-op when not recording
     // The deterministic world: setup (start) and the per-tick step. Everything the
     // sim needs lives in there; this class keeps rendering, the InfoPanel, sound,
     // the menu and input, and drives the Simulation.
