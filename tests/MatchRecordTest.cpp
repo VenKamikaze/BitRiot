@@ -418,6 +418,13 @@ TEST(MatchRecordTest, CheckpointsMustBeInOrderAndInsideTheRecord)
   std::vector<uint8_t> bytes = sampleRecord(false).serialize();
   bytes[bytes.size() - 12] = 99;
   expectParseFails(bytes, "out of order or beyond");
+  // ... or to a tick the checkpoint before it already has, or an earlier one
+  // (the checkpoints are at ticks 0, 3 and 7)
+  bytes = sampleRecord(false).serialize();
+  bytes[bytes.size() - 12] = 3;
+  expectParseFails(bytes, "out of order or beyond");
+  bytes[bytes.size() - 12] = 2;
+  expectParseFails(bytes, "out of order or beyond");
 }
 
 TEST(MatchRecordTest, WhatTheFormatCannotHoldIsRefusedOnWrite)

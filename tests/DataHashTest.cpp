@@ -119,6 +119,22 @@ TEST_F(DataHashTest, TheItemsAreSortedByNameAlone)
   EXPECT_TRUE(std::is_sorted(names.begin(), names.end()));
 }
 
+TEST_F(DataHashTest, ANameThatIsAPrefixOfAnotherSortsFirstAndTheSortIsOnTheNameAlone)
+{
+  // "BOMB_FUSE" < "BOMB_FUSE-X" by name, but as finished text "BOMB_FUSE-X=1" sorts
+  // before "BOMB_FUSE=45" ('-' is below '='). The specification sorts by name.
+  fs::current_path(m_scratch);
+  setEntity(entityText() + "BOMB_FUSE-X 1\n");
+  DataReader::getInstance()->clearCache();
+  const std::vector<std::string> items = DataHash::items();
+  const auto fuse = std::find(items.begin(), items.end(), "data/entity.txt:BOMB_FUSE=45");
+  const auto fuseX = std::find(items.begin(), items.end(), "data/entity.txt:BOMB_FUSE-X=1");
+  ASSERT_NE(fuse, items.end());
+  ASSERT_NE(fuseX, items.end());
+  EXPECT_LT(fuse, fuseX);
+  EXPECT_EQ(DataHash::hash(), referenceHash(items));
+}
+
 TEST_F(DataHashTest, TheSimulationsNamedConstantsAreInIt)
 {
   const std::vector<std::string> items = DataHash::items();
