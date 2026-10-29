@@ -12,7 +12,7 @@ The goal is deterministic lockstep online multiplayer for Bit Riot, a browser (W
 **Done and merged into `claude`:**
 
 - **BitRiot:** 01, 02, 02b, 03a and 03b. 02b, 03a and 03b are `done (play-test pending)`.
-- **vnet:** 06, 10 and 11. The whole vnet track is complete: code merged at 26f4b0f, version 0.3.0. Later commits on vnet's `claude` are docs only.
+- **vnet:** 06, 10 and 11. The whole vnet track is complete: code merged at 26f4b0f, version 0.3.0, released as tag `v0.3.0` on b302029 (later commits are docs only).
 
 **Next ready, in parallel:**
 
@@ -26,7 +26,7 @@ They touch different areas (input/sim vs `main.cpp`, CMake and renderers) but bo
 **Waiting on the user** (ask about these; don't block on them):
 
 1. **Play-test** of 02b (fixed-point movement feel), 03a (round flow, scoreboard) and 03b (frame loop, catch-up, rumble). One session on `claude` covers all three; the Arch commands are in 02b's and 03b's Outcomes. Record the result in each Outcome.
-2. **vnet tag.** The cloud session's tag push was refused (HTTP 403), so the user will push it from a PC. vnet's README still says to pin `v0.1.0`; consider tagging the current `claude` as `v0.3.0` instead and updating the README. Until a tag exists, consumers pin a commit hash.
+2. **vnet tags.** The cloud session can't push tags (HTTP 403), so the user tags from a PC. `v0.1.0` (5847e44) and `v0.2.0` (c8be4df) are pushed. `v0.3.0` is meant for b302029. Check with `git ls-remote --tags https://github.com/VenKamikaze/vnet`, and ask the user if it's missing. vnet's README already pins `v0.3.0`.
 3. **vnet `claude` → `main`** merge: the user's call.
 4. **CI has never been observed.** Neither repo's GitHub Actions runs could be watched from the cloud session. Ask the user to check vnet's Actions tab (Linux, macOS, ASan, MinGW/Wine, Go, fuzz, Docker, the browser job).
 

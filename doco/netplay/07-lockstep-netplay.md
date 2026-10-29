@@ -107,7 +107,7 @@ This brief is native-only and driven from the command line. The lobby UI is brie
 **Dependency.**
 
 - Pull in vnet as a submodule at `ext/vnet` or through `FetchContent` with `GIT_REPOSITORY`. Justify the choice.
-  - **vnet's state (Oct 2026):** briefs 06, 10 and 11 are merged on vnet's `claude` branch (version 0.3.0, merge 26f4b0f). The `v0.1.0` tag named in vnet's README may not exist on GitHub yet (the cloud session could not push tags), so pin vnet by **commit hash**, not by tag or branch.
+  - **vnet's state (Oct 2026):** briefs 06, 10 and 11 are merged on vnet's `claude` branch (version 0.3.0, merge 26f4b0f). vnet is released as tags `v0.1.0` (06), `v0.2.0` (10) and `v0.3.0` (11, commit b302029). Pin **`v0.3.0`**; check it exists with `git ls-remote --tags https://github.com/VenKamikaze/vnet`, and fall back to the commit hash if it doesn't.
   - vnet APIs worth using: `vnet_time()` (one backend-independent clock: virtual on loopback, so `LockstepSession` tests never sleep), the loopback backend with seeded impairment, and `VNET_IMPAIR` with a distinct `seed=` per process. `vnet_resolve` takes `host:port` numerically (no DNS).
   - 03b's `FrameLoop` gives you `canStep()` (veto a tick) and `extraTicks()` (up to 2 extra ticks a frame, to catch up after a stall). Wrap `GameEngine`'s hooks, don't replace them; read 03b's Outcome follow-ups for 07.
 - Update `scripts/cloud-setup.sh` as needed. vnet is public, so no credentials are needed to fetch it.
