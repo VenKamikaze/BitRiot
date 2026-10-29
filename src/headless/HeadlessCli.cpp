@@ -237,9 +237,10 @@ int cmdReplay(const std::vector<std::string>& args, std::ostream& out, std::ostr
         // The negative control: one unit of one offset, between two ticks, as if one
         // platform had rounded a single value differently.
         // A block is the target: the simulation never moves it, so nothing can
-        // quietly absorb the change (but an explosion that destroys it on this very
-        // tick would, as it does for the recorded run too; not at the ticks tested) (a player's offset is pulled back to the tile's
-        // centre by the next step). If there is no block, the first entity.
+        // quietly absorb the change (a player's offset is pulled back to the tile's
+        // centre by the next step). An explosion that destroys the block on this very
+        // tick would absorb it too; none does at the ticks the gate and the tests use.
+        // If there is no block, the first entity.
         const auto& entities = sim.entityManager().getDynamicMap()->entityList;
         std::shared_ptr<GameEntity> target;
         for (const auto& entry : entities)

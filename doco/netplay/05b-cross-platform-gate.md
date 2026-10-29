@@ -71,7 +71,7 @@ scripts/determinism-gate.sh --only gcc-O2,clang-O2,wasm-O2
 scripts/determinism-gate.sh --strict         # an unavailable variant counts as a failure
 ```
 
-About three minutes with warm builds (valgrind and qemu dominate), about ten from scratch on the shared 4 cores. A missing toolchain gives a "not available" row with the reason; with no emsdk (neither `emcc` on `PATH` nor `$EMSDK_DIR`, default `./.emsdk`) the three wasm rows say so and the rest run. The how-to, the table and the rules are also in `tests/README.md` ("Cross-platform determinism gate").
+About three minutes with warm builds (valgrind and qemu dominate), about ten from scratch on the shared 4 cores. A missing toolchain gives a "not available" row with the reason; with no emsdk (neither `$EMSDK_DIR`, default `./.emsdk`, nor `emcc` on `PATH`) the four wasm rows say so and the rest run. The how-to, the table and the rules are also in `tests/README.md` ("Cross-platform determinism gate").
 
 **Results** (GCC 13.3, Clang 18.1, Emscripten 6.0.13, Node 22.22.0, emsdk's Node 24.19.0, qemu-user 8.2.2; pass = `replay --hashes` exits 0 and its stdout is byte-identical to the reference's for all 7 records, `version` is identical, four exception probes behave identically, and the negative control is caught at tick 100)
 

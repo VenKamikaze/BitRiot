@@ -30,8 +30,9 @@
 # Needs: cmake and a C++17 compiler (g++, the reference). Optional, per variant: clang++
 # (clang-*), libc++ (clang-libc++), 32-bit multilib (gcc-m32), aarch64-linux-gnu-g++ +
 # qemu-aarch64 (aarch64-*), valgrind, and a pinned Emscripten + Node (wasm-*; install
-# with scripts/setup-emsdk.sh; this script never installs it). The wasm variants find
-# emcc on PATH, or $EMSDK_DIR (default <repo>/.emsdk) and source its emsdk_env.sh.
+# with scripts/setup-emsdk.sh; this script never installs it). The wasm variants use
+# $EMSDK_DIR (default <repo>/.emsdk, sourcing its emsdk_env.sh) when it exists, else an
+# emcc on PATH (a version other than the pin is a warning, a failure under --strict).
 #
 # Environment: GATE_JOBS (build jobs, default 4), GATE_BUILD_ROOT (default
 # <repo>/build-gate, git-ignored), GATE_NODE (the Node that runs the wasm builds;
@@ -333,14 +334,22 @@ run_replay() {
 if [ -z "$BUILD_ROOT" ]; then echo "determinism-gate: --build-root needs a directory" >&2; exit 2; fi
 BUILD_ROOT="$(realpath -m -- "$BUILD_ROOT")"
 if [ "$CLEAN" = 1 ]; then
-    # --clean deletes the build root: never the filesystem root, a home directory or the repository itself.
-    for bad in / "$HOME" "$root" "$(dirname "$root")"; do
+    # --clean deletes the build root, but only one the gate made (it holds _gate/) or an
+    # empty one: never the filesystem root, a home directory, the repository or any
+    # other directory named by mistake.
+    for bad in / "${HOME:-/}" "$root" "$(dirname "$root")"; do
         if [ "$BUILD_ROOT" = "$(realpath -m -- "$bad")" ]; then
             echo "determinism-gate: refusing to --clean $BUILD_ROOT (use a directory made for the gate, e.g. $root/build-gate)" >&2
             exit 2
         fi
     done
-    [ -d "$BUILD_ROOT" ] && rm -rf "$BUILD_ROOT"
+    if [ -d "$BUILD_ROOT" ]; then
+        if [ ! -d "$BUILD_ROOT/_gate" ] && [ -n "$(ls -A -- "$BUILD_ROOT")" ]; then
+            echo "determinism-gate: refusing to --clean $BUILD_ROOT: it is not empty and was not made by the gate (no _gate/ in it)" >&2
+            exit 2
+        fi
+        rm -rf -- "$BUILD_ROOT"
+    fi
 fi
 OUT="$BUILD_ROOT/_gate"
 mkdir -p "$BUILD_ROOT" "$OUT"
