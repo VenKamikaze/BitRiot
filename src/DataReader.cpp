@@ -187,6 +187,11 @@ bool DataReader::readTextFile(const string & filename)
   string fileText((istreambuf_iterator<char>(rawFile)), istreambuf_iterator<char>());
   rawFile.close();
   fileText.erase(remove(fileText.begin(), fileText.end(), '\r'), fileText.end());
+  // A UTF-8 byte order mark (some editors add one) is not part of the first name.
+  if (fileText.compare(0, 3, "\xEF\xBB\xBF") == 0)
+  {
+    fileText.erase(0, 3);
+  }
   istringstream inputFile(fileText);
 
   // set up map<string, int> for this file
@@ -251,12 +256,12 @@ bool DataReader::readTextFile(const string & filename)
     if (!inputFile)
     {
       m_errorString = "Unexpected end of file: " + filename + " after string: " + constantName;
-        return false;
+      return false;
     }
     if (input == '\n')
     {
       m_errorString = "Unexpected end of line in file: " + filename + " after string: " + constantName;
-        return false;
+      return false;
     }
 
     // get int or string
@@ -276,12 +281,12 @@ bool DataReader::readTextFile(const string & filename)
     {
       // error reading int
       m_errorString = "Error reading value in file: " + filename + " after: " + constantName;
-        return false;
+      return false;
     }
     if ((input != '\n') && (!(isAlphaNum(input))))
     {
       m_errorString = "Error reading value in file: " + filename + " after: " + constantName;
-        return false;
+      return false;
     }
 
     // test for string or int

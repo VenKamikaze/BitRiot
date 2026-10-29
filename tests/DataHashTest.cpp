@@ -173,6 +173,20 @@ TEST_F(DataHashTest, TheSameConstantsHashTheSameWhateverTheFileLooksLike)
   EXPECT_EQ(hashHere(), plain);
 }
 
+TEST_F(DataHashTest, AByteOrderMarkAtTheStartOfAFileDoesNotMatter)
+{
+  const uint64_t plain = hashHere();
+  setEntity("\xEF\xBB\xBF" + entityText());
+  setPlayer("\xEF\xBB\xBF" + playerText());
+  EXPECT_EQ(hashHere(), plain);
+  // and a file that starts with a constant (no comment line to hide the BOM in)
+  setEntity("\xEF\xBB\xBF" "BASE_ANIM_COUNT 5\n" + entityText().substr(entityText().find("DRONE_ANIM_COUNT")));
+  fs::current_path(m_scratch);
+  DataReader::getInstance()->clearCache();
+  EXPECT_EQ(DataReader::getInstance()->getIntFromFile("BASE_ANIM_COUNT", "data/entity.txt"), 5);
+  EXPECT_EQ(DataReader::getInstance()->errorCount(), 0);
+}
+
 TEST_F(DataHashTest, TheOrderOfTheLinesDoesNotMatter)
 {
   const uint64_t plain = hashHere();

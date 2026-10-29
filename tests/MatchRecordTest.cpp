@@ -6,7 +6,9 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <chrono>
 #include <cstdio>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -72,6 +74,52 @@ MatchRecord sampleRecord(bool rle)
   c7.tick = 7; c7.hash = 0xFFFFFFFFFFFFFFFFULL;
   r.checkpoints = { c0, c3, c7 };
   return r;
+}
+
+// Peak resident memory of this process in kB (VmHWM), or -1 where /proc is not there.
+long peakResidentKb()
+{
+  std::ifstream status("/proc/self/status");
+  std::string line;
+  while (std::getline(status, line))
+  {
+    if (line.rfind("VmHWM:", 0) == 0)
+    {
+      return std::atol(line.c_str() + 6);
+    }
+  }
+  return -1;
+}
+
+// A hand-made run-length encoded record for two players: `runs` runs of 65535 ticks that
+// alternate between two ticks, each carrying `events` control events. This is what a
+// hostile file looks like: a few bytes per run, a lot of memory if every run is expanded.
+std::vector<uint8_t> hostileRle(int runs, int events)
+{
+  std::vector<uint8_t> b = { 'B', 'R', 'M', 'R', 1, 0, 1, 0, 2, 0, 0, 0, 0, 0, 0, 0 };
+  b.insert(b.end(), 8 + 8 + 8, 0);        // build id, data hash, seed
+  b.insert(b.end(), { 13, 0, 11, 0, 55, 0, 1, 2, 0, 1, 1, 0 }); // map 13x11, 55%, spawner, 2 players
+  const uint32_t ticks = (uint32_t) runs * 65535u;
+  std::vector<uint8_t> body;
+  for (int r = 0; r < runs; r++)
+  {
+    body.push_back(0xFF);
+    body.push_back(0xFF);
+    body.push_back((uint8_t) (r % 2)); // slot 0's input differs between the two ticks
+    body.push_back(0);
+    body.push_back((uint8_t) events);
+    for (int e = 0; e < events; e++)
+    {
+      body.push_back(0); // slot 0
+      body.push_back((uint8_t) (r % 2)); // kind
+    }
+  }
+  for (uint32_t v : { ticks, 0u, (uint32_t) body.size() })
+  {
+    for (int shift = 0; shift < 32; shift += 8) { b.push_back((uint8_t) (v >> shift)); }
+  }
+  b.insert(b.end(), body.begin(), body.end());
+  return b;
 }
 
 void expectParseFails(const std::vector<uint8_t>& bytes, const std::string& messagePart)
@@ -507,4 +555,103 @@ TEST(MatchRecordTest, DamagedFilesNeverCrashAndNeverChangeMeaningSilently)
     EXPECT_GT(refused, 100) << "rle=" << rle;
     EXPECT_GT(accepted, 100) << "most bit flips in the payload are still a well-formed record (rle=" << rle << ")";
   }
+}
+
+// ---------------------------------------------------------------------------
+// Hostile files: a few bytes must not stand for gigabytes
+// ---------------------------------------------------------------------------
+
+TEST(MatchRecordTest, ARunLengthBombIsRefusedBeforeItIsExpanded)
+{
+  // 16 runs of 65535 ticks (the most MAX_TICKS allows), each tick carrying the most
+  // events a tick may: 25 million events if every run were expanded. The file is under
+  // 1 KB. The reader counts a run's events times its length before it copies anything.
+  const std::vector<uint8_t> bomb = hostileRle(16, (int) MatchRecord::MAX_EVENTS_PER_TICK);
+  EXPECT_LT(bomb.size(), 1024u);
+  const long before = peakResidentKb();
+  const auto start = std::chrono::steady_clock::now();
+  expectParseFails(bomb, "control events");
+  const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+  EXPECT_LT(seconds, 0.5) << "it should be refused after reading the first run";
+  if (before >= 0)
+  {
+    EXPECT_LT(peakResidentKb() - before, 16 * 1024) << "peak memory grew by more than 16 MB";
+  }
+}
+
+TEST(MatchRecordTest, TooManyEventsInOneTickAreRefusedOnReadAndOnWrite)
+{
+  expectParseFails(hostileRle(1, (int) MatchRecord::MAX_EVENTS_PER_TICK + 1), "at most 24");
+  MatchRecord r = sampleRecord(false);
+  for (uint32_t i = 0; i <= MatchRecord::MAX_EVENTS_PER_TICK; i++)
+  {
+    r.ticks[0].control.push_back(ControlEvent(0, ControlEvent::LEAVE));
+  }
+  EXPECT_THROW(r.serialize(), MatchRecordError);
+  r = sampleRecord(false);
+  for (uint32_t i = 0; i < MatchRecord::MAX_EVENTS_PER_TICK; i++)
+  {
+    r.ticks[0].control.push_back(ControlEvent(0, ControlEvent::LEAVE));
+  }
+  EXPECT_EQ(MatchRecord::parse(r.serialize()), r) << "exactly the limit is fine";
+}
+
+TEST(MatchRecordTest, TheEventsOfARecordAreCountedOncePerRepeat)
+{
+  // One event a tick for 70,000 ticks is past MAX_TOTAL_EVENTS (65,536) however small
+  // the run-length encoded file is.
+  MatchRecord r;
+  r.config = smallConfig(2);
+  r.rle = true;
+  r.ticks.assign(70000, tick({0, 0}, { ControlEvent(0, ControlEvent::LEAVE) }));
+  EXPECT_THROW(r.serialize(), MatchRecordError);
+  r.ticks.resize(60000);
+  const std::vector<uint8_t> bytes = r.serialize();
+  EXPECT_LT(bytes.size(), 200u);
+  EXPECT_EQ(MatchRecord::parse(bytes), r);
+  // The same on the read side: patch a legal file to claim more ticks of it.
+  MatchRecord two = r;
+  two.ticks.resize(2 * 30000);
+  EXPECT_NO_THROW(MatchRecord::parse(two.serialize()));
+  const std::vector<uint8_t> bomb = hostileRle(2, 1); // 131070 ticks, one event each
+  expectParseFails(bomb, "control events");
+}
+
+TEST(MatchRecordTest, AClaimOfMillionsOfPlainTicksReservesNothingNearThat)
+{
+  // A plain (not run-length) record that claims the most ticks MAX_TICKS allows and has
+  // a 4-byte body: refused as truncated, and the reader must not have reserved room for a
+  // million ticks first.
+  std::vector<uint8_t> b = hostileRle(1, 0);
+  b[6] = 0; // no RLE
+  const size_t ticksAt = 52;
+  const uint32_t claim = MatchRecord::MAX_TICKS;
+  for (int i = 0; i < 4; i++) { b[ticksAt + i] = (uint8_t) (claim >> (8 * i)); }
+  b.resize(ticksAt + 12 + 4); // header up to the body length, a 4 byte body
+  b[ticksAt + 8] = 4; b[ticksAt + 9] = 0; b[ticksAt + 10] = 0; b[ticksAt + 11] = 0;
+  const long before = peakResidentKb();
+  expectParseFails(b, "truncated");
+  if (before >= 0)
+  {
+    EXPECT_LT(peakResidentKb() - before, 4 * 1024);
+  }
+}
+
+TEST(MatchRecordTest, TheMostTicksARecordMayHoldStillParses)
+{
+  // 16 runs of 65535 with no events: 1,048,560 ticks, about 33 MB, the worst a legal
+  // file can ask for.
+  const MatchRecord r = MatchRecord::parse(hostileRle(16, 0));
+  EXPECT_EQ(r.ticks.size(), 16u * 65535u);
+  expectParseFails(hostileRle(17, 0), "ticks; at most");
+}
+
+TEST(MatchRecordTest, OffsetsAndFlagsAreWrittenInRealHex)
+{
+  std::vector<uint8_t> bytes = sampleRecord(false).serialize();
+  bytes[6] |= 0x04;
+  expectParseFails(bytes, "unknown flag bits 0x4 ");
+  bytes = sampleRecord(false).serialize();
+  bytes.resize(30);
+  expectParseFails(bytes, "truncated at byte 0x");
 }

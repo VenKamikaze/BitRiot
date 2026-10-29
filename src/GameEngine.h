@@ -91,6 +91,7 @@ class GameEngine
     bool m_drawNeeded = true;
     unique_ptr<MenuSDLRenderer> menuSystem = nullptr;
     std::string m_recordDir;
+    std::string m_recordStamp; // UTC date and time the recorded round started
     std::unique_ptr<MatchRecorder> m_recorder; // a round is being recorded
     void startRecording();
     // The deterministic world: setup (start) and the per-tick step. Everything the

@@ -128,6 +128,17 @@ void GameEngine::startRecording()
   {
     m_recorder.reset(new MatchRecorder(30, true));
     m_recorder->begin(m_sim);
+    // The file is named for when the round started, whenever it ends up written.
+    char stamp[32];
+    const std::time_t now = std::time(nullptr);
+    std::tm utc;
+#ifdef _WIN32
+    gmtime_s(&utc, &now);
+#else
+    gmtime_r(&now, &utc);
+#endif
+    std::strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", &utc);
+    m_recordStamp = stamp;
   }
   catch (const std::exception& e)
   {
@@ -146,17 +157,9 @@ void GameEngine::finishRecording()
   {
     const MatchRecord& record = m_recorder->finish(m_sim);
 
-    // round-<UTC date>-<UTC time>-<seed>.brmr, with -2, -3... if that name exists.
-    char stamp[32];
-    const std::time_t now = std::time(nullptr);
-    std::tm utc;
-#ifdef _WIN32
-    gmtime_s(&utc, &now);
-#else
-    gmtime_r(&now, &utc);
-#endif
-    std::strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", &utc);
-    const std::string base = m_recordDir + "/round-" + stamp + "-seed" + std::to_string(record.config.seed);
+    // round-<UTC date>-<UTC time the round started>-seed<seed>.brmr, with -2, -3... if
+    // that name exists.
+    const std::string base = m_recordDir + "/round-" + m_recordStamp + "-seed" + std::to_string(record.config.seed);
     std::string path = base + ".brmr";
     for (int n = 2; std::filesystem::exists(path); n++)
     {

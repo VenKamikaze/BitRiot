@@ -697,7 +697,10 @@ void Simulation::hashInto(StateHasher& h) const
   // selected). Slots past the player count are always the default and left out.
   for (int slot = 0; slot < settings->getNumberOfPlayers() && slot < std::GameSettings::MAX_PLAYERS; slot++)
   {
-    h.beginSection("[input state, slot " + std::to_string(slot) + "]");
+    if (h.dumping())
+    {
+      h.beginSection("[input state, slot " + std::to_string(slot) + "]");
+    }
     h.flag(m_slotInput[slot].action1Down, "input.action1Down");
     h.flag(m_slotInput[slot].action2Down, "input.action2Down");
     h.i32(m_slotInput[slot].spawnSelection, "input.spawnSelection");
@@ -722,8 +725,12 @@ void Simulation::hashInto(StateHasher& h) const
   for (std::map<int, std::shared_ptr<GameEntity>>::const_iterator it = dynamicMap->entityList.begin();
        it != dynamicMap->entityList.end(); ++it)
   {
-    h.beginSection("entity " + std::to_string(walkIndex++) + " " + ENTITY_TYPE_NAMES[it->second->getType()]
-                   + " (id " + std::to_string(it->first) + ")");
+    if (h.dumping())
+    {
+      h.beginSection("entity " + std::to_string(walkIndex) + " " + ENTITY_TYPE_NAMES[it->second->getType()]
+                     + " (id " + std::to_string(it->first) + ")");
+    }
+    walkIndex++;
     h.setTracePrefix(ENTITY_TYPE_NAMES[it->second->getType()]);
     it->second->hashState(h);
   }
@@ -791,7 +798,7 @@ void Simulation::dumpState(std::ostream& out) const
       << m_config.blockPercentage << "%, spawner " << (m_config.npcSpawnerEnabled ? "on" : "off") << ", players";
   for (int i = 0; i < m_config.numPlayers(); i++)
   {
-    out << " " << (i + 1) << ":team" << m_config.slots[i].team << (m_config.slots[i].ai ? "/ai" : "/human");
+    out << " " << i << ":team" << m_config.slots[i].team << (m_config.slots[i].ai ? "/ai" : "/human");
   }
   out << "\n\n";
 

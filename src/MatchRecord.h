@@ -44,9 +44,20 @@ struct MatchRecord
 {
   static const uint16_t FORMAT_VERSION = 1;
 
-  // The most ticks a record may hold (4,194,304: about 38 hours at 30 ticks a second).
-  // It bounds what a hostile file can ask a reader to allocate.
-  static const uint32_t MAX_TICKS = 1u << 22;
+  // Bounds on what a record may hold. They are what a hostile file can make a reader
+  // allocate: a run-length encoded tick is decoded into every tick of its run, so a few
+  // bytes can stand for a lot of memory. A tick is 32 bytes in memory, so MAX_TICKS is
+  // about 33 MB at most.
+  //
+  // MAX_TICKS: 1,048,576, about 9.7 hours of play at 30 ticks a second.
+  static const uint32_t MAX_TICKS = 1u << 20;
+  // Control events in one tick: four per player slot. A slot realistically gets one (a
+  // takeover, a return, a leave); two for one slot in a tick already means the last wins.
+  static const uint32_t MAX_EVENTS_PER_TICK = 4 * 6;
+  // Control events in the whole record, counting a repeated run's events once per
+  // repeat (that is what the reader has to hold): 65,536, about 3 MB. A real round has
+  // a handful per player.
+  static const uint32_t MAX_TOTAL_EVENTS = 1u << 16;
 
   struct Checkpoint
   {

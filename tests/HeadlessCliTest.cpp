@@ -240,6 +240,7 @@ TEST(HeadlessCliTest, TwoProcessesDumpTheSameState)
   EXPECT_TRUE(contains(one, "PLAYER_CHARACTER"));
   EXPECT_TRUE(contains(one, "entity.health"));
   EXPECT_TRUE(contains(one, "[map]"));
+  EXPECT_TRUE(contains(one, "players 0:team0/human 1:team1/human 2:team2/ai 3:team3/ai")) << "slots are 0-based, as in the replay output";
 
   // The header names the hash of that tick, and it is the record's own checkpoint.
   const MatchRecord golden = MatchRecord::readFile(goldenPath());
@@ -380,6 +381,19 @@ TEST(HeadlessCliTest, UsageErrorsExitWithTwoAndSayWhy)
     { "run --seed 1 --out x.brmr --config colour=red", "unknown config key" },
     { "run --seed 1 --out x.brmr --config map=13", "WIDTHxHEIGHT" },
     { "run --seed 1 --out x.brmr --config humans=5", "humans names slot 5" },
+    // every number is range-checked on its full 64-bit value before it is narrowed
+    { "run --seed 1 --out x.brmr --config map=4294967309x13", "map width must be 4 to 255" },
+    { "run --seed 1 --out x.brmr --config map=13x4294967309", "map height must be 4 to 255" },
+    { "run --seed 1 --out x.brmr --config map=3x13", "map width must be 4 to 255" },
+    { "run --seed 1 --out x.brmr --config map=256x13", "map width must be 4 to 255" },
+    { "run --seed 1 --out x.brmr --config players=4294967298", "players must be 2 to 6" },
+    { "run --seed 1 --out x.brmr --config players=1", "players must be 2 to 6" },
+    { "run --seed 1 --out x.brmr --config players=7", "players must be 2 to 6" },
+    { "run --seed 1 --out x.brmr --config blocks=4294967396", "blocks must be 0 to 100" },
+    { "run --seed 1 --out x.brmr --config blocks=101", "blocks must be 0 to 100" },
+    { "run --seed 1 --out x.brmr --config teams=300:1", "teams must be 0 to 255" },
+    { "run --seed 1 --out x.brmr --config teams=4294967296:1", "teams must be 0 to 255" },
+    { "run --seed 1 --out x.brmr --config humans=4294967296", "humans must be 0 to 5" },
     { "run --seed 1 --out x.brmr --config teams=0:1:2", "teams lists 3 teams for 2 players" },
     { "run --seed 1 --out x.brmr --max-ticks 99999999999", "too big" },
     { "replay", "one record file" },
@@ -397,6 +411,35 @@ TEST(HeadlessCliTest, UsageErrorsExitWithTwoAndSayWhy)
     EXPECT_TRUE(contains(r.err, c.message)) << "args: " << c.args << " expected stderr to contain: " << c.message << "\nstderr: " << r.err;
     EXPECT_TRUE(r.out.empty() || std::string(c.args).rfind("run --seed 1 --out /no", 0) == 0) << "usage errors print nothing on stdout: " << r.out;
   }
+}
+
+TEST(HeadlessCliTest, ARecordWithNoCheckpointsReplaysWithAWarning)
+{
+  Scratch s;
+  MatchRecord golden = MatchRecord::readFile(goldenPath());
+  golden.checkpoints.clear();
+  golden.ticks.resize(300);
+  golden.roundOver = false;
+  golden.writeFile(s.file("unverified.brmr"));
+  const CliRun r = s.run("replay \"" + s.file("unverified.brmr") + "\"");
+  EXPECT_EQ(r.code, 0) << "it plays; there was just nothing to compare";
+  EXPECT_TRUE(contains(r.out, "0 checkpoints verified")) << r.out;
+  EXPECT_TRUE(contains(r.err, "no checkpoints")) << r.err;
+}
+
+TEST(HeadlessCliTest, ABrokenRecordIsNotADeterminismFailure)
+{
+  // An event for a slot the round does not have: the simulation refuses the tick. That
+  // is a bad file (exit 2), not a replay that disagreed (exit 1), so the cross-platform
+  // gate never reads a broken file as a determinism failure.
+  Scratch s;
+  MatchRecord golden = MatchRecord::readFile(goldenPath());
+  golden.ticks[99].control.push_back(ControlEvent(5, ControlEvent::LEAVE));
+  golden.writeFile(s.file("broken.brmr"));
+  const CliRun r = s.run("replay \"" + s.file("broken.brmr") + "\"");
+  EXPECT_EQ(r.code, 2) << r.out;
+  EXPECT_TRUE(contains(r.out, "BAD RECORD")) << r.out;
+  EXPECT_TRUE(contains(r.out, "tick 100")) << r.out;
 }
 
 TEST(HeadlessCliTest, HelpAndVersion)
@@ -471,6 +514,21 @@ TEST(HeadlessCliTest, TheConfigSpecSetsWhatItNamesAndKeepsTheRest)
   EXPECT_FALSE(c.slots[1].ai);
   EXPECT_EQ(c.slots[2].team, 2) << "a new slot is on its own team";
   EXPECT_TRUE(c.slots[2].ai);
+}
+
+TEST(HeadlessCliTest, TheConfigSpecRangeChecksBeforeItNarrows)
+{
+  // 4294967309 is 13 once truncated to 32 bits; 4294967298 is 2.
+  for (const char* bad : { "map=4294967309x13", "map=13x4294967309", "players=4294967298", "blocks=4294967396", "teams=300:1",
+                           "teams=4294967297:1", "humans=4294967296", "humans=6", "map=13x3", "map=1000x13", "players=0" })
+  {
+    EXPECT_THROW(headless::parseConfigSpec(bad, MatchConfig()), std::invalid_argument) << bad;
+  }
+  MatchConfig c = headless::parseConfigSpec("map=255x4,blocks=0,players=6,teams=255:0:0:0:0:0,humans=5", MatchConfig());
+  EXPECT_EQ(c.mapWidth, 255);
+  EXPECT_EQ(c.mapHeight, 4);
+  EXPECT_EQ(c.slots[0].team, 255);
+  EXPECT_FALSE(c.slots[5].ai);
 }
 
 TEST(HeadlessCliTest, TheConfigSpecCanComeFromAFile)

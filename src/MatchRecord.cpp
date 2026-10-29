@@ -14,12 +14,23 @@ const uint16_t FLAG_RLE = 1 << 0;
 const uint16_t FLAG_ROUND_OVER = 1 << 1;
 const uint16_t KNOWN_FLAGS = FLAG_RLE | FLAG_ROUND_OVER;
 const uint32_t MAX_RUN = 65535;
-const size_t MAX_EVENTS_PER_TICK = 255;
 const size_t CHECKPOINT_BYTES = 12;
+
+std::string hexString(unsigned long long v)
+{
+  static const char DIGITS[] = "0123456789abcdef";
+  std::string s;
+  do
+  {
+    s.insert(s.begin(), DIGITS[v & 0xf]);
+    v >>= 4;
+  } while (v != 0);
+  return "0x" + s;
+}
 
 std::string hexOffset(size_t offset)
 {
-  return "byte " + std::to_string(offset);
+  return "byte " + hexString(offset);
 }
 
 class Writer
@@ -130,10 +141,10 @@ void writeTick(Writer& w, const TickInputs& t, int numPlayers)
   {
     w.u8(t.slot[slot].bits);
   }
-  if (t.control.size() > MAX_EVENTS_PER_TICK)
+  if (t.control.size() > MatchRecord::MAX_EVENTS_PER_TICK)
   {
     throw MatchRecordError("cannot record " + std::to_string(t.control.size()) + " control events in one tick: the format holds "
-                           + std::to_string(MAX_EVENTS_PER_TICK));
+                           + std::to_string(MatchRecord::MAX_EVENTS_PER_TICK));
   }
   w.u8((uint8_t) t.control.size());
   for (const ControlEvent& e : t.control)
@@ -153,6 +164,11 @@ TickInputs readTick(Reader& r, int numPlayers)
     t.slot[slot] = PlayerInput(r.u8("a player's input byte"));
   }
   const uint8_t events = r.u8("a control event count");
+  if (events > MatchRecord::MAX_EVENTS_PER_TICK)
+  {
+    throw MatchRecordError("a tick has " + std::to_string(events) + " control events at " + hexOffset(r.offset() - 1)
+                           + "; at most " + std::to_string(MatchRecord::MAX_EVENTS_PER_TICK) + " are supported");
+  }
   for (int i = 0; i < events; i++)
   {
     const uint8_t slot = r.u8("a control event's slot");
@@ -181,6 +197,19 @@ std::vector<uint8_t> MatchRecord::serialize() const
         throw MatchRecordError("tick " + std::to_string(i + 1) + " has an input for slot " + std::to_string(slot)
                                + ", but the config has only " + std::to_string(numPlayers) + " players");
       }
+    }
+  }
+  {
+    // Counting a repeated tick once per repeat, as a reader has to hold them.
+    uint64_t events = 0;
+    for (const TickInputs& t : ticks)
+    {
+      events += t.control.size();
+    }
+    if (events > MAX_TOTAL_EVENTS)
+    {
+      throw MatchRecordError("cannot record " + std::to_string(events) + " control events: the format holds "
+                             + std::to_string(MAX_TOTAL_EVENTS) + " in a record");
     }
   }
   uint32_t previous = 0;
@@ -277,7 +306,7 @@ MatchRecord MatchRecord::parse(const uint8_t* data, size_t size)
   const uint16_t flags = r.u16("the flags");
   if ((flags & ~KNOWN_FLAGS) != 0)
   {
-    throw MatchRecordError("unknown flag bits 0x" + std::to_string(flags & ~KNOWN_FLAGS) + " in a version-1 record");
+    throw MatchRecordError("unknown flag bits " + hexString(flags & ~KNOWN_FLAGS) + " in a version-1 record");
   }
   rec.rle = (flags & FLAG_RLE) != 0;
   rec.roundOver = (flags & FLAG_ROUND_OVER) != 0;
@@ -340,7 +369,23 @@ MatchRecord MatchRecord::parse(const uint8_t* data, size_t size)
 
   // The body, which must use exactly bodyBytes.
   const size_t bodyEnd = r.offset() + bodyBytes;
-  rec.ticks.reserve(numTicks);
+  // No reserve for the run-length case (the ticks a few bytes stand for are not known
+  // to be real until they have been decoded); a plain body cannot hold more ticks than
+  // it has bytes.
+  if (!rec.rle)
+  {
+    rec.ticks.reserve(numTicks < bodyBytes ? numTicks : bodyBytes);
+  }
+  uint64_t totalEvents = 0;
+  const auto countEvents = [&totalEvents](uint64_t repeats, const TickInputs& t, size_t at)
+  {
+    totalEvents += repeats * t.control.size();
+    if (totalEvents > MatchRecord::MAX_TOTAL_EVENTS)
+    {
+      throw MatchRecordError("the control events from " + hexOffset(at) + " on bring the record past " + std::to_string(MatchRecord::MAX_TOTAL_EVENTS)
+                             + " (a repeated run counts each repeat)");
+    }
+  };
   if (rec.rle)
   {
     uint32_t total = 0;
@@ -355,6 +400,7 @@ MatchRecord MatchRecord::parse(const uint8_t* data, size_t size)
                                + " ticks are still to come)");
       }
       TickInputs tick = readTick(r, numPlayers);
+      countEvents(run, tick, at); // before the run is expanded
       if (!rec.ticks.empty() && sameTick(rec.ticks.back(), tick) && lastRun != MAX_RUN)
       {
         throw MatchRecordError("run at " + hexOffset(at) + " repeats the tick before it: runs must be maximal (a run is split only at "
@@ -369,7 +415,9 @@ MatchRecord MatchRecord::parse(const uint8_t* data, size_t size)
   {
     for (uint32_t i = 0; i < numTicks; i++)
     {
+      const size_t at = r.offset();
       rec.ticks.push_back(readTick(r, numPlayers));
+      countEvents(1, rec.ticks.back(), at);
     }
   }
   if (r.offset() != bodyEnd)

@@ -21,6 +21,11 @@ namespace
 {
 const uint64_t DEFAULT_MAX_TICKS = 100000;
 const uint32_t DEFAULT_CHECKPOINT_INTERVAL = 30;
+// The map sides a spec may name: the simulation needs 4 or more, and a record holds
+// 16 bits; 255 is far past the biggest map the menu offers (33x25) and keeps a typo from
+// asking for a map that takes gigabytes.
+const unsigned long long MIN_MAP_SIDE = 4;
+const unsigned long long MAX_MAP_SIDE = 255;
 
 // Thrown for a bad command line; run() turns it into EXIT_USAGE and the message.
 class UsageError : public std::runtime_error
@@ -210,6 +215,10 @@ int cmdReplay(const std::vector<std::string>& args, std::ostream& out, std::ostr
   switch (r.status)
   {
     case ReplayResult::OK:
+      if (record.checkpoints.empty())
+      {
+        err << "warning: the record has no checkpoints, so nothing was verified: the replay only ran\n";
+      }
       out << "replay: OK, " << r.ticksPlayed << " ticks, " << r.checkpointsChecked << " checkpoints verified, final hash "
           << hex(r.finalHash) << ", round over: " << (r.roundOver ? "yes" : "no") << "\n";
       return EXIT_OK;
@@ -230,6 +239,10 @@ int cmdReplay(const std::vector<std::string>& args, std::ostream& out, std::ostr
       }
       return EXIT_FAILED;
     case ReplayResult::SIM_ERROR:
+      // The simulation refused a tick (an event for a slot the round lacks, an unknown
+      // kind): the file is broken, which is not a determinism failure.
+      out << "replay: BAD RECORD: " << r.message << "\n";
+      return EXIT_USAGE;
     case ReplayResult::ROUND_END_MISMATCH:
       out << "replay: MISMATCH: " << r.message << "\n";
       return EXIT_FAILED;
@@ -460,7 +473,19 @@ std::vector<std::string> splitOn(const std::string& s, char sep)
   return parts;
 }
 
-std::vector<int> parseIntList(const std::string& text, const std::string& key)
+// A number that must lie in [lo, hi]; checked on the full 64-bit value, before it is
+// narrowed to an int (a value like 4294967309 must not wrap around into range).
+int parseBounded(const std::string& text, const std::string& what, unsigned long long lo, unsigned long long hi)
+{
+  const unsigned long long v = parseNumber(text, what);
+  if (v < lo || v > hi)
+  {
+    throw std::invalid_argument(what + " must be " + std::to_string(lo) + " to " + std::to_string(hi) + ", not \"" + text + "\"");
+  }
+  return (int) v;
+}
+
+std::vector<int> parseIntList(const std::string& text, const std::string& key, unsigned long long lo, unsigned long long hi)
 {
   std::vector<int> out;
   if (text.empty())
@@ -469,7 +494,7 @@ std::vector<int> parseIntList(const std::string& text, const std::string& key)
   }
   for (const std::string& part : splitOn(text, ':'))
   {
-    out.push_back((int) parseNumber(part, key));
+    out.push_back(parseBounded(part, key, lo, hi));
   }
   return out;
 }
@@ -522,7 +547,7 @@ MatchConfig parseConfigSpec(const std::string& spec, const MatchConfig& base)
     const std::string value = pair.substr(eq + 1);
     if (key == "players")
     {
-      players = (int) parseNumber(value, "players");
+      players = parseBounded(value, "players", std::GameSettings::MIN_PLAYERS, std::GameSettings::MAX_PLAYERS);
     }
     else if (key == "map")
     {
@@ -531,12 +556,12 @@ MatchConfig parseConfigSpec(const std::string& spec, const MatchConfig& base)
       {
         throw std::invalid_argument("map must be WIDTHxHEIGHT, not \"" + value + "\"");
       }
-      c.mapWidth = (int) parseNumber(value.substr(0, x), "map width");
-      c.mapHeight = (int) parseNumber(value.substr(x + 1), "map height");
+      c.mapWidth = parseBounded(value.substr(0, x), "map width", MIN_MAP_SIDE, MAX_MAP_SIDE);
+      c.mapHeight = parseBounded(value.substr(x + 1), "map height", MIN_MAP_SIDE, MAX_MAP_SIDE);
     }
     else if (key == "blocks")
     {
-      c.blockPercentage = (int) parseNumber(value, "blocks");
+      c.blockPercentage = parseBounded(value, "blocks", 0, 100);
     }
     else if (key == "spawner")
     {
@@ -548,12 +573,12 @@ MatchConfig parseConfigSpec(const std::string& spec, const MatchConfig& base)
     }
     else if (key == "teams")
     {
-      teams = parseIntList(value, "teams");
+      teams = parseIntList(value, "teams", 0, 255);
       haveTeams = true;
     }
     else if (key == "humans")
     {
-      humans = parseIntList(value, "humans");
+      humans = parseIntList(value, "humans", 0, std::GameSettings::MAX_PLAYERS - 1);
       haveHumans = true;
     }
     else
@@ -562,11 +587,6 @@ MatchConfig parseConfigSpec(const std::string& spec, const MatchConfig& base)
     }
   }
 
-  if (players < 0 || players > std::GameSettings::MAX_PLAYERS)
-  {
-    throw std::invalid_argument("players must be " + std::to_string(std::GameSettings::MIN_PLAYERS) + " to "
-                                + std::to_string(std::GameSettings::MAX_PLAYERS));
-  }
   // Resize the roster; slots that are new get their own team and start as bots.
   const int before = c.numPlayers();
   c.slots.resize(players);

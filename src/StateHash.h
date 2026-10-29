@@ -151,9 +151,22 @@ class StateHasher
     {
       m_dump = out;
     }
+    // True while a dump sink is attached: callers build headings only then, so the plain
+    // hash path (every checkpoint, every desync check) allocates nothing for them.
+    bool dumping() const
+    {
+      return m_dump != nullptr;
+    }
     void quiet(bool on)
     {
       m_quiet = on;
+    }
+    void beginSection(const char* heading)
+    {
+      if (m_dump != nullptr)
+      {
+        *m_dump << heading << "\n";
+      }
     }
     void beginSection(const std::string& heading)
     {

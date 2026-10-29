@@ -1,0 +1,2 @@
+# Match records are binary: never convert line endings or show them as text.
+*.brmr binary
