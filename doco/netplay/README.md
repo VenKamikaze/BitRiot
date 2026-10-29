@@ -100,6 +100,14 @@ These are the user's conventions for this repo.
 4. If the fixes were non-trivial, the reviewer re-reviews.
 5. The coordinator verifies and merges.
 
+**Reduced review for 04a, 04b and 05** (the user's instruction, to save tokens):
+
+- **04a and 04b:** implement each on its own branch with **no review**. The coordinator still verifies each one (full suite on GCC and Clang, 200-seed sweep, golden digests) and merges it.
+- **After 04b is merged,** run **one** Opus review of 04a and 04b **together** (`git diff <commit before 04a's merge>..<04b's merge>`), followed by **one** fix round on a `netplay/04-review-fixes` branch.
+- **05:** one review and one fix round, on its own.
+- **Override:** a second review round is allowed **only if** the review finds something major that is complex to resolve, e.g. a determinism or correctness bug whose fix touches several files or changes a design decision. Nits and small should-fixes never justify one. Say why in the report to the user.
+- **Everything else** (05b onwards) uses the normal flow below unless the user says otherwise.
+
 **Play-tests.** Some acceptance criteria need the user to play the game; the cloud container has no display.
 
 - The coordinator **may merge** with a play-test pending if everything automated passes.

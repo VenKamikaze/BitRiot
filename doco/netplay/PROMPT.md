@@ -16,7 +16,7 @@ The goal is deterministic lockstep online multiplayer for Bit Riot, a browser (W
 
 **Next ready, in parallel:**
 
-- **04a** (input sampling): starts the 04a → 04b → 05 → 05b → 07 → 08 chain.
+- **04a** (input sampling): starts the 04a → 04b → 05 → 05b → 07 → 08 chain. 04a, 04b and 05 use the **reduced review** policy (README, "Reduced review").
 - **09** (WASM port): needs only 03b.
 
 They touch different areas (input/sim vs `main.cpp`, CMake and renderers) but both may touch `CMakeLists.txt` and `GameEngine`. Give each its own worktree, merge one, then merge `claude` into the other before review. After those: 04b → 05 → 05b → 07 → 08, then 12 and 13.
@@ -95,6 +95,12 @@ This is the user's standard process:
 
    Give it the brief and the diff command, not your own conclusions.
 4. **Fix round.** Send the worthwhile findings back to the **same** implementer: resume it, don't start a new one. If the fixes are non-trivial, have the reviewer re-review.
+
+   **Exception: 04a, 04b and 05 use a reduced review.** See "Reduced review" in [`README.md`](README.md):
+   - 04a and 04b are implemented and merged without review.
+   - After 04b, both get one joint review and one fix round.
+   - 05 gets one review and one fix round.
+   - A second round is allowed only for a major, complex finding.
 5. **Verify yourself.**
    - Rebuild and run the full suite.
    - For sim changes, run a seed sweep (`BITRIOT_TEST_SEED=1..200`).
