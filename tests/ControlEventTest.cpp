@@ -377,6 +377,10 @@ TEST_F(ControlEventTest, ADeadPlayersEventsAreIgnored)
     return hashes;
   };
   EXPECT_EQ(play(false), play(true));
+
+  // The dead player's own record is untouched too (the hash only sees live entities).
+  ASSERT_FALSE(sim().roster().at(0)->isAlive());
+  EXPECT_FALSE(sim().roster().at(0)->isControlledByAI()) << "an event does not hand a dead human to the AI";
 }
 
 TEST_F(ControlEventTest, TwoEventsForOneSlotEndInTheLastOne)
