@@ -161,6 +161,19 @@ TEST_F(InputControlTest, AKeyboardJoinQueuesATakeoverAndTheSetDrivesTheSlotFromT
   EXPECT_FALSE(player(3)->isControlledByAI());
 }
 
+TEST_F(InputControlTest, KeysDoNotDriveASlotThatHasAPadEvenIfItHasKeys)
+{
+  startRound4();
+  m_handler->m_keyMap[1] = {KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_RCTRL, KEY_RSHIFT}; // the defensive case
+  m_handler->keyboardEvent(KEY_UP, true);
+  EXPECT_EQ(m_handler->sampleTick().slot[1].bits, 0) << "the pad drives it";
+
+  // once the pad is gone the keys do (the player has keys, so it stays human)
+  m_handler->detachController(PAD);
+  m_handler->keyboardEvent(KEY_UP, true);
+  EXPECT_TRUE(m_handler->sampleTick().slot[1].held(PlayerInput::UP));
+}
+
 TEST_F(InputControlTest, CancellingASelectorProducesNothing)
 {
   startRound4();
@@ -194,6 +207,19 @@ TEST_F(InputControlTest, ATakeoverThatTheSimulationHasNotAppliedYetIsNotOfferedT
   ASSERT_EQ(t.control.size(), 2u);
   EXPECT_EQ(t.control[0], ControlEvent(2, ControlEvent::HUMAN_TAKES_OVER));
   EXPECT_EQ(t.control[1], ControlEvent(3, ControlEvent::HUMAN_TAKES_OVER)) << "the second joiner got the next bot, not the same one";
+}
+
+TEST_F(InputControlTest, ASlotTakenByAKeyboardSetIsNotOfferedToAPadEither)
+{
+  startRound4();
+  joinWithKeyboardSet1(); // slot 2, by keys: it has no pad, only the local mask says it is claimed
+  ASSERT_TRUE(player(3)->isControlledByAI());
+
+  joinWithPad(NEW_PAD);
+  const TickInputs t = m_handler->sampleTick();
+  ASSERT_EQ(t.control.size(), 2u);
+  EXPECT_EQ(t.control[0], ControlEvent(2, ControlEvent::HUMAN_TAKES_OVER));
+  EXPECT_EQ(t.control[1], ControlEvent(3, ControlEvent::HUMAN_TAKES_OVER));
 }
 
 TEST_F(InputControlTest, WithNoBotLeftASelectorOffersNothingAndProducesNothing)
@@ -381,6 +407,24 @@ TEST_F(InputControlTest, ASlotThatWentBackToTheAiNoLongerRumbles)
   m_handler->detachController(PAD);
   sim().step(m_handler->sampleTick());
   ASSERT_TRUE(player(2)->isControlledByAI());
+  hit(2);
+  sim().step(m_handler->sampleTick());
+  ASSERT_TRUE(sim().hitThisTick(1));
+  m_handler->rumbleForHits(sim());
+  EXPECT_TRUE(m_rumble.calls.empty());
+}
+
+TEST_F(InputControlTest, ABotWhosePadIsStillMappedDoesNotRumble)
+{
+  // The simulation hands the slot back to the AI by an event this layer did not
+  // produce (netplay's LEAVE, a replay): the pad is still mapped, the player is a bot.
+  startRound4();
+  TickInputs leave;
+  leave.control.push_back(ControlEvent(1, ControlEvent::LEAVE));
+  sim().step(leave);
+  ASSERT_TRUE(player(2)->isControlledByAI());
+  ASSERT_EQ(m_handler->controllerForSlot(1), PAD);
+
   hit(2);
   sim().step(m_handler->sampleTick());
   ASSERT_TRUE(sim().hitThisTick(1));

@@ -376,7 +376,9 @@ TEST_F(ControlEventTest, ADeadPlayersEventsAreIgnored)
     }
     return hashes;
   };
-  EXPECT_EQ(play(false), play(true));
+  const std::vector<uint64_t> quiet = play(false);
+  const std::vector<uint64_t> withEvent = play(true); // (the round of this one is the one left standing below)
+  EXPECT_EQ(quiet, withEvent);
 
   // The dead player's own record is untouched too (the hash only sees live entities).
   ASSERT_FALSE(sim().roster().at(0)->isAlive());
