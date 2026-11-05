@@ -153,7 +153,7 @@ Prove that tests fail without the code where it makes sense: for example, sessio
 
 ## Outcome
 
-**Status: done, play-test pending.** Native lockstep netplay works end to end: a session library with its own protocol (`doco/netplay/protocol.md`), `bitriot_headless host|join`, a multi-process test over real UDP under loss, desync detection with dumps and records, and the game itself (`--host`/`--join`, a lobby page, the scoreboard, leaving). **No `bitriot_sim` source changed**: the build id is still `0x6767612d056ba8af` on GCC and Clang, the six golden digests and `tests/data/golden-round.brmr` are untouched, and `scripts/determinism-gate.sh` passes (17 variants matched on every tick, 1 not available as in 05b, the negative control caught at exactly tick 100 on all 17; it is configured with `-DBITRIOT_NETPLAY=OFF`). Local play is unchanged without netplay flags (all 591 `bitriot_tests`, which include every simulation test, pass; the only edits to existing game code are listed below). The web build still configures (netplay OFF), builds, and `node tests/web/smoke.js` passes 41 of 41. What was *not* possible in the container is a person playing it: the two-real-windows run was driven under Xvfb with `xdotool`, which is evidence, not a play-test. The steps are below.
+**Status: done, play-test pending.** Native lockstep netplay works end to end: a session library with its own protocol (`doco/netplay/protocol.md`), `bitriot_headless host|join`, a multi-process test over real UDP under loss, desync detection with dumps and records, and the game itself (`--host`/`--join`, a lobby page, the scoreboard, leaving). **No `bitriot_sim` source changed**: the build id is still `0x6767612d056ba8af` on GCC and Clang, the six golden digests and `tests/data/golden-round.brmr` are untouched, and `scripts/determinism-gate.sh` passes (17 variants matched on every tick, 1 not available as in 05b, the negative control caught at exactly tick 100 on all 17; it is configured with `-DBITRIOT_NETPLAY=OFF`). Local play is unchanged without netplay flags (all `bitriot_tests`, which include every simulation test, pass; the only edits to existing game code are listed below). The web build still configures (netplay OFF), builds, and `node tests/web/smoke.js` passes 41 of 41. What was *not* possible in the container is a person playing it: the two-real-windows run was driven under Xvfb with `xdotool`, which is evidence, not a play-test. The steps are below.
 
 **What landed**
 
@@ -232,8 +232,8 @@ cmake -S /tmp/RmlUi -B /tmp/RmlUi/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTA
   -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_CXX_FLAGS="-include cstdint"
 cmake --build /tmp/RmlUi/build -j"$(nproc)" && sudo cmake --install /tmp/RmlUi/build && sudo ldconfig
 
-# this branch (use `claude` once it is merged). --recurse-submodules fetches ext/vnet.
-git clone --recurse-submodules --branch netplay/07-lockstep https://github.com/VenKamikaze/BitRiot.git ~/bitriot-net
+# the `claude` branch (07 is merged). --recurse-submodules fetches ext/vnet.
+git clone --recurse-submodules --branch claude https://github.com/VenKamikaze/BitRiot.git ~/bitriot-net
 git -C ~/bitriot-net submodule update --init ext/vnet    # a no-op after --recurse-submodules; needed in an existing checkout
 cmake -S ~/bitriot-net -B ~/bitriot-net/build -DCMAKE_BUILD_TYPE=Release -DBITRIOT_BUILD_TESTS=OFF
 cmake --build ~/bitriot-net/build -j"$(nproc)" --target BitRiot
@@ -254,13 +254,16 @@ cd ~/bitriot-net/build
 3. **The scoreboard and a second round.** When the round ends both show the scoreboard. Bob's Play Again reads "Waiting for the host to play again..." and pressing it does nothing. Alice's Play Again starts round 2 on both (the logs print `Network round 2, seed=..., delay=...`).
 4. **A peer leaves, and its player becomes AI.** Start another round, then press ESC in Bob's window: Bob goes to the main menu, and in Alice's window player 2 carries on **as a bot** (it walks and fights on its own from a tick or so later). The host's round is not interrupted. Bob can start the game again locally: his settings (players, map) are the ones he had before, not the host's.
 5. **The host leaves.** Join again (round 1 of a fresh `--host`), then press ESC in Alice's window: Alice returns to the main menu and Bob's window shows "Disconnected / the host ended the session" with a Leave button that returns him to the main menu. Also try killing the host's process (`kill -9`) in a round: after about 10 seconds Bob gets "lost the connection to the host".
-5b. **A pad as your own player.** With a pad connected, press its START once in a round: it takes over your own slot (the keyboard set is released); pressing START on a further pad takes your next own slot, and after that a bot (the selector).\n6. **A takeover of a bot.** With `--players 4` there are two bots. In Bob's window press the action-1 key of an unused keyboard set (arrows: Right Ctrl; keypad: KP+) to open the selector, up/down to choose, action-1 to take the bot over. After a moment (D ticks) it is yours in Bob's window and Alice sees the same bot start to move with Bob's input.
+5b. **A pad as your own player.** With a pad connected, press its START once in a round: it takes over your own slot (the keyboard set is released); pressing START on a further pad takes your next own slot, and after that a bot (the selector).
+6. **A takeover of a bot.** With `--players 4` there are two bots. In Bob's window press the action-1 key of an unused keyboard set (arrows: Right Ctrl; keypad: KP+) to open the selector, up/down to choose, action-1 to take the bot over. After a moment (D ticks) it is yours in Bob's window and Alice sees the same bot start to move with Bob's input.
 7. **Records.** After a round `ls /tmp/alice /tmp/bob`: both hold `round-1-peer<N>.brmr`; `cmp` says they are identical and `./bitriot_headless replay /tmp/alice/round-1-peer0.brmr` (from the build directory) says `replay: OK`. If a desync is ever reported the page lists the files written (`desync-r<round>-t<tick>-p<peer>-state.txt`, `...-now-...`, and a `.brmr`); keep them and diff the two machines' `-state.txt`.
 8. **A real second machine** (optional): on the host `./BitRiot --host 7777 --players 4`, on the other `./BitRiot --join <host ip>:7777`; the host needs UDP port 7777 reachable.
 9. **Closing the window or SIGTERM mid-round** leaves the round (like ESC) but keeps the process: a peer ends on the main menu, it does not quit. Use Exit on the menu to quit.
 10. **Regression:** `./BitRiot` with no flags is the game as before: menu, a local round, scoreboard, ESC, Play Again, map-size change.
 
 Record the result here when it comes back.
+
+**Final numbers at merge** (coordinator, after the second review pass, GCC Release, nothing else running): `bitriot_tests` **599**, `bitriot_sim_tests` **485**, ctest 3/3 (the process test has 7 cases); the same 599 and 485 on Clang Release (implementer). 200-seed sweep: 0 failing seeds on both binaries. `scripts/determinism-gate.sh`: 17 variants matched, 1 not available, the negative control caught at tick 100 on all 17. The web build builds and `tests/web/smoke.js` passes 41 of 41. `bitriot_headless version`: build id `0x6767612d056ba8af` (unchanged).
 
 **Review fix round** (one Opus review, "merge after fixes")
 
