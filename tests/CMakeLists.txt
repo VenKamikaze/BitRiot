@@ -38,6 +38,8 @@ set(SIM_TEST_SOURCES
   DataHashTest.cpp
   BuildIdTest.cpp
   HeadlessCliTest.cpp
+  FastForwardBenchmarkTest.cpp
+  SoundMuteTest.cpp
 )
 
 set(CORE_TEST_SOURCES
@@ -58,7 +60,7 @@ endif()
 
 # Netplay (brief 07): the wire format and the lockstep session, on vnet's loopback network.
 if(BITRIOT_NETPLAY)
-  list(APPEND SIM_TEST_SOURCES NetProtocolTest.cpp LockstepSessionTest.cpp LobbyModelTest.cpp)
+  list(APPEND SIM_TEST_SOURCES NetProtocolTest.cpp LockstepSessionTest.cpp HotJoinTest.cpp LobbyModelTest.cpp)
 endif()
 
 add_library(bitriot_sim_test_objs OBJECT ${SIM_TEST_SOURCES})

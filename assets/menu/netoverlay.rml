@@ -8,6 +8,7 @@
     <div id="stallbox"></div>
     <div id="toasts"></div>
     <div id="desyncbox"></div>
+    <div id="joinbox"></div>
     <div id="netstatusline"></div>
   </body>
 </rml>

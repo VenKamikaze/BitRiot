@@ -108,6 +108,8 @@ std::unique_ptr<NetGame> NetGame::build(const Params& params, Simulation& sim, c
   so.localPlayers = params.localPlayers;
   so.tickMs = std::GameSettings::NORMAL_TICKS_SPEED;
   so.requireReady = params.requireReady;
+  so.reconnectToken = params.reconnectToken;
+  so.spectate = params.spectate && !params.host;
 
   std::string sessionError;
   if (params.host)
@@ -278,6 +280,18 @@ bool NetGame::startRound(std::string* error)
 std::string NetGame::stallText() const
 {
   return m_session->waitingText();
+}
+
+std::string NetGame::joinText() const
+{
+  const netplay::LockstepSession& s = *m_session;
+  if (s.state() != netplay::LockstepSession::RUNNING)
+  {
+    return "";
+  }
+  // A machine with no slot in a round's START (a late joiner the seats ran out for) watches that round like one that asked to.
+  const bool watchingFromStart = s.joinStage() == netplay::LockstepSession::JOIN_NONE && s.spectating();
+  return netplay::joinSentence(s.joinStage(), s.catchUpFraction(), s.takeoverReason(), m_params.spectate || watchingFromStart);
 }
 
 std::string NetGame::statusLine() const

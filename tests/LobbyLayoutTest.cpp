@@ -403,6 +403,8 @@ TEST_F(LobbyLayoutTest, TheOverlayLoadsAndItsPiecesStayInsideTheWindow)
   doc->GetElementById("stallbox")->SetInnerRML("Waiting for a player with quite a long name...");
   doc->GetElementById("toasts")->SetInnerRML("<p>Bob left - now AI</p><br /><p>Carol left - now AI</p><br />");
   doc->GetElementById("netstatusline")->SetInnerRML("NET peer D=5 ping 123 ms - waiting for host");
+  doc->GetElementById("joinbox")->SetProperty("display", "block");   // brief 13: a late joiner's banner
+  doc->GetElementById("joinbox")->SetInnerRML("Joining... catching up 43%");
   updateLayout();
   const CellBox stall = boxOf(doc->GetElementById("stallbox"));
   EXPECT_GT(stall.width, 0.0f);
@@ -413,7 +415,12 @@ TEST_F(LobbyLayoutTest, TheOverlayLoadsAndItsPiecesStayInsideTheWindow)
   EXPECT_GT(status.top, (float) CONTEXT_HEIGHT / 2) << "the status line is at the bottom";
   const CellBox toasts = boxOf(doc->GetElementById("toasts"));
   EXPECT_GT(toasts.height, 0.0f);
-  EXPECT_EQ(doc->GetNumChildren(), 4);
+  const CellBox join = boxOf(doc->GetElementById("joinbox"));
+  EXPECT_GT(join.width, 0.0f);
+  EXPECT_GE(join.left, 0.0f);
+  EXPECT_LE(join.left + join.width, (float) CONTEXT_WIDTH);
+  EXPECT_LE(join.top + join.height, (float) CONTEXT_HEIGHT);
+  EXPECT_EQ(doc->GetNumChildren(), 5);
 }
 
 // -- the buttons: what a press asks for ----------------------------------------------------------------------------

@@ -91,6 +91,7 @@ class MenuSDLRenderer
       std::string stall;                  // "" = hidden
       std::vector<std::string> toasts;
       std::string desync;                 // "" = hidden
+      std::string join;                   // "" = hidden: "Joining... catching up 43%", a late joiner's banner (brief 13)
       std::string status;
     };
     // The error line of the open host or join form.

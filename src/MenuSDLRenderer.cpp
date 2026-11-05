@@ -314,6 +314,8 @@ void MenuSDLRenderer::setNetOverlay(const NetOverlay& o)
   set("toasts", toasts);
   set("desyncbox", NetLobbyBinder::toRml(o.desync));
   display("desyncbox", !o.desync.empty());
+  set("joinbox", NetLobbyBinder::toRml(o.join));
+  display("joinbox", !o.join.empty());
   set("netstatusline", NetLobbyBinder::toRml(o.status));
 }
 

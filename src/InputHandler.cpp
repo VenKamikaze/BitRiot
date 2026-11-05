@@ -571,6 +571,27 @@ void InputHandler::revokeSlot(int slot)
   MickLogger::getInstance()->debug(this, string("Takeover of slot ").append(to_string(slot)).append(" was not granted: it is not ours"));
 }
 
+void InputHandler::grantSlot(int slot)
+{
+  if (slot < 0 || slot >= std::GameSettings::MAX_PLAYERS)
+  {
+    return;
+  }
+  m_slotController[slot] = -1;
+  m_localSlots |= (1u << slot);
+  m_sampler.clearSlot(slot);
+  for (int set = 0; set < (int) m_availableKeySets.size(); set++)
+  {
+    if (!isKeyboardSetBound(set))
+    {
+      m_keyMap[slot] = m_availableKeySets.at(set);
+      setJoinIndicator(slot + 1, InfoPanel::JOIN_READY, InfoPanel::JOIN_DEVICE_KEYBOARD);
+      break;
+    }
+  }
+  MickLogger::getInstance()->debug(this, string("The host gave this machine player slot ").append(to_string(slot)));
+}
+
 void InputHandler::detachController(int controllerId)
 {
   if (controllerId < 0)
