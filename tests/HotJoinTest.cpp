@@ -406,6 +406,28 @@ TEST(HotJoin, AMachineThatArrivesOnTheScoreboardJoinsTheNextRoundLikeAnyoneElse)
   expectSameLogs(c, {0, 1, 2}, 120);
 }
 
+TEST(HotJoin, ATakeoverMessageThatArrivesAfterTheJoinerPassedItsTickIsBackfilledAndTheMatchResumes)
+{
+  // TAKEOVER_AT is lost on the way (the host's sends mostly vanish for a moment): the joiner steps on to the tick the host
+  // waits for before it knows it was given a slot, so the records of the ticks it already passed are neutral ones. Without
+  // them the host waits for a record nobody will ever make.
+  ClusterOptions o = delayed(10);
+  o.lobby.totalSlots = 4;
+  Cluster c(2, o);
+  ASSERT_TRUE(c.startRound(1, 0));
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(300); }, 60000));
+  Machine& j = c.addMachine(1);
+  ASSERT_TRUE(c.runUntil([&] { return j.s->joinStage() == LockstepSession::JOIN_WAITING; }, 20000));
+  c.impair(0, "loss=85");
+  c.run(1500);
+  c.impair(0, "");
+  ASSERT_TRUE(c.runUntil([&] { return joined(j); }, 20000));
+  const uint32_t ts = j.s->takeoverTick();
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(ts + 150); }, 60000)) << "the match never resumed";
+  expectSameLogs(c, {0, 1, 2}, ts + 150);
+  EXPECT_EQ(firstEvent(c.machine(0), 2, ControlEvent::HUMAN_TAKES_OVER), (int) ts);
+}
+
 TEST(HotJoin, ABotTheHostSaysIsNotWorthTakingIsNotDealt)
 {
   // The game's host narrows the choice to bots that are alive (NetMatch's filter); the session just asks.
@@ -508,6 +530,23 @@ TEST(Reconnect, APeerThatComesBackWithItsTokenFromAnotherAddressGetsItsSlotBackW
     ASSERT_EQ(c.machine(0).log[t - 1].slot[1].bits, sampleByte(1, t, 1)) << "tick " << t;
   }
   EXPECT_FALSE(c.machine(0).s->desynced());
+}
+
+TEST(Reconnect, TheOldSlotIsPreferredOverALowerFreeBot)
+{
+  ClusterOptions o = delayed(10);
+  o.lobby.totalSlots = 4;
+  Cluster c(3, o);   // host (0), peer 1 (1), peer 2 (2), a bot (3)
+  ASSERT_TRUE(c.startRound(1, 0));
+  c.machine(1).wantEvents[100] = {ControlEvent(1, ControlEvent::RETURN_TO_AI)};   // slot 1 is a bot now: free bots are 1 and 3
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(250); }, 60000));
+  ASSERT_GT(firstEvent(c.machine(0), 1, ControlEvent::RETURN_TO_AI), 0);
+  const uint32_t token = c.machine(2).s->token();
+  c.machine(2).frozen = true;
+  Machine& back = c.addMachine(1, 0, 0, [&](netplay::SessionOptions& so) { so.reconnectToken = token; });
+  ASSERT_TRUE(c.runUntil([&] { return joined(back); }, 20000));
+  EXPECT_EQ(back.s->myId(), 2);
+  EXPECT_EQ(back.s->grantedSlots(), 0b0100) << "its own slot 2, not the lowest free bot (slot 1)";
 }
 
 TEST(Reconnect, ASlotThatWasTakenInTheMeantimeIsNotOfferedBack)
@@ -745,4 +784,57 @@ TEST(LockstepSession, AVersionTwoHelloIsRefusedWithRejectVersion)
   EXPECT_EQ(rj.hostProtocol, 3);
   EXPECT_NE(rj.text.find("protocol version 2"), std::string::npos) << rj.text;
   EXPECT_EQ(c.machine(0).s->peerCount(), 0);
+}
+
+// -- NetMatch: the fast-forward keeps no state dumps ------------------------------------------------------------------------
+
+#include "MatchRecord.h"
+#include "NetMatch.h"
+#include "support/HeadlessGame.h"
+
+namespace
+{
+class NetMatchFastForward : public bitriot_test::HeadlessGameTest
+{
+};
+}
+
+TEST_F(NetMatchFastForward, StepsWithoutDevicesKeepsNoDumpsButStillRecordsAndReportsTheCheckpoints)
+{
+  // A host alone: the simulation and a session in one process. fastForward() is what a late joiner does with the record it
+  // received; here it just has to step, record, and not pay for a state dump at every checkpoint (they are what makes a long
+  // fast-forward slow, and only the last ones are of any use).
+  netharness::ClusterOptions o;
+  o.lobby.totalSlots = 2;
+  netharness::Cluster c(1, o);
+  LockstepSession& s = *c.machine(0).s;
+  std::string error;
+  ASSERT_TRUE(s.startRound(7, &error)) << error;
+  netplay::RoundStart rs;
+  ASSERT_TRUE(s.takeRoundStart(rs));
+  netplay::NetMatch match(s, sim());
+  match.beginRound(rs);
+  uint32_t stepped = 0;
+  while (stepped < 400)
+  {
+    s.pump();
+    const uint32_t n = match.fastForward(1000, 0);
+    stepped += n;
+    ASSERT_TRUE(n > 0 || stepped >= 400);
+  }
+  EXPECT_EQ(sim().tick(), stepped);
+  EXPECT_EQ(match.record().ticks.size(), stepped) << "the record has every tick";
+  EXPECT_GE(match.record().checkpoints.size(), stepped / 30u) << "and its checkpoints";
+  EXPECT_TRUE(match.keptDumpTicks().empty()) << "no dump was made on the way";
+  EXPECT_EQ(match.lastCheckpointTick(), (stepped / 30) * 30) << "a hash is still taken (and reported) at every checkpoint";
+  // The ordinary step keeps them (the evidence of a desync).
+  s.pump();
+  ASSERT_TRUE(s.canStep());
+  match.step(TickInputs(), 0);
+  while (match.keptDumpTicks().empty() && match.active())
+  {
+    s.pump();
+    if (s.canStep()) match.step(TickInputs(), 0);
+  }
+  EXPECT_FALSE(match.keptDumpTicks().empty());
 }
