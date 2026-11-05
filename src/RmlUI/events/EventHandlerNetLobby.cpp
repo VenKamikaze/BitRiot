@@ -212,6 +212,24 @@ void EventHandlerNetForm::rememberJoin(const std::string& name, const std::strin
   savePrefs();
 }
 
+void EventHandlerNetForm::rememberToken(const std::string& host, uint32_t token)
+{
+  netplay::NetPrefs& p = prefs();
+  if (p.token == token && p.tokenHost == host)
+  {
+    return;
+  }
+  p.token = token;
+  p.tokenHost = host;
+  savePrefs();
+}
+
+uint32_t EventHandlerNetForm::savedToken(const std::string& host)
+{
+  const netplay::NetPrefs& p = prefs();
+  return (!host.empty() && p.tokenHost == host) ? p.token : 0;
+}
+
 void EventHandlerNetForm::ProcessEvent(Rml::Event& event, const Rml::String& value)
 {
   Rml::ElementDocument* doc = event.GetTargetElement()->GetOwnerDocument();

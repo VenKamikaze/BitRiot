@@ -158,6 +158,17 @@ TEST(GameOptionsTest, JoinNeedsHostAndPort)
   EXPECT_TRUE(parse({ "--join" }).options.error);
 }
 
+TEST(GameOptionsTest, SpectateIsForJoiningOnly)
+{
+  // Brief 13.
+  const Parsed p = parse({ "--join", "1.2.3.4:5", "--spectate" });
+  EXPECT_FALSE(p.options.error) << p.err;
+  EXPECT_TRUE(p.options.spectate);
+  EXPECT_FALSE(parse({ "--join", "1.2.3.4:5" }).options.spectate);
+  EXPECT_TRUE(parse({ "--spectate" }).options.error);
+  EXPECT_TRUE(parse({ "--host", "--spectate" }).options.error);
+}
+
 TEST(GameOptionsTest, NetworkOptionsAreRefusedWhenTheyMakeNoSense)
 {
   EXPECT_TRUE(parse({ "--host", "--join", "1.2.3.4:5" }).options.error);          // both

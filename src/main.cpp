@@ -380,8 +380,9 @@ int main(int argc, char* argv[])
         net.relayUdp = target.udp;
         net.relayDisplay = netOptions.relay;
         net.room = roomCode;
-        net.join = netOptions.relay;
+        net.join = roomCode.empty() ? netOptions.relay : netOptions.relay + " (room " + roomCode + ")";
       }
+      net.spectate = netOptions.spectate;
       std::string netError;
       if(!engine->startNetplay(net, &netError))
       {

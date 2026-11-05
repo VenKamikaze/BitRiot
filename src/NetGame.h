@@ -78,6 +78,8 @@ class NetGame
       std::string relayWt;         // development: an explicit WebTransport URL ("https://127.0.0.1:4433/vnet")
       std::string relayCertSha256; // development: the hash of the relay's -dev-cert certificate
       std::string impair;          // a vnet impairment spec ("lat=40,loss=5,seed=3"); VNET_IMPAIR in the environment wins (native)
+      uint32_t reconnectToken = 0; // peer: the token an earlier session with this host issued (brief 13); 0 = none
+      bool spectate = false;       // peer: watch only
     };
 
     // A function the browser transports call (from a browser event) when something has arrived for vnet_poll()
@@ -150,6 +152,9 @@ class NetGame
     std::string statusLine() const;
     // What the stall overlay says ("waiting for peer1"), or "".
     std::string stallText() const;
+    // A late joiner's banner (brief 13): "Joining... catching up 43%", "Joining... waiting for a free player", or what a
+    // spectator sees; "" for everyone else.
+    std::string joinText() const;
 
   private:
     NetGame() {}

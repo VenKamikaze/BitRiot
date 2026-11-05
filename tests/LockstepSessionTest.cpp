@@ -666,7 +666,7 @@ TEST(LockstepSession, AVersionOneHelloIsRefusedWithRejectVersion)
   Cluster c(1);
   const netplay::RejectMsg rj = expectReject(rawHello(c, 1, 0xB111D, 0xDA7A));
   EXPECT_EQ(rj.reason, netplay::REJECT_VERSION);
-  EXPECT_EQ(rj.hostProtocol, 2);
+  EXPECT_EQ(rj.hostProtocol, 3);
   EXPECT_NE(rj.text.find("protocol version 1"), std::string::npos) << rj.text;
   EXPECT_EQ(c.machine(0).s->peerCount(), 0);
 }
@@ -719,9 +719,12 @@ TEST(LockstepSession, ASeventhPlayerAndTooManyLocalPlayersAreRejectedAsFull)
   EXPECT_EQ(seventh.s->rejectInfo().reason, netplay::REJECT_FULL);
 }
 
-TEST(LockstepSession, JoiningWhileARoundRunsIsRefused)
+TEST(LockstepSession, JoiningWhileARoundRunsIsRefusedByAHostThatDoesNotTakeLateJoiners)
 {
-  Cluster c(2);
+  // Version 3 lets a joiner into a running round (tests/HotJoinTest.cpp); a host can still say no.
+  ClusterOptions o;
+  o.session.allowHotJoin = false;
+  Cluster c(2, o);
   ASSERT_TRUE(c.startRound(1, 0));
   Machine& late = c.addMachine(1);
   ASSERT_TRUE(c.runUntil([&] { return late.s->ended(); }, 5000));
@@ -1430,14 +1433,16 @@ TEST(LockstepLobby, ARemovedPeerWhoseLeavePacketsWereAllLostIsStillToldWhy)
   EXPECT_EQ(c.machine(0).s->peerCount(), 0);
 }
 
-TEST(LockstepLobby, ARoundInProgressCannotKickAndANewJoinerBetweenRoundsHasToBeReadyOnlyInTheLobby)
+TEST(LockstepLobby, ARoundInProgressCanKickSinceVersionThree)
 {
+  // (Brief 13) Removing a peer used to be lobby-only. In a round its slots go to the AI like any leaver's (HotJoinTest).
   Cluster c(2, readyOptions());
   c.machine(1).s->setReady(true);
   ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 3000));
   ASSERT_TRUE(c.startRound(1, 0));
-  EXPECT_FALSE(c.machine(0).s->kick(1)) << "no kicking in a running round";
-  EXPECT_EQ(c.machine(0).s->peerCount(), 1);
+  EXPECT_TRUE(c.machine(0).s->kick(1));
+  EXPECT_EQ(c.machine(0).s->peerCount(), 0);
+  EXPECT_FALSE(c.machine(0).s->kick(1)) << "already gone";
 }
 
 TEST(LockstepLobby, ATeamChosenForMoreSlotsThanThereAreIsClampedAndTheRoundStillStarts)

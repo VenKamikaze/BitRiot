@@ -199,6 +199,12 @@ class GameEngine
     bool m_netResolveForRelay = false;   // the lookup under m_netResolve is a relay's host name (m_netJoinParams holds the rest)
     void startRelayGame(const NetGame::Params& params);
     void adoptNetGame(std::unique_ptr<NetGame> net);
+    // Brief 13: who was in the room (bit = peer id) when we last looked, so a newcomer is announced; whether this
+    // machine has told the prefs file the reconnect token the host issued.
+    uint32_t m_netPeersHere = 0;
+    bool m_netPeersKnown = false;
+    bool m_netTokenSaved = false;
+    bool m_netNamesFresh = true;
     void netFrame();
     void netIdleFrame();
     void stepNetTick();
@@ -209,6 +215,8 @@ class GameEngine
     void updateNetOverlay();
     void installNetInterceptor();
     void netRoundFinishedHere();
+    void netRoundMaybeOver();
+    void netJoinFrame();
 #endif
     // The deterministic world: setup (start) and the per-tick step. Everything the
     // sim needs lives in there; this class keeps rendering, the InfoPanel, sound,

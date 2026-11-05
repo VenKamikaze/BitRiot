@@ -416,7 +416,7 @@ EMSCRIPTEN_KEEPALIVE const char* bitriot_net_info()
     const netplay::LockstepSession& se = net->session();
     s_returned = "{\"delay\":" + std::to_string(se.delay()) + ",\"round\":" + std::to_string(se.round())
                + ",\"tick\":" + std::to_string(se.nextStepTick()) + ",\"sparseGaps\":" + std::to_string(se.sparsePumpGaps())
-               + ",\"hostSilenceMs\":" + std::to_string(se.hostSilenceMs())
+               + ",\"token\":" + std::to_string(se.token()) + ",\"catchingUp\":" + std::string(se.catchingUp() ? "true" : "false") + ",\"granted\":" + std::to_string((int) se.grantedSlots()) + ",\"hostSilenceMs\":" + std::to_string(se.hostSilenceMs())
                + ",\"relayRttMs\":" + std::to_string(net->relayRttMs())
                + ",\"endReason\":" + std::to_string((int) se.endReason())
                + ",\"endText\":\"" + jsonText(se.endText()) + "\",\"stall\":\"" + jsonText(net->stallText()) + "\"}";

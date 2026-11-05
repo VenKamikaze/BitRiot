@@ -159,6 +159,8 @@ netplay::SessionOptions NetGame::sessionOptionsFor(const Params& params)
   so.localPlayers = params.localPlayers;
   so.tickMs = std::GameSettings::NORMAL_TICKS_SPEED;
   so.requireReady = params.requireReady;
+  so.reconnectToken = params.reconnectToken;
+  so.spectate = params.spectate && !params.host;
   so.tolerateSparsePump = true;   // a hidden tab, a sleeping laptop or a debugger pause must not time the others out
   if (params.relay)
   {
@@ -415,6 +417,18 @@ std::string NetGame::stallText() const
     return "the host is away (nothing heard for " + std::to_string(m_session->hostSilenceMs() / 1000) + " s)";
   }
   return waiting;
+}
+
+std::string NetGame::joinText() const
+{
+  const netplay::LockstepSession& s = *m_session;
+  if (s.state() != netplay::LockstepSession::RUNNING)
+  {
+    return "";
+  }
+  // A machine with no slot in a round's START (a late joiner the seats ran out for) watches that round like one that asked to.
+  const bool watchingFromStart = s.joinStage() == netplay::LockstepSession::JOIN_NONE && s.spectating();
+  return netplay::joinSentence(s.joinStage(), s.catchUpFraction(), s.takeoverReason(), m_params.spectate || watchingFromStart);
 }
 
 std::string NetGame::statusLine() const

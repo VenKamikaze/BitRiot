@@ -1,4 +1,5 @@
 #include "GameEngine.h"
+#include "SoundMute.h"
 #include "SimRandom.h"
 #include "GameSettings.h"
 #include "MickBaseInput.h"
@@ -267,7 +268,8 @@ FrameLoop::Hooks GameEngine::frameHooks(std::function<uint32_t()> clockMs)
   // steps extra ticks to catch up (extraTicks). Both are asked every frame, so they look
   // at m_net then (it can appear and go away while the loop runs).
 #ifdef BITRIOT_NETPLAY
-  hooks.canStep = [this] { return !m_net || m_net->match().canStep(); };
+  // (A late joiner replays the host's record in slices from netFrame(), not tick by tick at the clock's pace.)
+  hooks.canStep = [this] { return !m_net || (m_net->match().canStep() && !m_net->session().catchingUp()); };
   hooks.extraTicks = [this] {
     if (!m_net) return 0;
     // A hidden browser tab has no animation frames and so no clock to speak of: it steps whatever it holds (the visible
@@ -590,6 +592,10 @@ bool GameEngine::startNetplay(const NetGame::Params& params, std::string* error)
   }
   NetGame::Params p = params;
   p.recordDir = m_recordDir;
+  if (!p.host && p.reconnectToken == 0)
+  {
+    p.reconnectToken = EventHandlerNetForm::savedToken(p.join);   // a game that crashed or was dropped comes back as the same player
+  }
   m_net = NetGame::create(p, m_sim, error);
   if (!m_net)
   {
@@ -605,6 +611,8 @@ bool GameEngine::startNetplay(const NetGame::Params& params, std::string* error)
   m_netToasts.clear();
   m_netOverlaySignature.clear();
   m_netStallTimer = netplay::StallTimer();
+  m_netPeersKnown = false;
+  m_netTokenSaved = false;
   m_netLocalErrorShown = false;
   m_netResolve.reset();
   m_netBackPage = p.host ? "mainmenu.rml" : "netjoin.rml";
@@ -719,6 +727,8 @@ void GameEngine::adoptNetGame(std::unique_ptr<NetGame> net)
   m_hostWantsLobby = false;
   m_netDesyncHandled = false;
   m_netRoomAnnounced = false;
+  m_netPeersKnown = false;
+  m_netTokenSaved = false;
   m_netMessage.clear();
   m_netToasts.clear();
   m_netOverlaySignature.clear();
@@ -753,7 +763,8 @@ bool GameEngine::startRelayFromText(bool host, const std::string& name, const st
   p.relayUdp = target.udp;
   p.relayDisplay = relay;
   p.room = code;
-  p.join = relay;
+  p.join = host ? relay : relay + " (room " + code + ")";
+  if (!host) p.reconnectToken = EventHandlerNetForm::savedToken(p.join);
   startRelayGame(p);
   return true;
 }
@@ -834,7 +845,9 @@ void GameEngine::netIdleFrame()
     p.relayUdp = rq.form.relayUdp;
     p.relayDisplay = rq.form.relay;
     p.room = rq.form.room;
-    p.join = rq.form.relay;   // what the words of an error name
+    // What names the room for the error pages and for brief 13's saved reconnect token (a token is for one room, not for a relay).
+    p.join = hosting ? rq.form.relay : rq.form.relay + " (room " + rq.form.room + ")";
+    if (!hosting) p.reconnectToken = EventHandlerNetForm::savedToken(p.join);
     EventHandlerNetForm::rememberRelay(rq.form.name, rq.form.relay, rq.form.room, rq.form.localPlayers);
     m_netBackPage = hosting ? "nethostrelay.rml" : "netjoinrelay.rml";
     m_netLocalErrorShown = false;
@@ -890,6 +903,7 @@ void GameEngine::netIdleFrame()
     m_netJoinParams.localPlayers = rq.form.localPlayers;
     m_netJoinParams.requireReady = true;
     m_netJoinParams.recordDir = m_recordDir;
+    m_netJoinParams.reconnectToken = EventHandlerNetForm::savedToken(rq.form.address);
     EventHandlerNetForm::rememberJoin(rq.form.name, rq.form.address, rq.form.localPlayers);
     m_netResolve.reset(new NetResolve(rq.form.address));   // on a worker thread: the menu keeps drawing
     m_netBackPage = "netjoin.rml";
@@ -1056,9 +1070,22 @@ void GameEngine::netFrame()
     m_netToasts.clear();
     m_netOverlaySignature.clear();
     m_netStallTimer = netplay::StallTimer();
+    m_netPeersKnown = false;
     m_roundEnding = false;
     menuSystem->closeAllMenus();
     gs->setGameState(GameSettings::GAME_INIT);
+  }
+  netJoinFrame();
+  // The host went back to the lobby while we were still catching up on the round: leave it and show the lobby.
+  if (s.state() == LockstepSession::LOBBY && gs->getGameState() == GameSettings::GAME_RUNNING)
+  {
+    m_roundEnding = false;
+    m_scoreboardWinner = nullptr;
+    menuSystem->hideNetOverlay();
+    m_netToasts.clear();
+    m_netOverlaySignature.clear();
+    gs->setGameState(GameSettings::MENU_RUNNING);
+    menuSystem->showNetLobby();
   }
 
   if (rq.copyRoom)
@@ -1178,7 +1205,37 @@ void GameEngine::updateNetOverlay()
     o.desync = m_netMessage.empty() ? std::string("Desync detected - writing the evidence...") : m_netMessage;
   }
   o.status = m_net->statusLine();
-  std::string signature = o.stall + "\n" + o.desync + "\n" + o.status + "\n";
+  o.join = m_net->joinText();
+  // Somebody new in the room (a late joiner, or a player that came back): the others see it in the next LOBBY.
+  {
+    uint32_t here = 0;
+    for (const netplay::LobbyEntry& e : m_net->session().lobby().peers)
+    {
+      if (e.connected && e.id < 32) here |= 1u << e.id;
+    }
+    if (m_netPeersKnown)
+    {
+      for (const netplay::LobbyEntry& e : m_net->session().lobby().peers)
+      {
+        if (e.connected && e.id < 32 && e.id != m_net->session().myId() && !(m_netPeersHere & (1u << e.id)))
+        {
+          m_netToasts.push_back(std::make_pair(netplay::clipUtf8(e.name, 20) + " joined", now + 6000u));
+          while (m_netToasts.size() > 3) m_netToasts.pop_front();
+        }
+      }
+      m_netPeersHere = here;
+    }
+    else if (!m_net->session().lobby().peers.empty())
+    {
+      m_netPeersHere = here;
+      m_netPeersKnown = true;
+    }
+  }
+  for (const auto& t : m_netToasts)
+  {
+    if (std::find(o.toasts.begin(), o.toasts.end(), t.first) == o.toasts.end()) o.toasts.push_back(t.first);
+  }
+  std::string signature = o.stall + "\n" + o.desync + "\n" + o.join + "\n" + o.status + "\n";
   for (const std::string& t : o.toasts) signature += t + "\n";
   if (signature != m_netOverlaySignature)
   {
@@ -1224,21 +1281,28 @@ void GameEngine::stepNetTick()
     m_pInputHandler->revokeSlot(slot);
   }
   m_pInputHandler->rumbleForHits(m_sim);
-  if (m_sim.roundOver())
+  netRoundMaybeOver();
+}
+
+// The round is over in the simulation (the last tick of a normal step, or of a late joiner's fast-forward): go to the scoreboard
+// and write the round's record.
+void GameEngine::netRoundMaybeOver()
+{
+  if (m_sim.roundOver() && !m_roundEnding)
   {
     m_roundEnding = true;
     m_scoreboardWinner = m_sim.winner();
     {
       char hash[32];
       std::snprintf(hash, sizeof(hash), "0x%016llx", (unsigned long long) m_sim.stateHash());
-      logNet("round " + std::to_string(match.round().round) + ": over at tick " + std::to_string(m_sim.tick()) + ", winner "
+      logNet("round " + std::to_string(m_net->match().round().round) + ": over at tick " + std::to_string(m_sim.tick()) + ", winner "
              + (m_scoreboardWinner ? "player " + std::to_string(m_scoreboardWinner->getPlayerNumber()) : std::string("none"))
              + ", final hash " + hash);
     }
     if (!m_recordDir.empty())
     {
       std::string path, error;
-      if (match.writeRoundRecord(&path, &error))
+      if (m_net->match().writeRoundRecord(&path, &error))
       {
         std::MickLogger::getInstance()->info(this, std::string("Match record written: ").append(path));
       }
@@ -1283,6 +1347,66 @@ void GameEngine::logNet(const std::string& line)
   }
 }
 
+#endif // BITRIOT_NETPLAY
+
+#ifdef BITRIOT_NETPLAY
+// A late joiner (brief 13), once a frame: replays the host's record in slices (the network keeps being served between them,
+// because netFrame() pumped just before), binds the keyboard to the slots the host gives it, and remembers the reconnect token.
+void GameEngine::netJoinFrame()
+{
+  using netplay::LockstepSession;
+  LockstepSession& s = m_net->session();
+  GameSettings* gs = GameSettings::getInstance();
+  if (!m_net->isHost() && !m_netTokenSaved && s.token() != 0 && s.state() != LockstepSession::CONNECTING)
+  {
+    m_netTokenSaved = true;
+    EventHandlerNetForm::rememberToken(m_net->params().join, s.token());
+  }
+  if (gs->getGameState() != GameSettings::GAME_RUNNING || m_roundEnding || s.state() != LockstepSession::RUNNING)
+  {
+    return;
+  }
+  if (const uint8_t granted = s.takeGrantedSlots())
+  {
+    for (int slot = 0; slot < 6; slot++)
+    {
+      if (granted & (1u << slot))
+      {
+        m_pInputHandler->grantSlot(slot);
+        m_netToasts.push_back(std::make_pair("You are player " + std::to_string(slot + 1), SDL_GetTicks() + 6000u));
+      }
+    }
+  }
+  if (s.catchingUp() && m_net->match().active() && !s.desynced())
+  {
+    // About a frame's worth of ticks at a time: 8 ms of stepping (thousands of ticks natively, fewer in the browser), then the
+    // network, the window and the picture get their turn.
+    {
+      SoundMute quiet;   // the replayed ticks make no noise (the simulation plays through MickBaseSound::getInstance())
+      m_ticksThisFrame += (int) m_net->match().fastForward(3000, 8000);
+    }
+    m_net->pump();   // the acks and the inputs the replay made go out now, not at the next frame
+    netRoundMaybeOver();
+  }
+  // Caught up: the names of who plays what, for "<name> left - now AI", are those of now (the replay changed many owners).
+  if (s.joinStage() != LockstepSession::JOIN_NONE && !s.catchingUp() && !m_netNamesFresh)
+  {
+    m_netNamesFresh = true;
+    const netplay::LobbyView& v = s.lobby();
+    for (int i = 0; i < 6; i++)
+    {
+      m_netSlotNames[i].clear();
+      if (i < (int) v.slots.size() && v.slots[i].owner != netplay::NO_PEER)
+      {
+        for (const netplay::LobbyEntry& e : v.peers)
+        {
+          if (e.id == v.slots[i].owner) m_netSlotNames[i] = e.name;
+        }
+      }
+    }
+  }
+}
+
 void GameEngine::resetNetGame()
 {
   m_netLoggedCheckpoint = 0;
@@ -1304,6 +1428,7 @@ void GameEngine::resetNetGame()
   m_net->match().beginRound(rs);
   resizeWindowIfMapChanged();
 
+  m_netNamesFresh = false;
   // The names the overlay uses for "<name> left - now AI".
   for (int i = 0; i < 6; i++)
   {

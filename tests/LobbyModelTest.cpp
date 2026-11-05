@@ -77,6 +77,45 @@ LobbyView mixedView()
 
 // -- text ---------------------------------------------------------------------------------------
 
+// Brief 13: the reconnect token the host issued is kept with the address it came from, and only used for that address.
+TEST(LobbyModelPrefs, TheReconnectTokenIsSavedWithItsHostAndNotWrittenWhenThereIsNone)
+{
+  NetPrefs p;
+  p.name = "Zed";
+  p.joinAddress = "host:7777";
+  EXPECT_EQ(formatNetPrefs(p).find("token"), std::string::npos) << "no token, no lines";
+  p.token = 0xDEADBEEFu;
+  p.tokenHost = "host:7777";
+  const std::string text = formatNetPrefs(p);
+  EXPECT_NE(text.find("token=3735928559\n"), std::string::npos) << text;
+  EXPECT_NE(text.find("token_host=host:7777\n"), std::string::npos) << text;
+  NetPrefs back;
+  EXPECT_TRUE(parseNetPrefs(text, back));
+  EXPECT_EQ(back, p);
+  // Junk is ignored, not half-read.
+  NetPrefs junk;
+  EXPECT_TRUE(parseNetPrefs("token=abc\ntoken=-5\ntoken=99999999999\ntoken=0\ntoken_host=\n", junk));
+  EXPECT_EQ(junk.token, 0u);
+  EXPECT_TRUE(parseNetPrefs("token=12 \n", junk));
+  EXPECT_EQ(junk.token, 12u);
+}
+
+TEST(LobbyModelRows, AJoinersBannerSaysWhereItIs)
+{
+  using netplay::LockstepSession;
+  const uint8_t G = TAKEOVER_GRANTED;
+  EXPECT_EQ(joinSentence(LockstepSession::JOIN_CATCHING_UP, 0.0, G, false), "Joining... catching up 0%");
+  EXPECT_EQ(joinSentence(LockstepSession::JOIN_CATCHING_UP, 0.436, G, false), "Joining... catching up 43%");
+  EXPECT_EQ(joinSentence(LockstepSession::JOIN_CATCHING_UP, 1.0, G, false), "Joining... catching up 99%") << "never 100% while it is still catching up";
+  EXPECT_EQ(joinSentence(LockstepSession::JOIN_WAITING, 1.0, G, false), "Joining... waiting for a free player");
+  EXPECT_EQ(joinSentence(LockstepSession::JOIN_DONE, 1.0, G, false), "");
+  EXPECT_EQ(joinSentence(LockstepSession::JOIN_NONE, 1.0, G, false), "");
+  EXPECT_EQ(joinSentence(LockstepSession::JOIN_DONE, 1.0, TAKEOVER_NO_FREE_BOT, false), "Watching - no player is free to take over");
+  EXPECT_EQ(joinSentence(LockstepSession::JOIN_DONE, 1.0, TAKEOVER_SPECTATOR, true), "Watching");
+  EXPECT_NE(joinSentence(LockstepSession::JOIN_DONE, 1.0, TAKEOVER_TOO_SLOW, false).find("too slow"), std::string::npos);
+  EXPECT_EQ(joinSentence(LockstepSession::JOIN_NONE, 1.0, G, true), "Watching") << "a spectator that chose to, from the start of the round";
+}
+
 TEST(LobbyModelText, SanitizeKeepsGoodUtf8AndReplacesEverythingElse)
 {
   EXPECT_EQ(sanitizeUtf8("plain"), "plain");

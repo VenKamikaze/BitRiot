@@ -51,6 +51,7 @@ GameOptions parseGameOptions(int argc, char* argv[], std::ostream& err)
     { "players", required_argument, nullptr, 'p' },
     { "relay", required_argument, nullptr, 'R' },
     { "room", required_argument, nullptr, 'o' },
+    { "spectate", no_argument, nullptr, 's' },
     { nullptr, 0, nullptr, 0 }
   };
 
@@ -131,6 +132,9 @@ GameOptions parseGameOptions(int argc, char* argv[], std::ostream& err)
           options.error = true;
         }
         break;
+      case 's':
+        options.spectate = true;
+        break;
       case 'p':
         if (!parseNumber(optarg, 2, 6, &options.players))
         {
@@ -197,6 +201,11 @@ GameOptions parseGameOptions(int argc, char* argv[], std::ostream& err)
     err << "--name, --local-players and --players need --host or --join\n";
     options.error = true;
   }
+  if (options.spectate && options.join.empty())
+  {
+    err << "--spectate is for --join: it joins a game to watch it\n";
+    options.error = true;
+  }
   if (!options.host && options.players != 0)
   {
     err << "--players is for the host: it decides how many players the game has\n";
@@ -222,6 +231,7 @@ void printGameUsage(const std::string& exec, std::ostream& out)
       << "\t    --name <name>\tThe name the others see\n"
       << "\t    --local-players N\tPlayers on this machine (default 1)\n"
       << "\t    --players N\t\tHost: player slots in all; the rest are computer players\n"
+      << "\t    --spectate\t\tJoin: only watch (a round in progress is joined and replayed)\n"
 #endif
       << std::endl;
 }

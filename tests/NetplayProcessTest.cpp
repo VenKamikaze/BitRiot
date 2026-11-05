@@ -580,3 +580,173 @@ TEST(NetplayRelayProcess, ARelayThatIsNotThereFailsTheHostWithAnExplanation)
   EXPECT_NE(host.err().find("cannot open a room on the relay"), std::string::npos) << host.err();
 }
 #endif
+// -- brief 13: late joiners, reconnecting, spectators ------------------------------------------------------------------
+
+namespace
+{
+// Waits until a process has printed `needle` (its stdout is in a file), up to `secs`.
+bool waitForOutput(const Proc& p, const std::string& needle, int secs)
+{
+  const auto limit = std::chrono::steady_clock::now() + std::chrono::seconds(secs);
+  while (std::chrono::steady_clock::now() < limit)
+  {
+    if (p.out().find(needle) != std::string::npos) return true;
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  return false;
+}
+
+// A round that lasts: four players (host, one peer, two bots), nobody plays, so the bots decide how long it takes (3021 ticks).
+const char* kLongConfig = "players=4,map=17x13,blocks=55";
+
+// The tick of the first "event 1 <tick> slot <slot> <kind>" line of a stdout, or 0.
+uint32_t eventTick(const std::string& out, int slot, const char* kind)
+{
+  const std::string tail = std::string(" slot ") + std::to_string(slot) + " " + kind;
+  size_t at = 0;
+  while ((at = out.find(tail, at)) != std::string::npos)
+  {
+    const size_t lineStart = out.rfind('\n', at);
+    const std::string line = out.substr(lineStart == std::string::npos ? 0 : lineStart + 1, at - (lineStart == std::string::npos ? 0 : lineStart + 1));
+    unsigned round = 0, tick = 0;
+    if (sscanf(line.c_str(), "event %u %u", &round, &tick) == 2) return tick;
+    at += tail.size();
+  }
+  return 0;
+}
+} // namespace
+
+TEST(NetplayProcess, AThirdProcessJoinsATickAbout1500TakesABotOverAndAllThreePrintTheSame)
+{
+  Scratch dir;
+  const std::string port = dir.file("port");
+  Proc host({"host", "--port-file", port, "--peers", "1", "--seed", "5", "--config", kLongConfig, "--tick-ms", "2", "--delay", "12",
+             "--out", dir.dir("h")}, impairSpec(0), dir.file("h.out"), dir.file("h.err"));
+  const int p = waitForPort(port);
+  ASSERT_GT(p, 0) << host.err();
+  const std::string addr = "127.0.0.1:" + std::to_string(p);
+  Proc a({"join", addr, "--tick-ms", "2", "--out", dir.dir("a")}, impairSpec(1), dir.file("a.out"), dir.file("a.err"));
+  ASSERT_TRUE(waitForOutput(host, "checkpoint 1 1500 ", 60)) << host.err() << host.out();
+  Proc b({"join", addr, "--tick-ms", "2", "--out", dir.dir("b")}, impairSpec(2), dir.file("b.out"), dir.file("b.err"));
+  const int hostCode = host.wait(kTimeout);
+  const int aCode = a.wait(30);
+  const int bCode = b.wait(30);
+  ASSERT_EQ(hostCode, 0) << host.err() << "\n" << host.out();
+  ASSERT_EQ(aCode, 0) << a.err();
+  ASSERT_EQ(bCode, 0) << b.err() << "\n" << b.out();
+
+  // The late joiner printed the whole round, the ticks it fast-forwarded included, and all three agree on every line.
+  EXPECT_EQ(host.out(), a.out());
+  EXPECT_EQ(host.out(), b.out());
+  const std::string out = host.out();
+  EXPECT_EQ(count(out, ": over at tick"), 1);
+  EXPECT_NE(b.err().find("joined a round in progress"), std::string::npos) << b.err();
+  EXPECT_NE(b.err().find("caught up"), std::string::npos) << b.err();
+  // It took slot 2 (the first bot) over at a tick after its arrival, and the round ran on.
+  const uint32_t takeover = eventTick(out, 2, "HUMAN_TAKES_OVER");
+  EXPECT_GT(takeover, 1500u) << out;
+  EXPECT_LT(takeover, 2400u) << out;
+  EXPECT_EQ(count(out, "desync"), 0);
+
+  // All three machines recorded the same round: the late joiner's record is byte-identical (it stepped from tick 1).
+  const std::string hr = dir.file("h/round-1-peer0.brmr");
+  ASSERT_TRUE(fs::exists(hr));
+  EXPECT_EQ(slurp(hr), slurp(dir.file("a/round-1-peer1.brmr")));
+  ASSERT_TRUE(fs::exists(dir.file("b/round-1-peer2.brmr")));
+  EXPECT_EQ(slurp(hr), slurp(dir.file("b/round-1-peer2.brmr")));
+  Proc replay({"replay", dir.file("b/round-1-peer2.brmr")}, "", dir.file("r.out"), dir.file("r.err"));
+  EXPECT_EQ(replay.wait(60), 0) << replay.out() << replay.err();
+}
+
+TEST(NetplayProcess, APeerKilledAtTickXAndRestartedWithItsTokenReclaimsItsSlot)
+{
+  Scratch dir;
+  const std::string port = dir.file("port");
+  // Host (slot 0), peer A (slot 1), peer B (slot 2), one bot (slot 3).
+  // 3 ms a tick: the round lasts about nine seconds, and a restarted machine's token is honoured after 3 s of silence.
+  Proc host({"host", "--port-file", port, "--peers", "2", "--seed", "5", "--config", kLongConfig, "--tick-ms", "3", "--delay", "12",
+             "--out", dir.dir("h")}, impairSpec(0), dir.file("h.out"), dir.file("h.err"));
+  const int p = waitForPort(port);
+  ASSERT_GT(p, 0) << host.err();
+  const std::string addr = "127.0.0.1:" + std::to_string(p);
+  Proc a({"join", addr, "--tick-ms", "3", "--out", dir.dir("a")}, impairSpec(1), dir.file("a.out"), dir.file("a.err"));
+  const std::string tokenFile = dir.file("tokenB");
+  Proc b({"join", addr, "--tick-ms", "3", "--token-file", tokenFile, "--out", dir.dir("b")}, impairSpec(2), dir.file("b.out"), dir.file("b.err"));
+  ASSERT_TRUE(waitForOutput(host, "checkpoint 1 300 ", 60)) << host.err() << host.out();
+  b.killNow();   // kill -9 at tick about 600: the host is not told and still has its address
+  const std::string token = slurp(tokenFile);
+  ASSERT_FALSE(token.empty()) << "the token was not saved";
+  Proc b2({"join", addr, "--tick-ms", "3", "--token", std::to_string(std::stoul(token)), "--out", dir.dir("b2")}, impairSpec(3),
+          dir.file("b2.out"), dir.file("b2.err"));
+  const int hostCode = host.wait(kTimeout);
+  const int aCode = a.wait(30);
+  const int b2Code = b2.wait(30);
+  ASSERT_EQ(hostCode, 0) << host.err() << "\n" << host.out();
+  ASSERT_EQ(aCode, 0) << a.err();
+  ASSERT_EQ(b2Code, 0) << b2.err() << "\n" << b2.out();
+
+  EXPECT_EQ(host.out(), a.out());
+  EXPECT_EQ(host.out(), b2.out()) << "the restarted machine printed the whole round";
+  const std::string out = host.out();
+  EXPECT_EQ(count(out, ": over at tick"), 1);
+  // Slot 2 went back to the AI when the host saw the same player come back, and was handed to the new process again.
+  const uint32_t back = eventTick(out, 2, "RETURN_TO_AI");
+  const uint32_t again = eventTick(out, 2, "HUMAN_TAKES_OVER");
+  EXPECT_GT(back, 250u) << out;
+  EXPECT_GT(again, back) << out;
+  EXPECT_EQ(count(out, "slot 3 HUMAN_TAKES_OVER"), 0) << "it got its own slot back, not the free bot";
+  EXPECT_EQ(count(out, "desync"), 0);
+  EXPECT_EQ(slurp(dir.file("h/round-1-peer0.brmr")), slurp(dir.file("b2/round-1-peer2.brmr")));
+}
+
+TEST(NetplayProcess, AJoinerWhoseStateIsWrongIsStoppedAndTheLiveMatchNeverNotices)
+{
+  Scratch dir;
+  const std::string port = dir.file("port");
+  Proc host({"host", "--port-file", port, "--peers", "1", "--seed", "5", "--config", kLongConfig, "--tick-ms", "2", "--delay", "12",
+             "--out", dir.dir("h")}, impairSpec(0), dir.file("h.out"), dir.file("h.err"));
+  const int p = waitForPort(port);
+  ASSERT_GT(p, 0) << host.err();
+  const std::string addr = "127.0.0.1:" + std::to_string(p);
+  Proc a({"join", addr, "--tick-ms", "2", "--out", dir.dir("a")}, impairSpec(1), dir.file("a.out"), dir.file("a.err"));
+  ASSERT_TRUE(waitForOutput(host, "checkpoint 1 900 ", 60)) << host.err() << host.out();
+  // The joiner's simulation is changed while it fast-forwards (before its tick 100): from then on it is not the same game.
+  Proc b({"join", addr, "--tick-ms", "2", "--perturb-at", "100", "--out", dir.dir("b")}, impairSpec(2), dir.file("b.out"), dir.file("b.err"));
+  const int hostCode = host.wait(kTimeout);
+  const int aCode = a.wait(30);
+  const int bCode = b.wait(30);
+  EXPECT_EQ(hostCode, 0) << host.err() << host.out();
+  EXPECT_EQ(aCode, 0) << a.err();
+  EXPECT_EQ(bCode, 1) << "the joiner leaves with a failure: " << b.err() << b.out();
+  EXPECT_EQ(host.out(), a.out());
+  EXPECT_EQ(count(host.out(), "desync"), 0) << "the match was not stopped";
+  EXPECT_EQ(count(host.out(), "HUMAN_TAKES_OVER"), 0) << "the joiner was never given a bot";
+  EXPECT_EQ(count(host.out(), ": over at tick"), 1);
+  EXPECT_NE(b.out().find("desync round 1 "), std::string::npos) << b.out();
+  bool wrote = false;
+  for (const auto& entry : fs::directory_iterator(dir.dir("b")))
+  {
+    if (entry.path().filename().string().find("desync-r1-") == 0) wrote = true;
+  }
+  EXPECT_TRUE(wrote) << "the joiner wrote its evidence";
+}
+
+TEST(NetplayProcess, ASpectatorWatchesTheWholeRoundAndTheMatchIgnoresIt)
+{
+  Scratch dir;
+  const std::string port = dir.file("port");
+  Proc host({"host", "--port-file", port, "--peers", "1", "--seed", "5", "--config", kLongConfig, "--tick-ms", "2", "--delay", "12",
+             "--out", dir.dir("h")}, impairSpec(0), dir.file("h.out"), dir.file("h.err"));
+  const int p = waitForPort(port);
+  ASSERT_GT(p, 0) << host.err();
+  const std::string addr = "127.0.0.1:" + std::to_string(p);
+  Proc a({"join", addr, "--tick-ms", "2", "--out", dir.dir("a")}, impairSpec(1), dir.file("a.out"), dir.file("a.err"));
+  ASSERT_TRUE(waitForOutput(host, "checkpoint 1 600 ", 60)) << host.err() << host.out();
+  Proc s({"join", addr, "--tick-ms", "2", "--spectate", "1", "--out", dir.dir("s")}, impairSpec(2), dir.file("s.out"), dir.file("s.err"));
+  EXPECT_EQ(host.wait(kTimeout), 0) << host.err() << host.out();
+  EXPECT_EQ(a.wait(30), 0) << a.err();
+  EXPECT_EQ(s.wait(30), 0) << s.err() << s.out();
+  EXPECT_EQ(host.out(), s.out());
+  EXPECT_EQ(count(host.out(), "HUMAN_TAKES_OVER"), 0);
+  EXPECT_EQ(slurp(dir.file("h/round-1-peer0.brmr")), slurp(dir.file("s/round-1-peer2.brmr")));
+}

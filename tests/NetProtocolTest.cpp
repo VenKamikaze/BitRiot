@@ -142,6 +142,7 @@ TEST(NetProtocol, HelloRoundTripsAndTheVersionComesFirst)
   m.localPlayers = 2;
   m.nonce = 0xDEADBEEF;
   m.token = 77;
+  m.flags = HELLO_SPECTATE;
   m.name = "Venom";
   auto bytes = packet(MSG_HELLO, NO_PEER, 0, [&](Writer& w) { encode(w, m); });
   HelloMsg back;
@@ -152,6 +153,7 @@ TEST(NetProtocol, HelloRoundTripsAndTheVersionComesFirst)
   EXPECT_EQ(back.localPlayers, 2);
   EXPECT_EQ(back.nonce, m.nonce);
   EXPECT_EQ(back.token, 77u);
+  EXPECT_EQ(back.flags, HELLO_SPECTATE);
   EXPECT_EQ(back.name, "Venom");
 
   // Any HELLO, whatever the rest looks like, gives its version.
@@ -364,11 +366,12 @@ TEST(NetProtocol, ChecksumDesyncPingKeepaliveLeaveRoundTrip)
   EXPECT_EQ(lback.reason, LEAVE_HOST_CLOSED);
 }
 
-TEST(NetProtocol, TheVersionIsTwoAndTheReadyMessageRoundTrips)
+TEST(NetProtocol, TheVersionIsThreeAndTheReadyMessageRoundTrips)
 {
-  // Version 2 (brief 08) added READY, the ready flag in LOBBY and LEAVE_REMOVED. A host speaking it
-  // refuses a version-1 HELLO (the session test AVersionOneHelloIsRefused...); this pins the number.
-  EXPECT_EQ(PROTOCOL_VERSION, 2);
+  // Version 2 (brief 08) added READY, the ready flag in LOBBY and LEAVE_REMOVED; version 3 (brief 13) added the HELLO flags
+  // byte and WELCOME_MIDMATCH, READY_AT and TAKEOVER_AT. A host speaking it refuses a version-1 or -2 HELLO (the session
+  // tests AVersionOneHelloIsRefused... and AVersionTwoHelloIsRefused...); this pins the number.
+  EXPECT_EQ(PROTOCOL_VERSION, 3);
 
   ReadyMsg m;
   m.round = 7;
@@ -389,6 +392,102 @@ TEST(NetProtocol, TheVersionIsTwoAndTheReadyMessageRoundTrips)
   // A ready byte that is neither 0 nor 1 is nonsense, not "true".
   bytes.back() = 2;
   EXPECT_FALSE(decodeBody(bytes, back));
+}
+
+TEST(NetProtocol, TheHotJoinMessagesRoundTripAndTheirDecodersAreStrict)
+{
+  // HELLO: the flags byte is the only new field; a bit that means nothing is refused, not ignored.
+  HelloMsg h;
+  h.name = "x";
+  h.flags = HELLO_SPECTATE;
+  auto hb = packet(MSG_HELLO, NO_PEER, 0, [&](Writer& w) { encode(w, h); });
+  HelloMsg hback;
+  ASSERT_TRUE(decodeBody(hb, hback));
+  EXPECT_EQ(hback.flags, HELLO_SPECTATE);
+  h.flags = 2;
+  hb = packet(MSG_HELLO, NO_PEER, 0, [&](Writer& w) { encode(w, h); });
+  EXPECT_FALSE(decodeBody(hb, hback)) << "an unknown HELLO flag";
+  // The flags byte sits between the token and the name: a version-2 body (without it) does not decode as a version-3 one.
+  Writer old;
+  old.u16(3); old.u64(1); old.u64(2); old.u8(1); old.u32(5); old.u32(0); old.str("old");
+  Reader oldReader(old.bytes().data(), old.bytes().size());
+  HelloMsg parsed;
+  EXPECT_FALSE(decode(oldReader, parsed));
+
+  WelcomeMidMatchMsg w;
+  w.nonce = 0xAABBCCDD;
+  w.peerId = 3;
+  w.token = 0x01020304;
+  w.round = 7;
+  w.head = 4500;
+  w.offerMask = 0b001010;
+  auto wb = packet(MSG_WELCOME_MIDMATCH, 0, 5, [&](Writer& o) { encode(o, w); });
+  EXPECT_EQ(wb.size(), HEADER_SIZE + 4 + 1 + 4 + 2 + 4 + 1);
+  WelcomeMidMatchMsg wback;
+  ASSERT_TRUE(decodeBody(wb, wback));
+  EXPECT_EQ(wback.nonce, 0xAABBCCDDu);
+  EXPECT_EQ(wback.peerId, 3);
+  EXPECT_EQ(wback.token, 0x01020304u);
+  EXPECT_EQ(wback.round, 7);
+  EXPECT_EQ(wback.head, 4500u);
+  EXPECT_EQ(wback.offerMask, 0b001010);
+  EXPECT_EQ(messageName(MSG_WELCOME_MIDMATCH), "WELCOME_MIDMATCH");
+  for (auto mutate : std::vector<std::function<void(WelcomeMidMatchMsg&)>>{
+         [](WelcomeMidMatchMsg& m) { m.peerId = 0; },           // the host's id
+         [](WelcomeMidMatchMsg& m) { m.peerId = MAX_PEERS; },   // past the table
+         [](WelcomeMidMatchMsg& m) { m.round = 0; },            // rounds start at 1
+         [](WelcomeMidMatchMsg& m) { m.offerMask = 0x40; }})    // a slot that does not exist
+  {
+    WelcomeMidMatchMsg bad = w;
+    mutate(bad);
+    auto bb = packet(MSG_WELCOME_MIDMATCH, 0, 5, [&](Writer& o) { encode(o, bad); });
+    EXPECT_FALSE(decodeBody(bb, wback));
+  }
+
+  ReadyAtMsg ra;
+  ra.round = 9;
+  ra.tick = 123456;
+  auto rb = packet(MSG_READY_AT, 2, 5, [&](Writer& o) { encode(o, ra); });
+  ReadyAtMsg raback;
+  ASSERT_TRUE(decodeBody(rb, raback));
+  EXPECT_EQ(raback.round, 9);
+  EXPECT_EQ(raback.tick, 123456u);
+  EXPECT_EQ(messageName(MSG_READY_AT), "READY_AT");
+  ra.round = 0;
+  rb = packet(MSG_READY_AT, 2, 5, [&](Writer& o) { encode(o, ra); });
+  EXPECT_FALSE(decodeBody(rb, raback)) << "rounds start at 1";
+
+  TakeoverAtMsg ta;
+  ta.round = 9;
+  ta.tick = 777;
+  ta.slotMask = 0b100100;
+  ta.reason = TAKEOVER_GRANTED;
+  auto tb = packet(MSG_TAKEOVER_AT, 0, 5, [&](Writer& o) { encode(o, ta); });
+  TakeoverAtMsg taback;
+  ASSERT_TRUE(decodeBody(tb, taback));
+  EXPECT_EQ(taback.tick, 777u);
+  EXPECT_EQ(taback.slotMask, 0b100100);
+  EXPECT_EQ(messageName(MSG_TAKEOVER_AT), "TAKEOVER_AT");
+  ta.slotMask = 0x40;
+  tb = packet(MSG_TAKEOVER_AT, 0, 5, [&](Writer& o) { encode(o, ta); });
+  EXPECT_FALSE(decodeBody(tb, taback)) << "a slot that does not exist";
+  // The reason says why a machine got no slot, and agrees with the mask: a slot with a reason, or no slot without one, is nonsense.
+  ta.slotMask = 0;
+  ta.reason = TAKEOVER_TOO_SLOW;
+  tb = packet(MSG_TAKEOVER_AT, 0, 5, [&](Writer& o) { encode(o, ta); });
+  ASSERT_TRUE(decodeBody(tb, taback));
+  EXPECT_EQ(taback.reason, TAKEOVER_TOO_SLOW);
+  ta.reason = TAKEOVER_GRANTED;
+  tb = packet(MSG_TAKEOVER_AT, 0, 5, [&](Writer& o) { encode(o, ta); });
+  EXPECT_FALSE(decodeBody(tb, taback)) << "no slot and no reason";
+  ta.slotMask = 4;
+  ta.reason = TAKEOVER_SPECTATOR;
+  tb = packet(MSG_TAKEOVER_AT, 0, 5, [&](Writer& o) { encode(o, ta); });
+  EXPECT_FALSE(decodeBody(tb, taback)) << "a slot and a reason";
+  ta.slotMask = 0;
+  ta.reason = 4;
+  tb = packet(MSG_TAKEOVER_AT, 0, 5, [&](Writer& o) { encode(o, ta); });
+  EXPECT_FALSE(decodeBody(tb, taback)) << "an unknown reason";
 }
 
 TEST(NetProtocol, ALobbyPeersReadyByteIsStrictAndTheRemovedReasonIsTheLastOne)
@@ -434,6 +533,9 @@ TEST(NetProtocol, EveryTruncationAndTrailingByteIsRefused)
   { KeepaliveMsg m; all.push_back(packet(MSG_KEEPALIVE, 0, 1, [&](Writer& w) { encode(w, m); })); }
   { LeaveMsg m; all.push_back(packet(MSG_LEAVE, 0, 1, [&](Writer& w) { encode(w, m); })); }
   { ReadyMsg m; m.round = 2; m.seq = 5; m.ready = true; all.push_back(packet(MSG_READY, 1, 1, [&](Writer& w) { encode(w, m); })); }
+  { WelcomeMidMatchMsg m; m.peerId = 2; m.round = 3; m.head = 99; all.push_back(packet(MSG_WELCOME_MIDMATCH, 0, 1, [&](Writer& w) { encode(w, m); })); }
+  { ReadyAtMsg m; m.round = 3; m.tick = 99; all.push_back(packet(MSG_READY_AT, 2, 1, [&](Writer& w) { encode(w, m); })); }
+  { TakeoverAtMsg m; m.round = 3; m.tick = 99; m.slotMask = 4; all.push_back(packet(MSG_TAKEOVER_AT, 0, 1, [&](Writer& w) { encode(w, m); })); }
 
   auto decodeAny = [](const std::vector<uint8_t>& b) -> bool {
     Reader r(b.data(), b.size());
@@ -454,6 +556,9 @@ TEST(NetProtocol, EveryTruncationAndTrailingByteIsRefused)
       case MSG_KEEPALIVE: { KeepaliveMsg m; return decode(r, m); }
       case MSG_LEAVE: { LeaveMsg m; return decode(r, m); }
       case MSG_READY: { ReadyMsg m; return decode(r, m); }
+      case MSG_WELCOME_MIDMATCH: { WelcomeMidMatchMsg m; return decode(r, m); }
+      case MSG_READY_AT: { ReadyAtMsg m; return decode(r, m); }
+      case MSG_TAKEOVER_AT: { TakeoverAtMsg m; return decode(r, m); }
     }
     return false;
   };
@@ -525,6 +630,8 @@ TEST(NetProtocol, FuzzedDatagramsNeverCrashADecoder)
   { HelloMsg m; m.name = "abc"; seeds.push_back(packet(MSG_HELLO, NO_PEER, 0, [&](Writer& w) { encode(w, m); })); }
   { ReadyMsg m; m.round = 1; m.seq = 2; m.ready = true; seeds.push_back(packet(MSG_READY, 1, 1, [&](Writer& w) { encode(w, m); })); }
   { StartMsg m; m.slots = {{0, 0, false}}; seeds.push_back(packet(MSG_START, 0, 1, [&](Writer& w) { encode(w, m); })); }
+  { WelcomeMidMatchMsg m; m.peerId = 2; m.round = 3; seeds.push_back(packet(MSG_WELCOME_MIDMATCH, 0, 1, [&](Writer& w) { encode(w, m); })); }
+  { TakeoverAtMsg m; m.round = 3; m.slotMask = 4; seeds.push_back(packet(MSG_TAKEOVER_AT, 0, 1, [&](Writer& w) { encode(w, m); })); }
 
   auto tryAll = [](const std::vector<uint8_t>& b) {
     for (int type = 1; type <= 13; type++)
@@ -532,7 +639,7 @@ TEST(NetProtocol, FuzzedDatagramsNeverCrashADecoder)
       Reader r(b.data(), b.size());
       Header h;
       if (!readHeader(r, h)) continue;
-      HelloMsg a; WelcomeMsg b2; RejectMsg c; LobbyMsg d; StartMsg e; InputMsg f; TicksMsg g; ChecksumMsg h2; DesyncMsg i; PingMsg j; KeepaliveMsg k; LeaveMsg l; ReadyMsg rd;
+      HelloMsg a; WelcomeMsg b2; RejectMsg c; LobbyMsg d; StartMsg e; InputMsg f; TicksMsg g; ChecksumMsg h2; DesyncMsg i; PingMsg j; KeepaliveMsg k; LeaveMsg l; ReadyMsg rd; WelcomeMidMatchMsg wm; ReadyAtMsg ra; TakeoverAtMsg ta;
       Reader r1 = r; decode(r1, a);
       Reader r2 = r; decode(r2, b2);
       Reader r3 = r; decode(r3, c);
@@ -546,6 +653,9 @@ TEST(NetProtocol, FuzzedDatagramsNeverCrashADecoder)
       Reader r11 = r; decode(r11, k);
       Reader r12 = r; decode(r12, l);
       Reader r13 = r; decode(r13, rd);
+      Reader r14 = r; decode(r14, wm);
+      Reader r15 = r; decode(r15, ra);
+      Reader r16 = r; decode(r16, ta);
       break;
     }
   };

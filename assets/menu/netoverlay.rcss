@@ -52,6 +52,22 @@ body.overlay {
   white-space: normal;
 }
 
+/* A machine that joined a round already running: it is replaying the host's record, or only watching. */
+#joinbox {
+  display: none;
+  position: absolute;
+  left: 5%;
+  top: 45%;
+  width: 90%;
+  padding: 8px 12px;
+  background-color: rgba(20,40,110,225);
+  color: white;
+  font-size: 13pt;
+  white-space: normal;
+  font-weight: bold;
+  text-align: center;
+}
+
 #netstatusline {
   position: absolute;
   left: 6px;

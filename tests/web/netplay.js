@@ -631,6 +631,76 @@ scenarios.knobs = async (ctx) => {
   await finish(page);
 };
 
+// Brief 13 in a browser: a tab joins a native host's RUNNING round by room code, replays the host's record and plays on. Once with a
+// visible tab and once with a throttled hidden one (the catch-up has to be driven by messages, not by animation frames).
+async function hotJoin(ctx, hidden) {
+  const name = hidden ? 'hotjoin-hidden' : 'hotjoin';
+  console.log(name + ': a browser ' + (hidden ? '(hidden, throttled) ' : '') + 'joins a running native round by room code and catches up');
+  const { host, room } = await nativeHost(ctx, { peers: 1, seed: 5, config: 'players=6,map=17x19,blocks=55', tickMs: 33 });
+  const guest = startNative(['join', '--relay', ctx.relay.udp, '--room', room, '--rounds', '1', '--name', 'native2', '--tick-ms', '33', '--timeout-secs', '900']);
+  await sleep(14000);   // the round is running before the browser arrives
+  const page = await openGame(ctx.context(), name, ctx.server, wsQuery(ctx));
+  await startGame(page);
+  if (hidden) { await hidePage(page); await throttleLikeABackgroundTab(page); }
+  await netStart(page, false, 'late', room);
+  await waitNetState(page, [3], 60000, 'in the running round');
+  let caught = false;
+  const tc = Date.now();
+  for (let i = 0; i < 120 && !caught; i++) { await sleep(250); const inf = await info(page); caught = !inf.catchingUp && inf.tick > 600; }
+  const took = (Date.now() - tc) / 1000;
+  console.log('  ' + name + ': caught up after ' + took.toFixed(1) + ' s');
+  check(caught, 'the browser replayed the record and caught up', JSON.stringify(await info(page)));
+  const t0 = await tickOf(page);
+  await sleep(4000);
+  const rate = ((await tickOf(page)) - t0) / 4;
+  check(rate >= 25, 'and then plays at the nominal pace', rate.toFixed(1) + ' ticks/s');
+  const inf = await info(page);
+  check(inf.granted !== undefined, 'the host answered about a slot (granted mask ' + inf.granted + ')');
+  for (const p of [page]) await waitNetState(p, [4, 5], 300000, 'the round ends');
+  await withTimeout(host.exited, 120000, 'the host to finish');
+  const machines = [{ name: 'native', log: parseLog(host.out) }, { name: name, log: await parseBrowserLog(page) }];
+  // The browser joined late: it logs the checkpoints it stepped itself. Every one of them must agree, and the end must match.
+  let common = 0, bad = 0;
+  for (const [k, h] of machines[1].log.cps) { if (machines[0].log.cps.has(k)) { common++; if (machines[0].log.cps.get(k) !== h) bad++; } }
+  check(common >= 20 && bad === 0, 'every checkpoint the late browser stepped agrees with the host\'s', common + ' shared, ' + bad + ' differing');
+  check(machines[0].log.over !== null && machines[1].log.over === machines[0].log.over, 'same winner and final hash', machines[0].log.over + ' | ' + machines[1].log.over);
+  stopNative(guest);
+  await finish(page);
+}
+scenarios.hotjoin = (ctx) => hotJoin(ctx, false);
+scenarios['hotjoin-hidden'] = (ctx) => hotJoin(ctx, true);
+
+// Reconnect (brief 13) in a browser: a tab that reloads comes back with a new vnet context, a new nonce and maybe another virtual address,
+// but with the token the host issued (kept in localStorage with the room), and gets its slot back.
+scenarios.reconnect = async (ctx) => {
+  console.log('reconnect: a browser that reloads mid-round rejoins the same room with its token and gets its slot back');
+  const { host, room } = await nativeHost(ctx, { peers: 1, seed: 5, config: 'players=6,map=17x19,blocks=55', tickMs: 33 });
+  const guest = startNative(['join', '--relay', ctx.relay.udp, '--room', room, '--rounds', '1', '--name', 'native2', '--tick-ms', '33', '--timeout-secs', '900']);
+  await sleep(12000);
+  const context = ctx.context();
+  let page = await openGame(context, 'reconnect-1', ctx.server, wsQuery(ctx));
+  await startGame(page);
+  await netStart(page, false, 'late', room);
+  await waitNetState(page, [3], 60000, 'in the running round');
+  let inf;
+  for (let i = 0; i < 120; i++) { await sleep(250); inf = await info(page); if (!inf.catchingUp && inf.granted) break; }
+  check(inf.granted > 0, 'the browser was given a slot in the running round', JSON.stringify(inf));
+  const first = inf.granted, firstToken = inf.token;
+  const saved = await page.evaluate(() => window.localStorage.getItem('bitriot.netplay'));
+  check(/token=\d+/.test(saved || ''), 'its reconnect token is saved in the browser', JSON.stringify(saved));
+  await finish(page);   // the tab closes: its relay session ends
+  await sleep(1500);
+  page = await openGame(context, 'reconnect-2', ctx.server, wsQuery(ctx));
+  await startGame(page);
+  await netStart(page, false, 'late', room);
+  await waitNetState(page, [3], 60000, 'back in the round');
+  for (let i = 0; i < 160; i++) { await sleep(250); inf = await info(page); if (!inf.catchingUp && inf.granted) break; }
+  check(inf.granted === first, 'the reloaded tab got the same slot back', 'first ' + first + ', now ' + inf.granted);
+  check(inf.token === firstToken && firstToken !== 0, 'as the same player: the host recognised its token (a stranger would have been issued a new one)', firstToken + ' -> ' + inf.token);
+  stopNative(guest); stopNative(host);
+  await finish(page);
+};
+
 // The real menus, with the keyboard.
 scenarios.ui = async (ctx) => {
   console.log('ui: join by room code through the menus, the saved settings, the room panel');

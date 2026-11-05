@@ -56,7 +56,11 @@ namespace netplay
 
       bool active() const { return m_active; }
       const RoundStart& round() const { return m_round; }
-      uint8_t localSlotMask() const { return m_round.localSlotMask; }
+      // The slots this machine's players drive: the round's own, and (a late joiner, brief 13) the ones the host gave it
+      // since (LockstepSession::grantedSlots()).
+      uint8_t localSlotMask() const { return (uint8_t) (m_round.localSlotMask | m_session.grantedSlots()); }
+      // The final inputs of the tick stepped last.
+      const TickInputs& lastInputs() const { return m_lastInputs; }
 
       // The next tick can be stepped (the session holds the host's inputs for it).
       bool canStep() const { return m_active && m_session.canStep(); }
@@ -65,6 +69,14 @@ namespace netplay
       // sample covers. Call only when canStep(). On the last tick of a round the session is
       // told (roundFinished) and active() becomes false.
       const TickInputs& step(const TickInputs& localSample, uint8_t sampledMask);
+
+      // Late joiner (brief 13): steps up to `maxTicks` ticks of the host's record without sampling any device, for at most
+      // `budgetMicros` microseconds of wall-clock time (0 = no time limit), and returns how many it stepped. It stops when the
+      // session holds no more ticks, the round ends, or the session ended or desynced. The caller calls session.pump()
+      // between chunks (the network must keep running while a long record is replayed), and stops calling once
+      // session.catchingUp() is false. No state dump is kept for the checkpoints passed on the way (they cost more than the
+      // ticks do; the checkpoint hashes are still reported, and the record is still made).
+      uint32_t fastForward(uint32_t maxTicks, uint32_t budgetMicros = 0);
 
       // The record of the round so far (final TickInputs, a checkpoint every interval).
       const MatchRecord& record();
@@ -107,6 +119,7 @@ namespace netplay
       std::deque<Dump> m_dumps;
       uint32_t m_lastCheckpointTick = 0;
       uint64_t m_lastCheckpointHash = 0;
+      bool m_fastForwarding = false;
       bool m_filesWritten = false;
       DesyncFiles m_files;
       TickInputs m_lastInputs;
