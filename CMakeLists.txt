@@ -228,6 +228,52 @@ target_link_libraries(bitriot_headless PRIVATE bitriot_headless_cli)
 target_compile_options(bitriot_headless PRIVATE -Wall -Wno-comment
   $<$<CONFIG:Debug>:-ggdb -O0> $<$<CONFIG:Release>:-O2>)
 
+# bitriot_net: native lockstep netplay (brief 07), src/net/. The wire messages, the
+# LockstepSession (protocol, buffering, acks, pacing, the choice of the input delay) and
+# NetMatch (a session driving a Simulation). It links bitriot_sim and vnet, the
+# virtual-UDP library, and no SDL; the game and bitriot_headless both use it.
+#
+# vnet is the git submodule ext/vnet, pinned to the v0.4.0 tag (like ext/RmlUi: a
+# submodule keeps the pin in git and needs no network at configure time, which a
+# FetchContent would). Netplay is native-only for now: the browser build (brief 12) is
+# a different transport, and the MinGW build has not been checked against vnet. The
+# default is therefore ON for native Linux/macOS builds that have the submodule, and
+# OFF otherwise; asking for ON without the submodule is an error that says how to get it.
+if(EMSCRIPTEN OR MINGW OR NOT EXISTS ${PROJECT_SOURCE_DIR}/ext/vnet/CMakeLists.txt)
+  set(BITRIOT_NETPLAY_DEFAULT OFF)
+else()
+  set(BITRIOT_NETPLAY_DEFAULT ON)
+endif()
+option(BITRIOT_NETPLAY "Build native lockstep netplay (src/net/, needs the ext/vnet submodule)" ${BITRIOT_NETPLAY_DEFAULT})
+if(BITRIOT_NETPLAY)
+  if(EMSCRIPTEN OR MINGW)
+    message(FATAL_ERROR "BITRIOT_NETPLAY is native-only for now (browser netplay is brief 12; MinGW is unchecked): configure with -DBITRIOT_NETPLAY=OFF")
+  endif()
+  if(NOT EXISTS ${PROJECT_SOURCE_DIR}/ext/vnet/CMakeLists.txt)
+    message(FATAL_ERROR "BITRIOT_NETPLAY needs the vnet submodule: run `git submodule update --init ext/vnet` (or configure with -DBITRIOT_NETPLAY=OFF)")
+  endif()
+  # vnet's own tests, examples, relay and install rules stay off (they default to off
+  # when it is not the top-level project; spelled out so a cache entry cannot change it).
+  set(VNET_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+  set(VNET_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(VNET_BUILD_RELAY OFF CACHE BOOL "" FORCE)
+  set(VNET_INSTALL OFF CACHE BOOL "" FORCE)
+  add_subdirectory(ext/vnet EXCLUDE_FROM_ALL)
+  add_library(bitriot_net STATIC
+    ./src/net/NetProtocol.cpp
+    ./src/net/LockstepSession.cpp
+    ./src/net/NetMatch.cpp)
+  target_link_libraries(bitriot_net PUBLIC bitriot_sim vnet::vnet)
+  target_include_directories(bitriot_net PUBLIC ${PROJECT_SOURCE_DIR}/src/net)
+  target_compile_definitions(bitriot_net PUBLIC BITRIOT_NETPLAY=1)
+  target_compile_options(bitriot_net PRIVATE -Wall -Wno-comment
+    $<$<CONFIG:Debug>:-ggdb -O0> $<$<CONFIG:Release>:-O2>)
+  # The headless host/join commands (src/headless/HeadlessNet.cpp) are part of the CLI
+  # library only when netplay is built.
+  target_sources(bitriot_headless_cli PRIVATE ./src/headless/HeadlessNet.cpp)
+  target_link_libraries(bitriot_headless_cli PUBLIC bitriot_net)
+endif()
+
 if(MINGW)
   # MickUtil::CheckFileExists uses PathFileExists on Windows.
   target_link_libraries(bitriot_sim PUBLIC shlwapi)

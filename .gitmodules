@@ -1,3 +1,6 @@
 [submodule "ext/RmlUi/RmlUi"]
 	path = ext/RmlUi/RmlUi
 	url = https://github.com/mikke89/RmlUi.git
+[submodule "ext/vnet"]
+	path = ext/vnet
+	url = https://github.com/VenKamikaze/vnet
