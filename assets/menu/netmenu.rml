@@ -1,0 +1,19 @@
+<rml>
+  <head>
+    <title>Online game</title>
+    <link rel="stylesheet" type="text/css" href="rkt.rcss"/>
+    <link rel="stylesheet" type="text/css" href="common.rcss"/>
+    <link type="text/rcss" href="mainmenu.rcss"/>
+  </head>
+  <body class="background">
+    <div class="menu-container">
+      <div class="menu">
+        <button class="tabbed" id="nethostrelay" autofocus tabindex="1" onclick="open nethostrelay.rml">Host via relay</button><br />
+        <button class="tabbed" id="netjoinrelay" tabindex="2" onclick="open netjoinrelay.rml">Join by room code</button><br />
+        <button class="tabbed" id="nethost" tabindex="3" onclick="open nethost.rml">Host direct (UDP)</button><br />
+        <button class="tabbed" id="netjoin" tabindex="4" onclick="open netjoin.rml">Join direct (UDP)</button><br />
+        <button class="tabbed" id="netback" tabindex="5" escapeAction="1" onclick="open mainmenu.rml">Back</button><br />
+      </div>
+    </div>
+  </body>
+</rml>

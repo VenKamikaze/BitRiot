@@ -18,6 +18,7 @@
 
 #include "FrameLoop.h"
 #include "MatchRecord.h"
+#include "MatchReplay.h"
 #include "MenuSDLRenderer.h"
 #include "GameSettings.h"
 #include "GameOverTimer.h"
@@ -76,6 +77,10 @@ class GameEngine
     // changing or going away); otherwise the overlay would be composited over the
     // previous frame's text, or left behind.
     void requestRedraw() { m_drawNeeded = true; }
+    // Brief 12 (the web build's full-game determinism check): plays a match record file through THIS engine's simulation with the
+    // game's own code (replayRecord), verifying every checkpoint hash the record carries. Only from a menu with no network game;
+    // otherwise BAD_CONFIG and a message. Leaves GameSettings and the map as the record's round set them: for a test page.
+    ReplayResult replayRecordFile(const std::string& path);
 #ifdef BITRIOT_NETPLAY
     // Network play (brief 07). Opens the network, saves the player's settings and shows the
     // lobby page instead of the main menu; false and `error` if it cannot start. Call it
@@ -86,6 +91,44 @@ class GameEngine
     // call when there is none. main() calls it when the game closes.
     void stopNetplay();
     bool netplayActive() const { return static_cast<bool>(m_net); }
+    // Test hook (brief 12): this machine's players all go back to the AI; how many were handed back.
+    int handBackSlots() { return m_pInputHandler ? m_pInputHandler->handBackAllSlots() : 0; }
+    // Starts a relay game as the Host via relay / Join by room code forms would (the same parsing), for the web build's test
+    // hooks and the page's own "join this room" link. False, and `error`, if the words are bad or a game is already on.
+    bool startRelayFromText(bool host, const std::string& name, const std::string& relay, const std::string& room, int localPlayers,
+                            bool pageIsSecure, std::string* error);
+#endif
+    // Brief 12: the browser tab is hidden (document.hidden). A hidden tab gets no animation frames, so the page drives
+    // the frame loop from network events instead (src/web/WebHooks.cpp); in this mode a network game steps every tick it
+    // holds, whenever it is asked, instead of waiting for the clock (the others set the pace), and nothing is drawn.
+    // Coming back, the next frame redraws everything.
+    void setHidden(bool hidden)
+    {
+      m_hidden = hidden;
+      m_drawNeeded = true;
+    }
+    bool hidden() const { return m_hidden; }
+    // What this machine's networked rounds looked like, in bitriot_headless's words ("checkpoint R T 0xHASH" every 30th tick
+    // and "round R: over at tick T, winner player W, final hash 0xHASH" at the end), so a test can compare machines. Kept
+    // for the web build's page hooks; the oldest lines are dropped beyond 64 KB.
+    const std::string& netLog() const { return m_netLog; }
+    // True when a hidden tab has something to drive: a network game, or a relay lookup pending. A local game in a hidden tab is not
+    // driven at all (brief 09: it stops, as the browser stops its animation frames).
+    bool hiddenPassesWanted() const;
+    // Sends what a frame's steps produced (the inputs sampled for the ticks just stepped) at once, instead of at the next pump:
+    // a hidden tab otherwise sends them one network wake late, a whole tick interval of D. No-op without a network game.
+    void flushNet();
+#ifdef BITRIOT_NETPLAY
+    // Brief 12 (the web build's test and development knobs): fields copied into the parameters of every relay session
+    // (an explicit WebTransport URL and a development certificate hash, a vnet impairment spec). Only the relay and
+    // impair fields are used.
+    void setNetDevParams(const NetGame::Params& dev) { m_netDev = dev; }
+    // The room code of the relay game being hosted or joined ("" if none, or before the relay has said it).
+    std::string netRoomCode() const { return m_net ? m_net->roomCode() : std::string(); }
+    // The network game, for the web build's page hooks (null when there is none).
+    NetGame* netGame() { return m_net.get(); }
+    // What the player typed for the relay of the game in progress ("" if direct or none): an invite link must carry it.
+    std::string netRelayText() const { return m_net && m_net->viaRelay() ? m_net->params().relayDisplay : std::string(); }
     // The main loop's sleep in a network game: up to `ms`, ending early when a datagram
     // arrives. False when there is no network game (or the backend cannot wait): sleep as usual.
     bool netplayWait(uint32_t ms) { return m_net && m_net->wait(ms); }
@@ -122,9 +165,12 @@ class GameEngine
     bool m_drawNeeded = true;
     unique_ptr<MenuSDLRenderer> menuSystem = nullptr;
     std::string m_recordDir;
+    bool m_hidden = false;
+    std::string m_netLog;
     std::string m_recordStamp; // UTC date and time the recorded round started
     std::unique_ptr<MatchRecorder> m_recorder; // a round is being recorded
     void startRecording();
+    // (m_hidden, m_netLog and the checkpoint counter below are used by non-netplay builds' declarations too)
 #ifdef BITRIOT_NETPLAY
     // -- network play ----------------------------------------------------------------
     std::unique_ptr<NetGame> m_net;
@@ -141,6 +187,7 @@ class GameEngine
     std::unique_ptr<NetResolve> m_netResolve;
     NetGame::Params m_netJoinParams;
     bool m_netLocalErrorShown = false;
+    bool m_netRoomAnnounced = false;     // the room code has been printed
     netplay::EndMessage m_netLocalError;
     std::string m_netBackPage = "mainmenu.rml";
     // The overlay over a running round.
@@ -148,6 +195,12 @@ class GameEngine
     std::deque<std::pair<std::string, uint32_t>> m_netToasts;   // text, when it goes
     std::string m_netSlotNames[6];       // who plays each slot (for "<name> left - now AI")
     std::string m_netOverlaySignature;
+    uint32_t m_netLoggedCheckpoint = 0;
+    void logNet(const std::string& line);
+    NetGame::Params m_netDev;            // development knobs for relay sessions (see setNetDevParams)
+    bool m_netResolveForRelay = false;   // the lookup under m_netResolve is a relay's host name (m_netJoinParams holds the rest)
+    void startRelayGame(const NetGame::Params& params);
+    void adoptNetGame(std::unique_ptr<NetGame> net);
     // Brief 13: who was in the room (bit = peer id) when we last looked, so a newcomer is announced; whether this
     // machine has told the prefs file the reconnect token the host issued.
     uint32_t m_netPeersHere = 0;

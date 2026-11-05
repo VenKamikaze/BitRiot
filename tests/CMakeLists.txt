@@ -154,6 +154,20 @@ if(BITRIOT_NETPLAY)
   if(TARGET bitriot_runtime_links)
     add_dependencies(bitriot_netplay_process_tests bitriot_runtime_links)
   endif()
+  # Brief 12: the relay (Go, from the vnet submodule) for the tests that play through it. Built when Go is found; the tests that need
+  # it are compiled only then (never skipped at run time).
+  find_program(BITRIOT_GO_EXECUTABLE go HINTS /usr/local/go/bin)
+  if(BITRIOT_GO_EXECUTABLE AND EXISTS ${PROJECT_SOURCE_DIR}/ext/vnet/relay/go.mod)
+    set(BITRIOT_RELAY_BINARY ${CMAKE_BINARY_DIR}/vnet-relay)
+    add_custom_target(bitriot_relay
+      COMMAND ${CMAKE_COMMAND} -E env CGO_ENABLED=0 ${BITRIOT_GO_EXECUTABLE} build -o ${BITRIOT_RELAY_BINARY} ./cmd/vnet-relay
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/ext/vnet/relay
+      COMMENT "Building the vnet relay (Go)")
+    add_dependencies(bitriot_netplay_process_tests bitriot_relay)
+    target_compile_definitions(bitriot_netplay_process_tests PRIVATE BITRIOT_RELAY_BINARY="${BITRIOT_RELAY_BINARY}")
+  else()
+    message(STATUS "Go not found: the relay process tests are not built (install Go 1.24 to build them)")
+  endif()
   add_test(
     NAME bitriot_netplay_process_tests
     COMMAND bitriot_netplay_process_tests

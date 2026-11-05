@@ -631,6 +631,22 @@ void InputHandler::detachController(int controllerId)
 }
 
 
+int InputHandler::handBackAllSlots()
+{
+  int n = 0;
+  for (int slot = 0; slot < std::GameSettings::MAX_PLAYERS; slot++)
+  {
+    if (m_localSlots & (1u << slot))
+    {
+      m_localSlots &= ~(1u << slot);
+      m_pendingControl.push_back(ControlEvent(slot, ControlEvent::RETURN_TO_AI));
+      m_sampler.clearSlot(slot);
+      n++;
+    }
+  }
+  return n;
+}
+
 void InputHandler::setControllerButtonState(int slot, ButtonName button, bool down)
 {
   m_sampler.setButton(slot, static_cast<PlayerInput::Button>(button), down);

@@ -14,6 +14,7 @@
 #include <stdexcept>
 
 #include "HeadlessCli.h"
+#include "LobbyModel.h"
 #include "LockstepSession.h"
 #include "MatchRecord.h"
 #include "NetMatch.h"
@@ -43,6 +44,11 @@ struct Options
   std::string joinAddr;
   uint16_t port = 0;
   std::string portFile;
+  // Brief 12: through a vnet relay (UDP "host:port") instead of direct UDP. The host creates a room and prints
+  // "room CODE" on stderr (and writes CODE to --room-file); a joiner gives --room CODE instead of HOST:PORT.
+  std::string relay;
+  std::string room;
+  std::string roomFile;
   int peers = 1;
   int rounds = 1;
   uint64_t seed = 1;
@@ -84,12 +90,8 @@ Options parseOptions(const std::vector<std::string>& args)
   }
   o.host = command == "host";
   size_t i = 1;
-  if (!o.host)
+  if (!o.host && args.size() >= 2 && !args[1].empty() && args[1][0] != '-')
   {
-    if (args.size() < 2 || args[1].empty() || args[1][0] == '-')
-    {
-      throw UsageError("join needs HOST:PORT");
-    }
     o.joinAddr = args[1];
     i = 2;
   }
@@ -118,6 +120,9 @@ Options parseOptions(const std::vector<std::string>& args)
     }
     if (name == "port") o.port = (uint16_t) number(value, "--port", 65535);
     else if (name == "port-file") o.portFile = value;
+    else if (name == "relay") o.relay = value;
+    else if (name == "room") o.room = value;
+    else if (name == "room-file") o.roomFile = value;
     else if (name == "peers") o.peers = (int) number(value, "--peers", 5);
     else if (name == "rounds") o.rounds = (int) number(value, "--rounds", 1000);
     else if (name == "seed") o.seed = number(value, "--seed", ~0ull);
@@ -148,6 +153,10 @@ Options parseOptions(const std::vector<std::string>& args)
     }
     else throw UsageError("unknown option --" + name);
   }
+  if (!o.host && o.relay.empty() && o.joinAddr.empty()) throw UsageError("join needs HOST:PORT (or --relay HOST:PORT --room CODE)");
+  if (!o.host && !o.relay.empty() && o.room.empty()) throw UsageError("join through a relay needs --room CODE");
+  if (!o.relay.empty() && o.port != 0) throw UsageError("--port means nothing through a relay");
+  if (o.relay.empty() && (!o.room.empty() || !o.roomFile.empty())) throw UsageError("--room and --room-file are for a relay (--relay HOST:PORT)");
   if (o.localPlayers < 1 || o.localPlayers > 6) throw UsageError("--local-players must be 1 to 6");
   if (o.rounds < 1) throw UsageError("--rounds must be at least 1");
   if (o.tickMs < 1) throw UsageError("--tick-ms must be at least 1");
@@ -233,6 +242,13 @@ bool Runner::setup()
   vnet_config_init(&cfg);
   cfg.backend = VNET_BACKEND_UDP;
   cfg.family = VNET_FAMILY_IPV4;   // 127.0.0.1 and the lab networks of the tests; the game itself can use ANY
+  if (!m_o.relay.empty())
+  {
+    cfg.backend = VNET_BACKEND_RELAY_AUTO;   // natively the same as RELAY_UDP, to relay_udp
+    cfg.relay_udp = m_o.relay.c_str();
+    cfg.room = m_o.host ? nullptr : m_o.room.c_str();
+    cfg.keepalive_ms = 2000;
+  }
   int err = 0;
   m_v = vnet_create(&cfg, &err);
   if (m_v == nullptr)
@@ -247,12 +263,17 @@ bool Runner::setup()
   so.tickMs = m_o.tickMs;
   so.fixedDelay = m_o.delay;
   so.requireReady = m_o.requireReady && m_o.host;
+  so.tolerateSparsePump = true;
+  if (!m_o.relay.empty())
+  {
+    so.maxDelay = 12;
+  }
   so.spectate = m_o.spectate && !m_o.host;
   so.reconnectToken = m_o.token;
   std::string error;
   if (m_o.host)
   {
-    m_session = netplay::LockstepSession::host(m_v, m_o.port, so, &error);
+    m_session = netplay::LockstepSession::host(m_v, m_o.relay.empty() ? m_o.port : (uint16_t) netplay::RELAY_SESSION_PORT, so, &error);
     if (!m_session)
     {
       throw UsageError(error);
@@ -284,15 +305,58 @@ bool Runner::setup()
         throw UsageError("cannot write " + m_o.portFile);
       }
     }
-    m_err << "hosting on UDP port " << m_session->localPort() << "\n";
+    if (m_o.relay.empty())
+    {
+      m_err << "hosting on UDP port " << m_session->localPort() << "\n";
+    }
+    else
+    {
+      // The room is made asynchronously: wait for its code (the relay's answer takes a round trip).
+      vnet_status_info st;
+      const uint64_t t0 = vnet_time(m_v);
+      int state = VNET_STATUS_CONNECTING;
+      while (state == VNET_STATUS_CONNECTING && vnet_time(m_v) - t0 < 20000)
+      {
+        vnet_poll(m_v);
+        state = vnet_status(m_v, &st);
+        if (state == VNET_STATUS_CONNECTING) usleep(2000);
+      }
+      if (state != VNET_STATUS_READY)
+      {
+        throw UsageError(std::string("cannot open a room on the relay ") + m_o.relay + ": "
+                         + vnet_strerror(state == VNET_STATUS_FAILED ? st.error : VNET_ETIMEDOUT));
+      }
+      m_err << "room " << st.room << " (" << st.transport << ")\n";
+      m_err.flush();
+      if (!m_o.roomFile.empty())
+      {
+        const std::string tmp = m_o.roomFile + ".tmp";
+        {
+          std::ofstream f(tmp.c_str());
+          f << st.room << "\n";
+        }
+        if (std::rename(tmp.c_str(), m_o.roomFile.c_str()) != 0)
+        {
+          throw UsageError("cannot write " + m_o.roomFile);
+        }
+      }
+    }
   }
   else
   {
     vnet_addr addr;
-    const int rc = vnet_resolve_host(m_o.joinAddr.c_str(), VNET_FAMILY_IPV4, &addr);
+    int rc = 0;
+    if (m_o.relay.empty())
+    {
+      rc = vnet_resolve_host(m_o.joinAddr.c_str(), VNET_FAMILY_IPV4, &addr);
+    }
+    else
+    {
+      rc = vnet_resolve(m_v, ("room-host:" + std::to_string(netplay::RELAY_SESSION_PORT)).c_str(), &addr);
+    }
     if (rc != 0)
     {
-      throw UsageError("cannot resolve " + m_o.joinAddr + ": " + vnet_strerror(rc));
+      throw UsageError("cannot resolve " + (m_o.relay.empty() ? m_o.joinAddr : std::string("the room's host")) + ": " + vnet_strerror(rc));
     }
     m_session = netplay::LockstepSession::join(m_v, addr, so, &error);
     if (!m_session)

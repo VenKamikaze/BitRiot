@@ -233,12 +233,13 @@ target_compile_options(bitriot_headless PRIVATE -Wall -Wno-comment
 # NetMatch (a session driving a Simulation). It links bitriot_sim and vnet, the
 # virtual-UDP library, and no SDL; the game and bitriot_headless both use it.
 #
-# vnet is the git submodule ext/vnet, pinned to the v0.4.0 tag (like ext/RmlUi: a
+# vnet is the git submodule ext/vnet, pinned to a vnet commit (like ext/RmlUi: a
 # submodule keeps the pin in git and needs no network at configure time, which a
-# FetchContent would). Netplay is native-only for now: the browser build (brief 12) is
-# a different transport, and the MinGW build has not been checked against vnet. The
-# default is therefore ON for native Linux/macOS builds that have the submodule, and
-# OFF otherwise; asking for ON without the submodule is an error that says how to get it.
+# FetchContent would). Netplay is built for native Linux/macOS and, since brief 12, for the
+# browser (Emscripten: vnet's WebSocket and WebTransport relay backends); the MinGW build
+# has not been checked against vnet. The default is therefore ON for those builds when the
+# submodule is present, and OFF otherwise; asking for ON without the submodule is an error
+# that says how to get it.
 # BITRIOT_NETPLAY is AUTO (the default), ON or OFF. AUTO means ON where it can be (native, with the
 # submodule) and OFF otherwise, and it is re-evaluated on every configure: fetching ext/vnet later
 # and re-running cmake turns it on (a plain ON/OFF default would be cached by the first configure).
@@ -255,7 +256,8 @@ if(NOT _bitriot_netplay_value MATCHES "^(AUTO|ON|OFF)$")
 endif()
 set(BITRIOT_NETPLAY ${_bitriot_netplay_value})
 if(BITRIOT_NETPLAY STREQUAL "AUTO")
-  if(EMSCRIPTEN OR MINGW)
+  if(MINGW OR (EMSCRIPTEN AND NOT BITRIOT_BUILD_GAME))
+    # (An Emscripten build of only the simulation, such as the determinism gate's, has no use for it.)
     set(BITRIOT_NETPLAY OFF)
   elseif(NOT EXISTS ${PROJECT_SOURCE_DIR}/ext/vnet/CMakeLists.txt)
     message(WARNING "Network play is NOT built: the vnet submodule is missing. Run `git submodule update --init ext/vnet` and configure again (or pass -DBITRIOT_NETPLAY=OFF to silence this).")
@@ -265,8 +267,8 @@ if(BITRIOT_NETPLAY STREQUAL "AUTO")
   endif()
 endif()
 if(BITRIOT_NETPLAY)
-  if(EMSCRIPTEN OR MINGW)
-    message(FATAL_ERROR "BITRIOT_NETPLAY is native-only for now (browser netplay is brief 12; MinGW is unchecked): configure with -DBITRIOT_NETPLAY=OFF")
+  if(MINGW)
+    message(FATAL_ERROR "BITRIOT_NETPLAY is not available for MinGW yet (vnet is unchecked there): configure with -DBITRIOT_NETPLAY=OFF")
   endif()
   if(NOT EXISTS ${PROJECT_SOURCE_DIR}/ext/vnet/CMakeLists.txt)
     message(FATAL_ERROR "BITRIOT_NETPLAY needs the vnet submodule: run `git submodule update --init ext/vnet` (or configure with -DBITRIOT_NETPLAY=OFF)")
@@ -286,12 +288,22 @@ if(BITRIOT_NETPLAY)
   target_link_libraries(bitriot_net PUBLIC bitriot_sim vnet::vnet)
   target_include_directories(bitriot_net PUBLIC ${PROJECT_SOURCE_DIR}/src/net)
   target_compile_definitions(bitriot_net PUBLIC BITRIOT_NETPLAY=1)
+  # The relay a native game's relay forms offer before the player types one (brief 12). Empty: 127.0.0.1:7777, a relay on this
+  # machine. A web page derives its default from where it was loaded (or window.BITRIOT_RELAY), so this does not apply there.
+  set(BITRIOT_DEFAULT_RELAY "" CACHE STRING "Default relay address for native relay games, e.g. relay.example.org (empty: 127.0.0.1:7777)")
+  if(NOT BITRIOT_DEFAULT_RELAY STREQUAL "")
+    target_compile_definitions(bitriot_net PRIVATE BITRIOT_DEFAULT_RELAY="${BITRIOT_DEFAULT_RELAY}")
+  endif()
   target_compile_options(bitriot_net PRIVATE -Wall -Wno-comment
     $<$<CONFIG:Debug>:-ggdb -O0> $<$<CONFIG:Release>:-O2>)
   # The headless host/join commands (src/headless/HeadlessNet.cpp) are part of the CLI
   # library only when netplay is built.
-  target_sources(bitriot_headless_cli PRIVATE ./src/headless/HeadlessNet.cpp)
+  # (Not in a browser build: the headless runner there is only the replay tool.)
   target_link_libraries(bitriot_headless_cli PUBLIC bitriot_net)
+  if(NOT EMSCRIPTEN)
+    target_sources(bitriot_headless_cli PRIVATE ./src/headless/HeadlessNet.cpp)
+    target_compile_definitions(bitriot_headless_cli PUBLIC BITRIOT_HEADLESS_NET=1)
+  endif()
 endif()
 
 if(MINGW)

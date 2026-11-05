@@ -17,6 +17,12 @@
   padding-bottom: 4px;
 }
 
+/* A relay game's room code, shown big so it can be read out to a friend. */
+#nettitle.roomcode {
+  font-size: 26pt;
+  color: #ffee44;
+}
+
 #lobbyview {
   background-color: rgba(0,0,0,170);
   width: 94%;

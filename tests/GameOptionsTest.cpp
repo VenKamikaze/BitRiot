@@ -181,3 +181,47 @@ TEST(GameOptionsTest, NetworkOptionsAreRefusedWhenTheyMakeNoSense)
   EXPECT_FALSE(parse({ "--host", "--players", "4", "--name", "H" }).options.error);
   EXPECT_EQ(parse({ "--host", "--players", "4" }).options.players, 4);
 }
+
+#ifdef BITRIOT_NETPLAY
+// Brief 12: through a relay.
+TEST(GameOptionsTest, HostViaARelayAndJoinByRoomCode)
+{
+  const Parsed host = parse({ "--host", "--relay", "relay.example.org", "--name", "Alice", "--players", "4" });
+  EXPECT_FALSE(host.options.error) << host.err;
+  EXPECT_TRUE(host.options.host);
+  EXPECT_TRUE(host.options.viaRelay());
+  EXPECT_EQ(host.options.relay, "relay.example.org");
+  EXPECT_TRUE(host.options.networked());
+
+  const Parsed join = parse({ "--relay=wss://relay.example.org/vnet", "--room", "k7pq3x" });
+  EXPECT_FALSE(join.options.error) << join.err;
+  EXPECT_FALSE(join.options.host);
+  EXPECT_EQ(join.options.room, "k7pq3x");
+  EXPECT_TRUE(join.options.networked()) << "a room is a join";
+  EXPECT_TRUE(join.options.viaRelay());
+
+  const Parsed direct = parse({ "--join", "10.0.0.2:7777" });
+  EXPECT_FALSE(direct.options.viaRelay()) << "direct UDP is as before";
+}
+
+TEST(GameOptionsTest, AViewerMayJoinARoomOnARelay)
+{
+  const Parsed p = parse({ "--relay", "r.example.org", "--room", "K7PQ3X", "--spectate" });
+  EXPECT_FALSE(p.options.error) << p.err;
+  EXPECT_TRUE(p.options.spectate);
+  EXPECT_TRUE(parse({ "--spectate" }).options.error) << "still needs something to watch";
+  EXPECT_TRUE(parse({ "--host", "--relay", "r", "--spectate" }).options.error) << "a host does not watch";
+}
+
+TEST(GameOptionsTest, TheRelayOptionsRefuseTheCombinationsThatMeanNothing)
+{
+  EXPECT_TRUE(parse({ "--relay", "r.example.org" }).options.error) << "a relay with nothing to do on it";
+  EXPECT_TRUE(parse({ "--room", "K7PQ3X" }).options.error) << "a room needs a relay";
+  EXPECT_TRUE(parse({ "--host", "--relay", "r", "--room", "K7PQ3X" }).options.error) << "host OR join";
+  EXPECT_TRUE(parse({ "--join", "10.0.0.2:7777", "--relay", "r" }).options.error) << "--join is direct UDP";
+  EXPECT_TRUE(parse({ "--relay", "" }).options.error);
+  EXPECT_TRUE(parse({ "--relay", "r", "--room", "" }).options.error);
+  const Parsed p = parse({ "--relay", "r.example.org", "--room", "K7PQ3X", "--name", "Bob" });
+  EXPECT_FALSE(p.options.error) << p.err;
+}
+#endif

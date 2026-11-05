@@ -16,6 +16,12 @@
  *       --name <name>    the name the others see
  *       --local-players N  players on this machine (keyboard sets 1..N; default 1)
  *       --players N      host: player slots in all (the rest are computer players)
+ *
+ * Through a vnet relay (brief 12): `--host --relay ADDR` opens a room (its code is printed and shown in
+ * the lobby), `--relay ADDR --room CODE` joins one. ADDR is host[:port] (the relay's UDP port, 7777 by
+ * default) or a ws:// / wss:// URL.
+ *       --relay ADDR     the relay to use
+ *       --room CODE      join this room (with --relay)
  *       --spectate       join: watch only, never take a player over (a round already running is joined and watched)
  */
 
@@ -39,7 +45,10 @@ struct GameOptions
   std::string name;
   int localPlayers = 1;
   int players = 0;         // 0: as many as there are humans (at least 2)
-  bool networked() const { return host || !join.empty(); }
+  std::string relay;       // brief 12: "" = direct UDP
+  std::string room;        // a joiner's room code
+  bool networked() const { return host || !join.empty() || !room.empty(); }
+  bool viaRelay() const { return !relay.empty(); }
   bool error = false;      // a bad option or a missing argument (already reported on `err`)
 };
 

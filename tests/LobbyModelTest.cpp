@@ -649,3 +649,197 @@ TEST(LobbyModelOverlay, TheStallTextWaitsForHalfASecondOfStalling)
   EXPECT_EQ(w.update("x", 0xFFFFFF00u + 100), "");
   EXPECT_EQ(w.update("x", 0xFFFFFF00u + 500), "x");
 }
+
+// -- brief 12: relays and room codes -----------------------------------------------------------------
+
+TEST(RelayAddress, AHostOrHostAndPortIsAUdpAddressWithTheWebSocketUrlDerivedFromIt)
+{
+  RelayTarget t;
+  std::string error;
+  ASSERT_TRUE(parseRelayAddress("relay.example.org", false, &t, &error)) << error;
+  EXPECT_EQ(t.udp, "relay.example.org:7777") << "the relay's default UDP port";
+  EXPECT_EQ(t.ws, "ws://relay.example.org:8080/vnet") << "the relay's default HTTP port, for a page served over http";
+  EXPECT_EQ(t.host, "relay.example.org");
+  ASSERT_TRUE(parseRelayAddress("  relay.example.org  ", true, &t, &error));
+  EXPECT_EQ(t.ws, "wss://relay.example.org/vnet") << "a page served over https can only use wss, on 443";
+  ASSERT_TRUE(parseRelayAddress("127.0.0.1:9000", false, &t, &error));
+  EXPECT_EQ(t.udp, "127.0.0.1:9000");
+  EXPECT_EQ(t.ws, "ws://127.0.0.1:8080/vnet");
+  ASSERT_TRUE(parseRelayAddress("[::1]:7001", false, &t, &error));
+  EXPECT_EQ(t.udp, "[::1]:7001");
+  EXPECT_EQ(t.ws, "ws://[::1]:8080/vnet");
+  std::string normalised;
+  ASSERT_TRUE(parseRelayAddress("  localhost  ", false, &t, &error, &normalised));
+  EXPECT_EQ(normalised, "localhost");
+}
+
+TEST(RelayAddress, AWebSocketUrlIsKeptAndTheUdpAddressIsTheHostOnTheDefaultPort)
+{
+  RelayTarget t;
+  std::string error;
+  ASSERT_TRUE(parseRelayAddress("wss://relay.example.org/vnet", false, &t, &error)) << error;
+  EXPECT_EQ(t.ws, "wss://relay.example.org/vnet");
+  EXPECT_EQ(t.udp, "relay.example.org:7777");
+  ASSERT_TRUE(parseRelayAddress("ws://127.0.0.1:8080/vnet", true, &t, &error));
+  EXPECT_EQ(t.ws, "ws://127.0.0.1:8080/vnet") << "typed URLs are not rewritten";
+  EXPECT_EQ(t.udp, "127.0.0.1:7777") << "the URL's port is the HTTP port, not the UDP one";
+  ASSERT_TRUE(parseRelayAddress("wss://relay.example.org", false, &t, &error));
+  EXPECT_EQ(t.ws, "wss://relay.example.org/vnet") << "a missing path is /vnet";
+  ASSERT_TRUE(parseRelayAddress("wss://relay.example.org:8443/", false, &t, &error));
+  EXPECT_EQ(t.ws, "wss://relay.example.org:8443/vnet");
+  ASSERT_TRUE(parseRelayAddress("ws://[::1]:8080/vnet", false, &t, &error));
+  EXPECT_EQ(t.udp, "[::1]:7777");
+}
+
+TEST(RelayAddress, JunkIsRefusedWithASentence)
+{
+  RelayTarget t;
+  for (const char* bad : {"", "   ", "a b", "http://relay.example.org/vnet", "ftp://x", "wss://", "wss:///vnet", "relay.example.org:99999",
+                          "relay.example.org:", "a:b:c", "wss://rel ay/vnet", "wss://relay.example.org/v net"})
+  {
+    std::string error;
+    EXPECT_FALSE(parseRelayAddress(bad, false, &t, &error)) << "'" << bad << "'";
+    EXPECT_FALSE(error.empty()) << "'" << bad << "'";
+  }
+  std::string error;
+  EXPECT_FALSE(parseRelayAddress(std::string(300, 'a'), false, &t, &error));
+}
+
+TEST(RoomCode, SixSymbolsOfTheRelaysAlphabetInAnyCaseWithSeparatorsTolerated)
+{
+  std::string code, error;
+  ASSERT_TRUE(parseRoomCode("k7pq3x", &code, &error)) << error;
+  EXPECT_EQ(code, "K7PQ3X");
+  ASSERT_TRUE(parseRoomCode("  K7P-Q3X \n", &code, &error));
+  EXPECT_EQ(code, "K7PQ3X");
+  ASSERT_TRUE(parseRoomCode("abc 234", &code, &error));
+  EXPECT_EQ(code, "ABC234");
+  for (const char* bad : {"", "   ", "K7PQ3", "K7PQ3XX", "K7PQ30", "K7PQ31", "K7PQ3O", "K7PQ3I", "K7PQ3!", "K7PQ3\xc3\xa9"})
+  {
+    EXPECT_FALSE(parseRoomCode(bad, &code, &error)) << "'" << bad << "'";
+    EXPECT_FALSE(error.empty());
+  }
+  // Every symbol of the alphabet is accepted (the relay's: A-Z without I and O, and 2-9).
+  ASSERT_TRUE(parseRoomCode("ABCDEF", &code, nullptr));
+  ASSERT_TRUE(parseRoomCode("GHJKLM", &code, nullptr));
+  ASSERT_TRUE(parseRoomCode("NPQRST", &code, nullptr));
+  ASSERT_TRUE(parseRoomCode("UVWXYZ", &code, nullptr));
+  ASSERT_TRUE(parseRoomCode("234567", &code, nullptr));
+  ASSERT_TRUE(parseRoomCode("89AAAA", &code, nullptr));
+}
+
+TEST(RelayAddress, TheBuildsDefaultIsALocalRelay)
+{
+  RelayTarget t;
+  ASSERT_TRUE(parseRelayAddress(defaultRelayAddress(), false, &t, nullptr)) << "whatever the build default is, it has to parse";
+  EXPECT_FALSE(t.udp.empty());
+}
+
+TEST(RelayPrefs, TheRelayAndTheLastRoomAreSavedAndBadOnesAreIgnored)
+{
+  NetPrefs p;
+  p.name = "Zed";
+  p.relay = "wss://relay.example.org/vnet";
+  p.room = "K7PQ3X";
+  NetPrefs back;
+  ASSERT_TRUE(parseNetPrefs(formatNetPrefs(p), back));
+  EXPECT_EQ(back, p);
+  NetPrefs bad;
+  ASSERT_TRUE(parseNetPrefs("relay=not a relay at all\nroom=O0O0O0\n", bad));
+  EXPECT_EQ(bad.relay, "");
+  EXPECT_EQ(bad.room, "");
+  NetPrefs lower;
+  ASSERT_TRUE(parseNetPrefs("room=k7pq3x\nrelay=relay.example.org:7000\n", lower));
+  EXPECT_EQ(lower.room, "K7PQ3X");
+  EXPECT_EQ(lower.relay, "relay.example.org:7000");
+  // An empty value clears an old one.
+  ASSERT_TRUE(parseNetPrefs("relay=\nroom=\n", lower));
+  EXPECT_EQ(lower.relay, "");
+  EXPECT_EQ(lower.room, "");
+  EXPECT_FALSE(p == NetPrefs()) << "the new fields take part in equality";
+  NetPrefs q = p;
+  q.room = "AAAAAA";
+  EXPECT_FALSE(p == q);
+  q = p;
+  q.relay = "other";
+  EXPECT_FALSE(p == q);
+}
+
+TEST(RelayFailure, EveryRelayErrorHasItsOwnHeadlineAndSaysWhatToDo)
+{
+  const struct { int err; const char* title; } cases[] = {
+      {VNET_ENOROOM, "No such room"},           {VNET_EROOMFULL, "The room is full"},
+      {VNET_ELIMIT, "The relay said no"},       {VNET_ETIMEDOUT, "Cannot reach the relay"},
+      {VNET_ECONNREFUSED, "Cannot reach the relay"}, {VNET_ECLOSED, "The relay ended your session"},
+  };
+  for (const auto& c : cases)
+  {
+    const EndMessage m = describeRelayFailure(c.err, "relay.example.org", "K7PQ3X", false);
+    EXPECT_EQ(m.title, c.title) << vnet_strerror(c.err);
+    EXPECT_FALSE(m.lines.empty());
+  }
+  const EndMessage noRoom = describeRelayFailure(VNET_ENOROOM, "relay.example.org", "K7PQ3X", false);
+  EXPECT_NE(noRoom.lines[0].find("K7PQ3X"), std::string::npos) << "names the code that was tried";
+  EXPECT_NE(noRoom.lines[1].find("relay.example.org"), std::string::npos) << "and the relay it was tried on";
+  EXPECT_EQ(describeRelayFailure(VNET_ECLOSED, "r", "", true).title, "The relay ended your room");
+  EXPECT_EQ(describeRelayFailure(VNET_EPROTO, "r", "", false).title, "The relay does not fit this game");
+  EXPECT_EQ(describeRelayFailure(-999, "", "", false).title, "Relay error");
+  EXPECT_NE(describeRelayFailure(-999, "", "", false).lines[0].find("the relay"), std::string::npos) << "no relay typed: a plain noun";
+  // A hostile relay string cannot become markup or invalid UTF-8 in the page.
+  const EndMessage evil = describeRelayFailure(VNET_ETIMEDOUT, "a\xff<b>", "", false);
+  for (const std::string& l : evil.lines) EXPECT_TRUE(validUtf8(l));
+}
+
+TEST(RelayLobby, TheRoomCodeBecomesTheTitleAndTheHostIsToldToShareIt)
+{
+  LobbyView v;
+  v.slots = {{0, 0}, {NO_PEER, 1}};
+  LobbyEntry host;
+  host.id = 0;
+  host.name = "Alice";
+  host.slotMask = 1;
+  host.ready = true;
+  v.peers = {host};
+  LobbyContext ctx;
+  ctx.isHost = true;
+  ctx.canStart = true;
+  ctx.viaRelay = true;
+  LobbyScreen s = buildLobbyScreen(v, ctx);
+  EXPECT_EQ(s.title, "Opening a room...") << "before the relay has said the code";
+  EXPECT_EQ(s.roomCode, "");
+  EXPECT_NE(s.status.find("Opening the room"), std::string::npos);
+  ctx.roomCode = "K7PQ3X";
+  s = buildLobbyScreen(v, ctx);
+  EXPECT_EQ(s.title, "Room K7PQ3X");
+  EXPECT_EQ(s.roomCode, "K7PQ3X");
+  EXPECT_NE(s.status.find("room code"), std::string::npos) << s.status;
+  ctx.isHost = false;
+  ctx.canStart = false;
+  s = buildLobbyScreen(v, ctx);
+  EXPECT_EQ(s.title, "Room K7PQ3X") << "a joiner sees the code too (to read it out to the next friend)";
+  ctx.viaRelay = false;
+  ctx.roomCode.clear();
+  s = buildLobbyScreen(v, ctx);
+  EXPECT_EQ(s.title, "Network game") << "a direct game is as it was";
+  EXPECT_EQ(s.roomCode, "");
+}
+
+TEST(RelayLobby, APeerIsToldWhenTheHostHasGoneQuiet)
+{
+  LobbyView v;
+  v.slots = {{0, 0}, {1, 1}};
+  LobbyEntry host, me;
+  host.id = 0; host.name = "Alice"; host.slotMask = 1; host.ready = true;
+  me.id = 1; me.name = "Bob"; me.slotMask = 2;
+  v.peers = {host, me};
+  LobbyContext ctx;
+  ctx.myId = 1;
+  ctx.inLobby = true;
+  ctx.hostSilenceMs = 1999;
+  EXPECT_EQ(buildLobbyScreen(v, ctx).status.find("away"), std::string::npos) << "a short quiet is just network";
+  ctx.hostSilenceMs = 5300;
+  const LobbyScreen s = buildLobbyScreen(v, ctx);
+  EXPECT_NE(s.status.find("The host is away"), std::string::npos) << s.status;
+  EXPECT_NE(s.status.find("5 s"), std::string::npos) << s.status;
+  EXPECT_TRUE(s.canToggleReady) << "ready can still be pressed";
+}

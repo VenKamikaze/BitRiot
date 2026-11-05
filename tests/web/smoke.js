@@ -28,7 +28,10 @@ const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
 
-const buildDir = path.resolve(process.argv[2] || 'build-wasm');
+// --menu-lines N: the main menu's lines (4 with netplay: Play, Online game, Game Options, Exit; 3 in a -DBITRIOT_NETPLAY=OFF build).
+const menuLinesIdx = process.argv.indexOf('--menu-lines');
+const menuLines = menuLinesIdx >= 0 ? parseInt(process.argv[menuLinesIdx + 1], 10) : 4;
+const buildDir = path.resolve(process.argv.slice(2).find((a, i, all) => !a.startsWith('--') && all[i - 1] !== '--menu-lines') || 'build-wasm');
 const shotDir = path.resolve(process.env.BITRIOT_SMOKE_SHOTS || path.join(buildDir, 'smoke'));
 fs.mkdirSync(shotDir, { recursive: true });
 
@@ -48,7 +51,8 @@ function serve(dir) {
     fs.createReadStream(file).pipe(res);
   });
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({
-    url: 'http://127.0.0.1:' + server.address().port + '/index.html',
+    // ?test=1: the page is a test page, so the game's test hooks answer (a public page does not offer them; brief 12).
+    url: 'http://127.0.0.1:' + server.address().port + '/index.html?test=1',
     close: () => server.close(),
   })));
 }
@@ -263,7 +267,7 @@ async function scenarioMenuAndRound(server) {
 async function scenarioAutostart(server) {
   console.log('2. ?autostart=ai6 (six players need a taller map than the default)');
   const browser = await chromium.launch({ args: GL_ARGS });
-  const page = await openPage(browser, 'autostart', server.url + '?autostart=ai6');
+  const page = await openPage(browser, 'autostart', server.url + '&autostart=ai6');
   await waitReady(page);
   await clickStart(page);
   const advanced = await waitTicks(page, 60, 30000);
@@ -278,7 +282,7 @@ async function scenarioAutostart(server) {
 async function scenarioSoftwareRenderer(server) {
   console.log('3. no WebGL: the software renderer');
   const browser = await chromium.launch({ args: NO_GL_ARGS });
-  const page = await openPage(browser, 'software-renderer', server.url + '?autostart=ai2');
+  const page = await openPage(browser, 'software-renderer', server.url + '&autostart=ai2');
   const gl = await page.evaluate(() => !!document.createElement('canvas').getContext('webgl'));
   check(!gl, 'this browser really has no WebGL');
   await waitReady(page);
@@ -297,7 +301,7 @@ async function scenarioQuit(server) {
   await clickStart(page);
   await page.waitForTimeout(500);
   const box = await page.locator('#canvas').boundingBox();
-  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.61); // Exit
+  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * (0.36 + (menuLines - 1) * 0.123)); // Exit, the last line
   await page.waitForFunction(() => window.bitriotQuit === true, null, { timeout: 15000 })
     .then(() => check(true, 'Exit quits and tells the page'), () => check(false, 'Exit quits and tells the page'));
   const frames = await call(page, 'bitriot_frames');

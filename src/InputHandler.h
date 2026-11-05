@@ -102,6 +102,9 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
     // slot goes back to the AI (a RETURN_TO_AI event in the next sample); a player that
     // also has a keymap stays human on the keys.
     void detachController(int controllerId);
+    // Test hook (brief 12): every slot this machine plays goes back to the AI (a RETURN_TO_AI event each in the next sample), keyboard
+    // players included, so a scripted match can be left to the bots and ends. Returns how many slots were handed back.
+    int handBackAllSlots();
     // The controller id driving a slot (SLOT = playerNumber - 1), or -1.
     int controllerForSlot(int slot) const;
     // Whether this machine reads a slot's input, as of now (events included).

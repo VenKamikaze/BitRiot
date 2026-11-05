@@ -31,7 +31,7 @@ Each brief (`NN-*.md`) is one unit of work, sized for a single implement → rev
 | 09 | [WASM port (local play)](09-wasm-port.md) | BitRiot | 03b | done (play-test pending) |
 | 10 | [vnet relay and WebSocket transport](https://github.com/VenKamikaze/vnet/blob/claude/doco/10-vnet-relay-websocket.md) | vnet | 06 | tracked in vnet (done) |
 | 11 | [vnet WebTransport datagrams](https://github.com/VenKamikaze/vnet/blob/claude/doco/11-vnet-webtransport.md) | vnet | 10 | tracked in vnet (done) |
-| 12 | [Browser netplay](12-browser-netplay.md) | BitRiot (+vnet) | 07, 08, 09, 10, 14 | todo |
+| 12 | [Browser netplay](12-browser-netplay.md) | BitRiot (+vnet) | 07, 08, 09, 10, 14 | done (play-test pending) |
 | 13 | [Disconnects and hot-join](13-disconnect-and-hot-join.md) | BitRiot | 05, 07, 08 (12 for browser) | done (play-test pending) |
 | 14 | [vnet API polish and browser lifecycle](https://github.com/VenKamikaze/vnet/blob/claude/doco/14-vnet-api-polish.md) | vnet | 11 | tracked in vnet (done) |
 
@@ -42,7 +42,7 @@ Each brief (`NN-*.md`) is one unit of work, sized for a single implement → rev
 - **Determinism:** 01 → 02 → 02b → 03a → 03b (done) → 04a (done) → 04b (done) → 05 (done) → 05b (done).
 - **vnet:** 06, 10 and 11 are all done (vnet `claude` 26f4b0f, version 0.3.0). Brief 14 (from vnet's design review) is done too: vnet `claude` eb1feeb, version 0.4.0, tag `v0.4.0`. 07 and 12 should pin `v0.4.0` and read vnet's `doco/integration.md`.
 - **Netplay:** 07 and 08 are done, play-tests pending (each Outcome has the steps): `src/net/` (protocol, `LockstepSession`, `NetMatch`, `LobbyModel`), the game's `--host`/`--join` and its host, join and lobby menus, `bitriot_headless host|join`, [`protocol.md`](protocol.md) (version 3 since 13: late joiners, reconnect, spectators). 12 builds on them; 13 reuses their records.
-- **WASM:** 09 is done, play-test pending (Outcome has the steps); 12 builds on it.
+- **WASM:** 09 is done, play-test pending (Outcome has the steps); 12 (done, play-test pending) built browser netplay on it.
 
 **Resuming?** [`PROMPT.md`](PROMPT.md) §0 has the hand-off state: what's done, what's ready, and what's waiting on the user.
 

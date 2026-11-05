@@ -72,6 +72,8 @@ void NetLobbyBinder::applyLobby(Rml::ElementDocument* doc, const netplay::LobbyS
   setDisplay(doc, "endview", "none");
   setText(doc, "nettitle", sc.title);
   setText(doc, "netstatus", sc.status);
+  setClass(doc, "nettitle", "roomcode", !sc.roomCode.empty());
+  setDisplay(doc, "netcopy", sc.roomCode.empty() ? "none" : "inline-block");
 
   // The settings: the host edits them with buttons, a peer reads them.
   setText(doc, "settingstext", sc.isHost ? std::string() : sc.settings);
@@ -142,6 +144,8 @@ void NetLobbyBinder::applyConnecting(Rml::ElementDocument* doc, const std::strin
     }
   }
   setDisplay(doc, "netstart", "none");
+  setDisplay(doc, "netcopy", "none");
+  setClass(doc, "nettitle", "roomcode", false);
   setText(doc, "netleave", "Cancel");
 }
 
@@ -167,5 +171,7 @@ void NetLobbyBinder::applyEnd(Rml::ElementDocument* doc, const netplay::EndMessa
     }
   }
   setDisplay(doc, "netstart", "none");
+  setDisplay(doc, "netcopy", "none");
+  setClass(doc, "nettitle", "roomcode", false);
   setText(doc, "netleave", buttonLabel);
 }

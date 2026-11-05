@@ -120,18 +120,27 @@ function(bitriot_configure_web_target target)
   file(GLOB_RECURSE preloaded CONFIGURE_DEPENDS
     ${PROJECT_SOURCE_DIR}/data/* ${PROJECT_SOURCE_DIR}/assets/*)
   target_sources(${target} PRIVATE ${PROJECT_SOURCE_DIR}/src/web/WebHooks.cpp)
+  # Brief 12: the golden match record, for the page hook that replays it through the game (tests/web/netplay.js). 39 KB; turn it
+  # off (-DBITRIOT_WEB_TEST_FILES=OFF) for a build that is going to be deployed.
+  option(BITRIOT_WEB_TEST_FILES "Preload tests/data/golden-round.brmr into the web build, for the golden-replay test hook" ON)
+  set(golden_preload "")
+  if(BITRIOT_WEB_TEST_FILES AND EXISTS ${PROJECT_SOURCE_DIR}/tests/data/golden-round.brmr)
+    set(golden_preload "SHELL:--preload-file ${PROJECT_SOURCE_DIR}/tests/data/golden-round.brmr@/tests/data/golden-round.brmr")
+    set_property(TARGET ${target} APPEND PROPERTY LINK_DEPENDS ${PROJECT_SOURCE_DIR}/tests/data/golden-round.brmr)
+  endif()
   set_target_properties(${target} PROPERTIES
     SUFFIX ".html"
     LINK_DEPENDS "${shell};${preloaded}")
   target_link_options(${target} PRIVATE
     "SHELL:--shell-file ${shell}"
     # The page starts the game from its "Click to start" button (Module.callMain).
-    -sEXPORTED_RUNTIME_METHODS=callMain
+    -sEXPORTED_RUNTIME_METHODS=callMain,UTF8ToString
     # The game reads data/ and assets/ relative to its working directory, which is
     # / in Emscripten's file system. Nothing is written, so no IDBFS yet (brief 12).
     # (SHELL: keeps each pair together and stops CMake dropping the repeated option.)
     "SHELL:--preload-file ${PROJECT_SOURCE_DIR}/data@/data"
-    "SHELL:--preload-file ${PROJECT_SOURCE_DIR}/assets@/assets")
+    "SHELL:--preload-file ${PROJECT_SOURCE_DIR}/assets@/assets"
+    ${golden_preload})
   add_custom_command(TARGET ${target} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             $<TARGET_FILE_DIR:${target}>/$<TARGET_FILE_BASE_NAME:${target}>.html

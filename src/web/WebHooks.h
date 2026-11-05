@@ -10,6 +10,13 @@
 //   Module._bitriot_start_ai_match(n)  start a round of n CPU players; 1 if it started
 //   Module._bitriot_sounds_played()    sounds the mixer has accepted (audio reached SDL_mixer)
 //   Module._bitriot_joystick_count()   SDL_NumJoysticks()
+//   Module._bitriot_net_start(host, localPlayers)   (brief 12) start a relay game: open a room, or join Module.bitriotTestArgs.room
+//   Module._bitriot_replay_golden()   replay the golden record through the game (JSON)
+//   Module._bitriot_net_room() / _net_transport() / _net_state() / _net_press_start() / _net_log() / _net_info()
+//   Module._bitriot_hidden_polls() / _is_hidden()
+//
+// All of those answer 0 (or an empty string) unless the page was opened with ?test=1 (or sets Module.bitriotTest): a public page
+// offers no way to start games or read the simulation from outside.
 //
 // and through Module.bitriotFatal(message) / Module.bitriotQuit() callbacks that the
 // page may define. The page may also be opened with ?autostart=ai4 (any count from
@@ -19,8 +26,8 @@
 // After the game has quit (webReportQuit) every hook answers 0, except
 // _bitriot_frames, which keeps its last count.
 //
-// NOTE: these hooks ship in every web build. They are test and development aids; gate
-// them (a build option, or a page-side opt-in) before the game is put on a public page.
+// (Brief 09 shipped the hooks open and asked for them to be gated before a public page;
+// brief 12 gated them behind ?test=1.)
 #ifndef WEBHOOKS_H_
 #define WEBHOOKS_H_
 
@@ -38,6 +45,13 @@ void webHooksAfterFrame();
 void webReportFatal(const std::string& message);
 // Tells the page the game has quit and shut down (Module.bitriotQuit).
 void webReportQuit();
+// Runs one pass of the main loop for a tab that is hidden (it gets no animation frames): from the page's message and timer
+// events (see WebHooks.cpp). Defined in main.cpp. Does nothing when the game is not running or the tab is not hidden.
+void webHiddenPoll();
+// Counted by webHiddenPoll() for the test hook bitriot_hidden_polls().
+void webCountHiddenPoll();
+// Puts `text` on the browser's clipboard (the lobby's "Copy room code").
+void webCopyToClipboard(const std::string& text);
 
 #endif /* __EMSCRIPTEN__ */
 

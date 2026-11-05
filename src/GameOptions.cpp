@@ -49,6 +49,8 @@ GameOptions parseGameOptions(int argc, char* argv[], std::ostream& err)
     { "name", required_argument, nullptr, 'n' },
     { "local-players", required_argument, nullptr, 'l' },
     { "players", required_argument, nullptr, 'p' },
+    { "relay", required_argument, nullptr, 'R' },
+    { "room", required_argument, nullptr, 'o' },
     { "spectate", no_argument, nullptr, 's' },
     { nullptr, 0, nullptr, 0 }
   };
@@ -107,6 +109,22 @@ GameOptions parseGameOptions(int argc, char* argv[], std::ostream& err)
       case 'n':
         options.name = optarg;
         break;
+      case 'R':
+        options.relay = optarg;
+        if (options.relay.empty())
+        {
+          err << "--relay takes an address\n";
+          options.error = true;
+        }
+        break;
+      case 'o':
+        options.room = optarg;
+        if (options.room.empty())
+        {
+          err << "--room takes a room code\n";
+          options.error = true;
+        }
+        break;
       case 'l':
         if (!parseNumber(optarg, 1, 6, &options.localPlayers))
         {
@@ -163,14 +181,29 @@ GameOptions parseGameOptions(int argc, char* argv[], std::ostream& err)
     err << "--host and --join cannot be used together\n";
     options.error = true;
   }
+  if (!options.relay.empty() && !options.join.empty())
+  {
+    err << "--relay is for --host (a new room) or --room (an existing one), not --join\n";
+    options.error = true;
+  }
+  if (!options.room.empty() && (options.host || options.relay.empty()))
+  {
+    err << "--room joins a room on a relay: use --relay ADDR --room CODE (and not --host)\n";
+    options.error = true;
+  }
+  if (!options.relay.empty() && !options.host && options.room.empty())
+  {
+    err << "--relay needs --host (to open a room) or --room CODE (to join one)\n";
+    options.error = true;
+  }
   if (!options.networked() && (!options.name.empty() || options.localPlayers != 1 || options.players != 0))
   {
     err << "--name, --local-players and --players need --host or --join\n";
     options.error = true;
   }
-  if (options.spectate && options.join.empty())
+  if (options.spectate && options.join.empty() && options.room.empty())
   {
-    err << "--spectate is for --join: it joins a game to watch it\n";
+    err << "--spectate is for --join or --room: it joins a game to watch it\n";
     options.error = true;
   }
   if (!options.host && options.players != 0)
@@ -193,6 +226,8 @@ void printGameUsage(const std::string& exec, std::ostream& out)
       << "Network play:\n"
       << "\t    --host [port]\tHost a game on a UDP port (default 7777)\n"
       << "\t    --join host:port\tJoin a hosted game\n"
+      << "\t    --relay ADDR\tPlay through a relay: with --host opens a room, with --room joins one\n"
+      << "\t    --room CODE\t\tThe room to join (with --relay)\n"
       << "\t    --name <name>\tThe name the others see\n"
       << "\t    --local-players N\tPlayers on this machine (default 1)\n"
       << "\t    --players N\t\tHost: player slots in all; the rest are computer players\n"

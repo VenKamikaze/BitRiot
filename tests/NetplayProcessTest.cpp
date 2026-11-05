@@ -441,6 +441,145 @@ TEST(NetplayProcess, LosingTheHostEndsThePeerCleanlyWithAMessage)
   EXPECT_NE(peer.err().find("lost the connection to the host"), std::string::npos) << peer.err();
 }
 
+#ifdef BITRIOT_RELAY_BINARY
+// -- brief 12: through a vnet relay ----------------------------------------------------------------------------------
+namespace
+{
+// A relay process on loopback with ephemeral ports. Its "LISTEN udp=ADDR ..." line is read from its stdout file.
+class Relay
+{
+  public:
+    explicit Relay(const Scratch& dir)
+    {
+      const std::string out = dir.file("relay.out");
+      m_pid = fork();
+      if (m_pid == 0)
+      {
+        FILE* o = freopen(out.c_str(), "w", stdout);
+        FILE* e = freopen(dir.file("relay.err").c_str(), "w", stderr);
+        (void) o; (void) e;
+        setvbuf(stdout, nullptr, _IONBF, 0);
+        execl(BITRIOT_RELAY_BINARY, BITRIOT_RELAY_BINARY, "-udp", "127.0.0.1:0", "-http", "127.0.0.1:0", (char*) nullptr);
+        _exit(127);
+      }
+      const auto limit = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+      while (std::chrono::steady_clock::now() < limit && m_udp.empty())
+      {
+        const std::string text = slurp(out);
+        const size_t at = text.find("LISTEN udp=");
+        if (at != std::string::npos && text.find(' ', at + 11) != std::string::npos)
+        {
+          m_udp = text.substr(at + 11, text.find(' ', at + 11) - (at + 11));
+        }
+        else
+        {
+          std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+      }
+    }
+    ~Relay()
+    {
+      if (m_pid > 0)
+      {
+        kill(m_pid, SIGKILL);
+        int status;
+        waitpid(m_pid, &status, 0);
+      }
+    }
+    const std::string& udp() const { return m_udp; }
+  private:
+    pid_t m_pid = -1;
+    std::string m_udp;
+};
+
+std::string waitForText(const std::string& file)
+{
+  const auto limit = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+  while (std::chrono::steady_clock::now() < limit)
+  {
+    std::string t = slurp(file);
+    while (!t.empty() && (t.back() == '\n' || t.back() == '\r')) t.pop_back();
+    if (!t.empty()) return t;
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  return std::string();
+}
+} // namespace
+
+TEST(NetplayRelayProcess, ThreeProcessesMeetInARoomByCodeAndPlayUnderLossAndPrintTheSame)
+{
+  Scratch dir;
+  Relay relay(dir);
+  ASSERT_FALSE(relay.udp().empty()) << slurp(dir.file("relay.err"));
+  const std::string script = makeScript(dir, 3, 2, 3000, 17);
+  const std::string roomFile = dir.file("room");
+  Proc host({"host", "--relay", relay.udp(), "--room-file", roomFile, "--peers", "1", "--rounds", "1", "--seed", "12", "--config", kConfig3,
+             "--script", script, "--tick-ms", "2", "--out", dir.dir("h")}, impairSpec(0), dir.file("h.out"), dir.file("h.err"));
+  const std::string room = waitForText(roomFile);
+  ASSERT_EQ(room.size(), 6u) << host.err();
+  EXPECT_NE(host.err().find("room " + room), std::string::npos) << "the room code is printed on stderr";
+  Proc peer({"join", "--relay", relay.udp(), "--room", room, "--rounds", "1", "--script", script, "--tick-ms", "2", "--out", dir.dir("p")},
+            impairSpec(1), dir.file("p.out"), dir.file("p.err"));
+  const int hostCode = host.wait(kTimeout);
+  const int peerCode = peer.wait(30);
+  ASSERT_EQ(hostCode, 0) << host.err() << "\n" << host.out();
+  ASSERT_EQ(peerCode, 0) << peer.err() << "\n" << peer.out();
+  EXPECT_EQ(host.out(), peer.out());
+  EXPECT_EQ(count(host.out(), ": over at tick"), 1);
+  EXPECT_GE(count(host.out(), "checkpoint 1 "), 10);
+  // The D is the relay's two hops, not a LAN's: the host chose one from the measured round trip through the relay.
+  EXPECT_NE(host.err().find("delay "), std::string::npos);
+}
+
+TEST(NetplayRelayProcess, OverASlowRelayPathTheHostChoosesADBeyondEight)
+{
+  // 120 ms each way on the peer's sends is about a 240 ms round trip: ceil(240 / 33) + 1 is 9 or more, which only a relay's raised limit
+  // (12; a LAN's is 8) allows.
+  Scratch dir;
+  Relay relay(dir);
+  ASSERT_FALSE(relay.udp().empty());
+  const std::string script = makeScript(dir, 3, 2, 600, 17);
+  const std::string roomFile = dir.file("room");
+  Proc host({"host", "--relay", relay.udp(), "--room-file", roomFile, "--peers", "1", "--rounds", "1", "--seed", "12", "--config", kConfig3,
+             "--script", script, "--tick-ms", "2", "--out", dir.dir("h")}, "", dir.file("h.out"), dir.file("h.err"));
+  const std::string room = waitForText(roomFile);
+  ASSERT_EQ(room.size(), 6u) << host.err();
+  Proc peer({"join", "--relay", relay.udp(), "--room", room, "--rounds", "1", "--script", script, "--tick-ms", "2", "--out", dir.dir("p")},
+            "lat=120,seed=5", dir.file("p.out"), dir.file("p.err"));
+  ASSERT_EQ(host.wait(kTimeout), 0) << host.err() << host.out();
+  ASSERT_EQ(peer.wait(30), 0) << peer.err() << peer.out();
+  const size_t at = host.err().find(", delay ");
+  ASSERT_NE(at, std::string::npos) << host.err();
+  EXPECT_GE(std::atoi(host.err().c_str() + at + 8), 9) << "a D above the LAN limit of 8: " << host.err();
+  EXPECT_EQ(host.out(), peer.out());
+}
+
+TEST(NetplayRelayProcess, ARoomCodeThatDoesNotExistIsRefusedByTheRelayAndTheJoinerSaysSo)
+{
+  Scratch dir;
+  Relay relay(dir);
+  ASSERT_FALSE(relay.udp().empty());
+  Proc peer({"join", "--relay", relay.udp(), "--room", "ZZZZZZ", "--timeout-secs", "30", "--out", dir.dir("p")}, "", dir.file("p.out"), dir.file("p.err"));
+  EXPECT_EQ(peer.wait(40), 1) << peer.err() << peer.out();
+  const std::string text = peer.err() + peer.out();
+  EXPECT_NE(text.find("no such room"), std::string::npos) << text;
+}
+
+TEST(NetplayRelayProcess, ARelayThatIsNotThereFailsTheHostWithAnExplanation)
+{
+  Scratch dir;
+  // A UDP port nobody listens on (the relay's, once it has gone).
+  std::string dead;
+  {
+    Relay relay(dir);
+    ASSERT_FALSE(relay.udp().empty());
+    dead = relay.udp();
+  }
+  Proc host({"host", "--relay", dead, "--peers", "1", "--out", dir.dir("h")}, "", dir.file("h.out"), dir.file("h.err"));
+  EXPECT_EQ(host.wait(40), 2) << host.err() << host.out();
+  EXPECT_NE(host.err().find("cannot open a room on the relay"), std::string::npos) << host.err();
+}
+#endif
 // -- brief 13: late joiners, reconnecting, spectators ------------------------------------------------------------------
 
 namespace

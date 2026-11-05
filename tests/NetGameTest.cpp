@@ -13,6 +13,10 @@
 #include <mutex>
 #include <thread>
 
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
 #include "GameSettings.h"
 #include "NetGame.h"
 #include "Simulation.h"
@@ -369,4 +373,66 @@ TEST_F(NetGameTest, AHostWithTwoLocalPlayersAndAPeerWithTwoFillFourSeats)
   EXPECT_TRUE(sc.rows[2].kickable);
   EXPECT_FALSE(sc.rows[3].kickable);
   EXPECT_EQ(sc.rows[4].kind, netplay::SlotKind::OPEN);
+}
+
+// Brief 12: a joiner over a relay that is slow to answer. The session was made while the relay context was still CONNECTING; the host's
+// time to answer (connectTimeoutMs) must start when the room is entered, not when the join was asked for, or a slow relay (a WebTransport
+// attempt that falls back to the WebSocket takes seconds) would be reported as "the host did not answer".
+TEST(NetGameRelay, TheHostsTimeToAnswerStartsWhenTheRelayIsReadyNotWhenTheJoinWasAsked)
+{
+  // A UDP socket that never answers: the relay context stays CONNECTING until its own timeout (1.5 s), then FAILED.
+  const int hole = socket(AF_INET, SOCK_DGRAM, 0);
+  ASSERT_GE(hole, 0);
+  sockaddr_in a;
+  std::memset(&a, 0, sizeof(a));
+  a.sin_family = AF_INET;
+  a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  a.sin_port = 0;
+  ASSERT_EQ(bind(hole, (sockaddr*) &a, sizeof(a)), 0);
+  socklen_t len = sizeof(a);
+  ASSERT_EQ(getsockname(hole, (sockaddr*) &a, &len), 0);
+  const std::string relayAddr = "127.0.0.1:" + std::to_string(ntohs(a.sin_port));
+
+  vnet_config cfg;
+  vnet_config_init(&cfg);
+  cfg.backend = VNET_BACKEND_RELAY_AUTO;
+  cfg.relay_udp = relayAddr.c_str();
+  cfg.room = "ABCDEF";
+  cfg.relay_timeout_ms = 1500;
+  cfg.ignore_env = 1;
+  int err = 0;
+  vnet* v = vnet_create(&cfg, &err);
+  ASSERT_NE(v, nullptr) << vnet_strerror(err);
+  vnet_addr host;
+  ASSERT_EQ(vnet_resolve(v, "room-host:7777", &host), 0);
+  netplay::SessionOptions so;
+  so.connectTimeoutMs = 300;   // far shorter than the relay's 1.5 s
+  std::string error;
+  std::unique_ptr<LockstepSession> s = LockstepSession::join(v, host, so, &error);
+  ASSERT_NE(s, nullptr) << error;
+
+  ASSERT_TRUE(pumpUntil({}, [&] { s->pump(); return s->ended(); }, 4000));
+  EXPECT_EQ(s->endReason(), LockstepSession::END_NETWORK) << "the relay failed first; the host was never given a chance to be slow: " << s->endText();
+  EXPECT_NE(s->endText().find("timed out"), std::string::npos) << s->endText();
+  s.reset();
+  vnet_destroy(v);
+  close(hole);
+}
+
+// Brief 12 review: the game's own sessions raise the D limit on a relay and tolerate sparse pumps (commenting either out used to pass).
+TEST(NetGameRelay, ARelayGameMayChooseADOfUpToTwelveAndADirectOneEight)
+{
+  NetGame::Params direct;
+  direct.host = true;
+  EXPECT_EQ(NetGame::sessionOptionsFor(direct).maxDelay, 8);
+  NetGame::Params relay;
+  relay.host = true;
+  relay.relay = true;
+  EXPECT_EQ(NetGame::sessionOptionsFor(relay).maxDelay, 12);
+  relay.host = false;
+  EXPECT_EQ(NetGame::sessionOptionsFor(relay).maxDelay, 12);
+  EXPECT_TRUE(NetGame::sessionOptionsFor(direct).tolerateSparsePump);
+  EXPECT_TRUE(NetGame::sessionOptionsFor(relay).tolerateSparsePump);
+  relay.name = "Bob";
+  EXPECT_EQ(NetGame::sessionOptionsFor(relay).name, "Bob");
 }

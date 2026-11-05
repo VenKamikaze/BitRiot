@@ -85,6 +85,7 @@
         </div>
         <div id="netbuttons">
           <button class="tabbed" id="netstart" autofocus tabindex="1" onclick="netstart">Start match</button>
+          <button class="tabbed" id="netcopy" tabindex="20" onclick="netcopy">Copy room code</button>
           <button class="tabbed" id="netleave" tabindex="19" escapeAction="1" onclick="netleave">Leave</button>
         </div>
       </div>

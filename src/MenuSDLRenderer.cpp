@@ -77,6 +77,8 @@ void MenuSDLRenderer::initGui(SDL_Renderer* renderer, SDL_Window *screen)
   EventManager::getInstance()->RegisterEventHandler(EventHandlerNetLobby::RML_FILENAME, new EventHandlerNetLobby());
   EventManager::getInstance()->RegisterEventHandler(EventHandlerNetForm::HOST_FILENAME, new EventHandlerNetForm());
   EventManager::getInstance()->RegisterEventHandler(EventHandlerNetForm::JOIN_FILENAME, new EventHandlerNetForm());
+  EventManager::getInstance()->RegisterEventHandler(EventHandlerNetForm::RELAY_HOST_FILENAME, new EventHandlerNetForm());
+  EventManager::getInstance()->RegisterEventHandler(EventHandlerNetForm::RELAY_JOIN_FILENAME, new EventHandlerNetForm());
 
   // The last name, address and port live in a small file in the user's preferences folder, which is only looked up (and
   // so only created) when an online page first needs it.
@@ -90,14 +92,43 @@ void MenuSDLRenderer::initGui(SDL_Renderer* renderer, SDL_Window *screen)
     return path;
   });
 
-  // The main menu gets its online entries here and not in mainmenu.rml, so a build without netplay (the web build)
-  // shows exactly the menu it always had.
+  // The main menu gets its online entry here and not in mainmenu.rml, so a build without netplay shows exactly the menu it always
+  // had. One entry, "Online game", that opens netmenu.rml (brief 12: the main menu would have had seven lines, more than the
+  // smallest window holds); the page lists the ways in: Host via relay and Join by room code, and on a native build the direct UDP
+  // pair brief 08 added. A browser cannot open a UDP socket, so there those two are taken out of the page.
   EventManager::SetDocumentLoadedHook([](Rml::ElementDocument& doc, const Rml::String& name) {
+    if (name == "netmenu.rml")
+    {
+#ifdef __EMSCRIPTEN__
+      for (const char* id : {"nethost", "netjoin"})
+      {
+        if (Rml::Element* e = doc.GetElementById(id))
+        {
+          // The <br /> that follows the button goes with it.
+          Rml::Element* parent = e->GetParentNode();
+          Rml::Element* after = e->GetNextSibling();
+          if (parent && after && after->GetTagName() == "br")
+          {
+            parent->RemoveChild(after);
+          }
+          if (parent)
+          {
+            parent->RemoveChild(e);
+          }
+        }
+      }
+      if (Rml::Element* back = doc.GetElementById("netback"))
+      {
+        back->SetAttribute("tabindex", "3");
+      }
+#endif
+      return;
+    }
     if (name != "mainmenu.rml")
     {
       return;
     }
-    // The two online buttons go in after "Play", into the list mainmenu.rml has: the tab indexes of what follows move up by two.
+    // The button goes in after "Play", into the list mainmenu.rml has: the tab indexes of what follows move up by one.
     Rml::Element* play = doc.GetElementById("quickstart");
     Rml::Element* menu = play ? play->GetParentNode() : nullptr;
     if (!menu)
@@ -111,7 +142,7 @@ void MenuSDLRenderer::initGui(SDL_Renderer* renderer, SDL_Window *screen)
       const int index = MickRmlUIElementUtil::getTabIndex(b);
       if (index >= 2)
       {
-        b->SetAttribute("tabindex", std::to_string(index + 2));
+        b->SetAttribute("tabindex", std::to_string(index + 1));
       }
     }
     // Inserted before the first button after Play (Rml has no insert-after: the buttons are followed by <br />).
@@ -125,19 +156,14 @@ void MenuSDLRenderer::initGui(SDL_Renderer* renderer, SDL_Window *screen)
         break;
       }
     }
-    auto add = [&](const char* id, const char* page, int tab, const char* label) {
-      Rml::ElementPtr b = doc.CreateElement("button");
-      b->SetId(id);
-      b->SetClassNames("tabbed");
-      b->SetAttribute("tabindex", std::to_string(tab));
-      b->SetAttribute("onclick", Rml::String("open ") + page);
-      b->SetInnerRML(label);
-      Rml::Element* raw = menu->InsertBefore(std::move(b), before);
-      (void) raw;
-      menu->InsertBefore(doc.CreateElement("br"), before);
-    };
-    add("nethost", "nethost.rml", 2, "Host online game");
-    add("netjoin", "netjoin.rml", 3, "Join online game");
+    Rml::ElementPtr b = doc.CreateElement("button");
+    b->SetId("netonline");
+    b->SetClassNames("tabbed");
+    b->SetAttribute("tabindex", "2");
+    b->SetAttribute("onclick", "open netmenu.rml");
+    b->SetInnerRML("Online game");
+    menu->InsertBefore(std::move(b), before);
+    menu->InsertBefore(doc.CreateElement("br"), before);
   });
 #endif
 

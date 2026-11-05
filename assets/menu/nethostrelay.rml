@@ -1,0 +1,26 @@
+<rml>
+  <head>
+    <title>Host via relay</title>
+    <link rel="stylesheet" type="text/css" href="rkt.rcss"/>
+    <link rel="stylesheet" type="text/css" href="common.rcss"/>
+    <link type="text/rcss" href="netform.rcss"/>
+  </head>
+  <body class="background" onload="netforminit">
+    <div class="menu-container">
+      <div class="menu">
+        <h2>Host via relay</h2>
+        <div class="form">
+          <div class="frow"><span class="flabel">Your name</span><input type="text" id="f-name" class="tabbed text" tabindex="1" maxlength="24" autofocus /></div>
+          <div class="frow"><span class="flabel">Relay</span><input type="text" id="f-relay" class="tabbed text wide" tabindex="2" maxlength="200" /></div>
+          <div class="frow"><span class="flabel">Players here</span><button class="tabbed formbtn" id="f-local" tabindex="3" onclick="netlocal">1</button></div>
+          <p class="note">The relay makes a room and gives you its six-letter code to read out to your friends, in a browser or a native game. No port forwarding is needed.</p>
+          <p class="error" id="formerror"></p>
+        </div>
+        <div class="formbuttons">
+          <button class="tabbed" id="formgo" tabindex="4" onclick="netrelayhostgo">Open room</button>
+          <button class="tabbed" id="formback" tabindex="5" escapeAction="1" onclick="open netmenu.rml">Back</button>
+        </div>
+      </div>
+    </div>
+  </body>
+</rml>
