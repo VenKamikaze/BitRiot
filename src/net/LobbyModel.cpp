@@ -266,9 +266,12 @@ LobbyScreen buildLobbyScreen(const LobbyView& view, const LobbyContext& ctx)
     }
     else if (ctx.canStart)
     {
-      sc.status = sc.humanPeers == 0
-          ? "No one else has joined yet. Start with computer players, or wait for your friends."
-          : "Everyone is ready.";
+      if (sc.humanPeers == 0)
+        sc.status = "No one else has joined yet. Start with computer players, or wait for your friends.";
+      else if (notReady.empty())
+        sc.status = "Everyone is ready.";
+      else
+        sc.status = joinNames(notReady) + (notReady.size() == 1 ? " has" : " have") + " not said ready, but you can start now.";
     }
     else if (!notReady.empty())
     {

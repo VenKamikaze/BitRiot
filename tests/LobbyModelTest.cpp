@@ -331,6 +331,13 @@ TEST(LobbyModelScreen, TheHostCanStartWhenTheSessionSaysSo)
   EXPECT_TRUE(sc.canStart);
   EXPECT_EQ(sc.status, "Everyone is ready.");
 
+  // The session may allow a start without ready flags (the command-line host); the page says who has not answered.
+  LobbyView lax = v;
+  lax.peers[2].ready = false;
+  sc = buildLobbyScreen(lax, ctx);
+  EXPECT_TRUE(sc.canStart);
+  EXPECT_EQ(sc.status, "Carol has not said ready, but you can start now.");
+
   // Alone: allowed, and the page says what that means.
   LobbyView alone;
   alone.slots = {SlotInfo(), SlotInfo()};

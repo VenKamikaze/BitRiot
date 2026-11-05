@@ -17,9 +17,16 @@
   padding-bottom: 4px;
 }
 
+#lobbyview {
+  background-color: rgba(0,0,0,170);
+  width: 94%;
+  margin: 0 3%;
+  padding: 4px 0;
+}
+
 #netstatus {
   font-size: 11pt;
-  color: #cccccc;
+  color: #dddddd;
   height: 1.3em;
   overflow: hidden;
   white-space: nowrap;
@@ -125,6 +132,9 @@
 
 #endview {
   display: none;
+  background-color: rgba(0,0,0,170);
+  padding: 8px 12px;
+  box-sizing: border-box;
   width: 86%;
   margin: 0 7%;
   text-align: left;

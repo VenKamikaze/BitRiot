@@ -1,6 +1,10 @@
 /* The in-game network overlay (brief 08), drawn over the world by RmlUi: who the match is waiting for, who
    left, a desync, and a small connection line. It never takes focus and has no background of its own. */
 body.overlay {
+  font-family: FreeMono;
+  display: block;
+  width: 100%;
+  height: 100%;
   background-color: rgba(0,0,0,0);
   font-size: 13pt;
   color: white;
@@ -53,5 +57,5 @@ body.overlay {
   left: 6px;
   bottom: 4px;
   font-size: 10pt;
-  color: rgba(255,255,255,170);
+  color: rgba(255,255,255,225);
 }
