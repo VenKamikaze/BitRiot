@@ -41,7 +41,7 @@ Each brief (`NN-*.md`) is one unit of work, sized for a single implement → rev
 
 - **Determinism:** 01 → 02 → 02b → 03a → 03b (done) → 04a (done) → 04b (done) → 05 (done) → 05b (done).
 - **vnet:** 06, 10 and 11 are all done (vnet `claude` 26f4b0f, version 0.3.0). Brief 14 (from vnet's design review) is done too: vnet `claude` eb1feeb, version 0.4.0, tag `v0.4.0`. 07 and 12 should pin `v0.4.0` and read vnet's `doco/integration.md`.
-- **Netplay:** 07 and 08 are done, play-tests pending (each Outcome has the steps): `src/net/` (protocol, `LockstepSession`, `NetMatch`, `LobbyModel`), the game's `--host`/`--join` and its host, join and lobby menus, `bitriot_headless host|join`, [`protocol.md`](protocol.md) (version 3 since 13: late joiners, reconnect, spectators). 12 builds on them; 13 reuses their records.
+- **Netplay:** 07, 08, 12 and 13 are done, play-tests pending (each Outcome has the steps): `src/net/` (protocol, `LockstepSession`, `NetMatch`, `LobbyModel`), the game's `--host`/`--join` and its host, join and lobby menus, `bitriot_headless host|join`, [`protocol.md`](protocol.md) (version 3 since 13: late joiners, reconnect, spectators). 12 runs them over the vnet relay in browsers and natively; 13 adds hot-join, reconnect and spectators.
 - **WASM:** 09 is done, play-test pending (Outcome has the steps); 12 (done, play-test pending) built browser netplay on it.
 
 **Resuming?** [`PROMPT.md`](PROMPT.md) §0 has the hand-off state: what's done, what's ready, and what's waiting on the user.

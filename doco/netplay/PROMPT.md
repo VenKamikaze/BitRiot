@@ -7,13 +7,28 @@ You are the **coordinator** for a multi-brief project across two repos:
 
 The goal is deterministic lockstep online multiplayer for Bit Riot, a browser (WASM) build, and vnet underneath both.
 
-## 0. Where things stand (hand-off, 5 Nov 2026, after brief 08)
+## 0. Where things stand (hand-off, 5 Nov 2026, after briefs 12 and 13: every brief is done)
 
 **Done and merged into `claude`:**
 
-- **BitRiot:** 01, 02, 02b, 03a, 03b, 04a, 04b, 05, 05b, 09, 07 and **08**.
+- **BitRiot:** 01, 02, 02b, 03a, 03b, 04a, 04b, 05, 05b, 09, 07, 08, **12** and **13**.
   - `done`: 02b, 03a, 05 and 05b.
-  - `done (play-test pending)`: 03b, 04a and 04b (controller parts only), 09 (browser), 07 and 08 (two real windows). See "Waiting on the user".
+  - `done (play-test pending)`: 03b, 04a and 04b (controller parts only), 09 (browser), 07 and 08 (two real windows), 12 (a native window and a browser tab through a relay) and 13 (three windows). See "Waiting on the user".
+- **13, disconnects and hot-join** (merge 56b1a4e):
+  - **Protocol version 3:** a flags byte in `HELLO` (`HELLO_SPECTATE`), `WELCOME_MIDMATCH`, `READY_AT`, `TAKEOVER_AT`. A v2 `HELLO` gets `REJECT_VERSION`.
+  - **Hot-join:** the host keeps every confirmed tick of the round (`m_history`) and streams it as ordinary `TICKS` in ack-clocked windows; the joiner fast-forwards silently (`SoundMute`, time-sliced in `GameEngine::netJoinFrame`), says `READY_AT`, its checksums are compared, and the host deals it bots at a tick it chooses (the `HUMAN_TAKES_OVER` rides in the confirmed inputs, so every machine applies it on the same tick). The live match never waits for a joiner. A joiner whose round trip needs more D than the round has is told `TAKEOVER_TOO_SLOW` and watches.
+  - **Reconnect:** a token from `WELCOME`, saved per host (and per relay and room after 12) in the prefs file; the old incarnation is dropped and its slots offered back. A token from another address counts only once its owner has been silent 3 s, so two live windows sharing a prefs file never evict each other.
+  - **Spectators** (`--spectate`, or no slot free); a machine demoted for want of a slot is dealt one again when one frees up. `kick()` works mid-round; the final-checksum wait is bounded at 8 s (07 R3).
+  - **Fast-forward:** 9,000 ticks with four bots in about 0.13 s natively and 0.23–0.34 s in wasm under Node (targets 3 s and 10 s), so no snapshots.
+  - **Review:** one Opus review (a reconnect got the wrong keyboard, fast-forward played sound, six state-machine holes), a fix round, a re-review (a demoted joiner stayed a spectator for good), a second small fix round. The coordinator's own ctest then caught a real lost-acknowledgement gap (a caught-up joiner's `READY_AT` kept the running keepalive from ever firing); fixed with a test (5 of 40 failing → 0 of 40 in a stall reproduction).
+- **12, browser netplay** (merge 0154499):
+  - **Relay:** `RELAY_AUTO` in the browser (WebTransport, then WebSocket), relay UDP natively; the host creates a room, others join by code; direct UDP stays. An "Online game" sub-menu holds Host via relay, Join by room code and (native only) 08's two direct entries. `--relay`/`--room` on the game and `bitriot_headless`.
+  - **Session:** `SessionOptions::maxDelay` (8, or 12 on a relay); the sparse-pump rule (own pumps more than 1.5 s apart time nobody out, and 13's host timers move with the gap); the connect clock holds while the transport is CONNECTING. No wire change of its own.
+  - **Web:** netplay is built for Emscripten; prefs in localStorage synced to `netplay.txt`; hidden tabs step from vnet's wake callback via a `MessageChannel`, plus a 1 s timer, and `GameEngine::flushNet()` sends after every stepped frame (a hidden tab keeps ~29 ticks/s at D=2); dev URL knobs (`relay_wt`, `relay_cert`, `impair`, `hiddendriver`) and test hooks only with `?test=1`.
+  - **The full game's wasm build replays the golden record identically to native** (`tests/web/netplay.js golden`, every tick).
+  - **Tests:** `tests/web/netplay.js` (Playwright, a local Go relay, a native host, browsers): 16 scenarios, 226 checks, including WS/WT rounds with and without impairment, hidden and throttled tabs, a 12 s freeze, browser hot-join and reconnect. About 15–20 minutes; not in ctest.
+  - **Review:** one Opus review (a hidden tab sent inputs a wake late, the web NETPLAY=OFF build broke, a local game ran in a hidden tab, invite links vs saved relay, dev knobs on deployed pages), a fix round, a merge of `claude` with 13 and its integration, a re-review (a 200-checkpoint truncation loosened the round test: replaced by a hand-back to the AI so rounds end; two timer shifts untested), a final fix round, which also fixed a regression of its own (the unclamped `delayNeededBy`).
+  - **Deployment** is a written note in 12's Outcome; nothing is deployed. vnet is unchanged (`v0.4.0`), so no tag is needed.
 - **08, lobby UI** (merge 6c69112):
   - **Menus:** "Host online game" and "Join online game" on the main menu (inserted by an `EventManager` hook, so the web and NETPLAY=OFF menus are unchanged), host and join forms, the host-name lookup on a worker thread (`NetResolve`).
   - **Online lobby:** six rows (host-local, remote, computer, open) with team, ready and ping; the host edits map, blocks, enemies, players and teams with new lobby buttons and can remove a peer (lobby only, no ban). Start waits for everyone's ready.
@@ -37,19 +52,17 @@ The goal is deterministic lockstep online multiplayer for Bit Riot, a browser (W
   - **09** (merge 452b742): the WASM build, `scripts/setup-emsdk.sh [--with-ports]`, `tests/web/smoke.js`.
   - **The user's first web build failed** on a fresh emsdk (SDL2_ttf's port wants plain FreeType under the parent's cache lock). It is fixed in 76f516d: configure runs `embuilder build freetype`.
 - **Test counts on `claude`:**
-  - `bitriot_tests` 678 and `bitriot_sim_tests` 532, on GCC Release and Clang Release (NETPLAY=OFF: 526 and 412).
-  - `ctest` 3/3. The multi-process netplay test has 8 cases and takes about 80 s.
+  - `bitriot_tests` 766 and `bitriot_sim_tests` 606, on GCC Release and Clang Release (NETPLAY=OFF: 531 and 414).
+  - `ctest` 3/3. The multi-process netplay test has 16 cases and takes about 210 s.
+  - `tests/web/netplay.js` passes 226/226 (coordinator's run on the merged tree).
   - The 200-seed sweep has 0 failures on both binaries.
   - The determinism gate passes: 17 variants, with `gcc-m32` not available.
-  - The web smoke test passes 41/41.
-- **vnet:** unchanged. `claude` is at 579a410, tag `v0.4.0`, CI green (run 36). Read run logs with the GitHub MCP tools (`actions_list`, `get_job_logs`). BitRiot has no CI workflow.
+  - The web smoke test passes 41/41, with netplay and in the web NETPLAY=OFF build (`--menu-lines 3`).
+- **vnet:** unchanged. `claude` is at 579a410, tag `v0.4.0`, CI green (run 36); `main` was merged up to it (12c8cec) at the user's request. Read run logs with the GitHub MCP tools (`actions_list`, `get_job_logs`). BitRiot has no CI workflow.
 
-**Next ready: 12** (browser netplay, needs 07, 08, 09, 10 and 14) **and 13** (disconnects and hot-join, needs 05, 07 and 08). They can run in parallel in separate worktrees; whichever merges second merges `claude` in before its review. Read 07's and 08's Outcomes first (both have follow-up lists for 12 and 13). 12 may need vnet changes; brief them in vnet's `doco/` if so.
+**Next ready:** nothing briefed. Every brief in both repos is done. What remains is the user's play-tests (below) and the follow-up lists in the Outcomes of 07, 08, 12 and 13. "Beyond Bit Riot" in [`README.md`](README.md) (jfSW, Odamex, a relay UDP gateway) is the next thing to brief, at the user's request.
 
-**In flight (started 5 Nov 2026, in parallel):**
-- **12** in worktree `/home/user/wt/12`, branch `netplay/12-browser`; any vnet changes go in `/home/user/wt/vnet-12`, branch `vnet/12-browser-netplay`.
-- **13** in worktree `/home/user/wt/13`, branch `netplay/13-hot-join`. 13 owns the bump to `PROTOCOL_VERSION` 3; 12 avoids wire changes if it can.
-- Both implementers push their branches after every commit. If the session restarts, check the branches' logs and Outcomes, then resume with a review. Whichever merges second merges `claude` in before its review.
+**In flight:** nothing. Every feature branch in both repos is merged.
 
 **Decisions taken while the user was away** (they may revisit them; the details are in each brief's Outcome):
 
@@ -99,6 +112,8 @@ The goal is deterministic lockstep online multiplayer for Bit Riot, a browser (W
 
    The steps are at the end of 07's Outcome.
 3b. **Lobby play-test (08):** the same two windows, driven from the menus (`XDG_DATA_HOME=/tmp/alice-data ./BitRiot` and `XDG_DATA_HOME=/tmp/bob-data ./BitRiot`): host and join forms, ready, settings and teams, a match with the overlay, leaving, the scoreboard's Next round and Back to lobby, removing a peer, the error pages, saved settings, and your own settings surviving. The 12 steps are at the end of 08's Outcome; it can be done in the same sitting as 07's.
+3c. **Browser netplay play-test (12):** a native window and a browser tab (Chrome and Firefox) through a relay run on your machine, joined by room code. The steps are at the end of 12's Outcome (they need the relay built with Go and the web build from 09).
+3d. **Hot-join play-test (13):** three windows on one machine: join mid-round, no free bot, leave, reconnect after `kill -9`, identical records. The steps are at the end of 13's Outcome. 07, 08 and 13 can be done in one sitting.
 4. ~~**vnet `claude` → `main`**~~ **Done** at the user's request: vnet `main` 12c8cec (`--no-ff`, same tree as `claude` 579a410).
 5. **Tags:** the cloud session can't push tags (HTTP 403), so the user tags any future vnet release from a PC. The releasing brief's Outcome gives the commands. No tag was needed in this session.
 
@@ -109,9 +124,11 @@ The goal is deterministic lockstep online multiplayer for Bit Riot, a browser (W
 - **vnet relay limits:** a forged-source flood can delay new handshakes while it lasts. This is documented in vnet's `relay-protocol.md`.
 - **Netplay limits (07 follow-ups):**
   - no authentication or encryption, and no NAT traversal;
-  - `canStartRound()` waits for every peer's final hash with no time limit (unreachable today; 13 should bound it);
+  - ~~`canStartRound()` waits for every peer's final hash with no time limit~~ bounded at 8 s by 13;
   - a debugger pause over 10 s drops a machine;
-  - over a relay (12) D may need more than 8.
+  - ~~over a relay (12) D may need more than 8~~ 12 allows 12 on a relay;
+  - the room code has 30 bits and no authentication: anyone with the code can join until the lobby is full or the round starts;
+  - a hidden tab under Chrome's intensive throttling never times out a dead host while hidden (it is detected within 10 s of becoming visible); see protocol.md.
 - **`RuntimeException::what()`** returns a pointer into a local string. It is pre-existing and in `bitriot_sim`; Clang warns `-Wreturn-stack-address`. Fix it in a brief that owns the sim, and rerun the gate.
 
 **Lessons so far:**
@@ -156,7 +173,7 @@ Then read the brief(s) you are about to start, plus the **Outcome** sections of 
 
 1. **Find ready briefs.** From the status tables in both repos, list every brief whose dependencies are all done.
 2. **Tracks that can run in parallel now:**
-   - BitRiot netplay: 12 (browser netplay) and 13 (disconnects and hot-join) are both ready (08 is done) and can run in parallel.
+   - None: every brief is done (see §0).
    - vnet: no briefed work left (06, 10, 11 and 14 are done; `v0.4.0`). 12 may need vnet changes; brief them in vnet's `doco/` if so.
 3. **Check the prerequisites.** Some briefs depend on **open questions** (`Qn` in the table). If the user hasn't answered one, **ask the user before starting that brief**. Implementer subagents cannot ask.
    - All four are answered: Q1 (countdown 2 s / 60 ticks), Q2 (fixed-point up front, brief 02b), Q3 (vnet: MIT, public) and Q4 (online cap stays 6). Check the README in case new questions have been added.
