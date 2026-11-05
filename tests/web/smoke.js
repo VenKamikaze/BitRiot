@@ -28,7 +28,10 @@ const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
 
-const buildDir = path.resolve(process.argv[2] || 'build-wasm');
+// --menu-lines N: the main menu's lines (4 with netplay: Play, Online game, Game Options, Exit; 3 in a -DBITRIOT_NETPLAY=OFF build).
+const menuLinesIdx = process.argv.indexOf('--menu-lines');
+const menuLines = menuLinesIdx >= 0 ? parseInt(process.argv[menuLinesIdx + 1], 10) : 4;
+const buildDir = path.resolve(process.argv.slice(2).find((a, i, all) => !a.startsWith('--') && all[i - 1] !== '--menu-lines') || 'build-wasm');
 const shotDir = path.resolve(process.env.BITRIOT_SMOKE_SHOTS || path.join(buildDir, 'smoke'));
 fs.mkdirSync(shotDir, { recursive: true });
 
@@ -298,7 +301,7 @@ async function scenarioQuit(server) {
   await clickStart(page);
   await page.waitForTimeout(500);
   const box = await page.locator('#canvas').boundingBox();
-  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.73); // Exit (the 4th line: Play, Online game, Game Options, Exit)
+  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * (0.36 + (menuLines - 1) * 0.123)); // Exit, the last line
   await page.waitForFunction(() => window.bitriotQuit === true, null, { timeout: 15000 })
     .then(() => check(true, 'Exit quits and tells the page'), () => check(false, 'Exit quits and tells the page'));
   const frames = await call(page, 'bitriot_frames');

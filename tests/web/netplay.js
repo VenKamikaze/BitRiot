@@ -654,7 +654,7 @@ scenarios.ui = async (ctx) => {
   check(!shown.hidden && shown.code === room, 'the room panel under the canvas shows the code of the room joined', JSON.stringify(shown));
   await page.screenshot({ path: path.join(shotDir, 'ui-lobby.png') });
   const saved = await page.evaluate(() => window.localStorage.getItem('bitriot.netplay'));
-  check(/name=Webby/.test(saved || '') && new RegExp('room=' + room).test(saved || '') && /relay=ws:\/\/127\.0\.0\.1:/.test(saved || ''), 'the name, room and relay were saved in the browser', JSON.stringify(saved));
+  check(/name=Webby/.test(saved || '') && new RegExp('room=' + room).test(saved || '') && /relay=\n/.test(saved || ''), 'the name and room were saved in the browser, and the relay was not (it is the page\'s own default)', JSON.stringify(saved));
   await withTimeout(host.exited, 120000, 'the host to start and finish').catch(() => stopNative(host));
   await finish(page);
   // A fresh page load: the join form comes back filled in.
