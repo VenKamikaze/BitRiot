@@ -1150,8 +1150,8 @@ TEST(LockstepSession, APeerThatNeverReportsTheLastChecksumIsDroppedAndTheNextRou
 
 TEST(LockstepRelay, AGapInTheHostsOwnPumpsDoesNotRunOutThirteensFinalChecksumWait)
 {
-  // Brief 12 with brief 13: the host's clocks for "a peer that never reports the last checksum" and "a joiner that never verifies" run on
-  // its own pump clock. A hidden tab or a sleeping laptop that was not pumped for 6 s has not given the peer 6 s of silence to answer
+  // Brief 12 with brief 13: the host's clock for "a peer that never reports the last checksum" runs on its own pump clock (the
+  // never-verified joiner timer and the token grace have tests of their own below). A hidden tab or a sleeping laptop that was not pumped for 6 s has not given the peer 6 s of silence to answer
   // for: with tolerateSparsePump those clocks are moved on by the gap.
   for (const bool tolerant : {true, false})
   {
@@ -1176,6 +1176,74 @@ TEST(LockstepRelay, AGapInTheHostsOwnPumpsDoesNotRunOutThirteensFinalChecksumWai
     else
     {
       EXPECT_EQ(c.machine(0).s->peerCount(), 1) << "what the option is for: without it the gap counts against the peer";
+    }
+  }
+}
+
+TEST(LockstepRelay, AGapInTheHostsOwnPumpsDoesNotRunOutTheNeverVerifiedTimerOfALateJoiner)
+{
+  // A late joiner that said it is ready but whose checksums are never compared is dropped after the timeout (10 s) on the HOST's clock. The
+  // host's own 6 s gap (a hidden tab, a sleeping laptop) is not the joiner's time.
+  for (const bool tolerant : {true, false})
+  {
+    SCOPED_TRACE(tolerant ? "tolerateSparsePump on" : "tolerateSparsePump off");
+    ClusterOptions o = delayed(10);
+    o.lobby.totalSlots = 4;
+    o.session.tolerateSparsePump = tolerant;
+    Cluster c(2, o);
+    ASSERT_TRUE(c.startRound(1, 0));
+    ASSERT_TRUE(c.runUntil([&] { return c.allStepped(40); }, 60000));
+    Machine& j = c.addMachine(1);
+    j.reportHashes = false;   // caught up and ready, never verified
+    c.run(4000);
+    ASSERT_EQ(c.machine(0).s->peerCount(), 2) << "still inside the timer";
+    for (int i = 0; i < c.size(); i++) c.machine(i).frozen = true;
+    vnet_loopback_network_step(c.network(), 6000);
+    for (int i = 0; i < c.size(); i++) c.machine(i).frozen = false;
+    c.run(3000);   // about 7 s of the host's pumping since READY_AT, 13 s on its clock
+    if (tolerant)
+    {
+      EXPECT_EQ(c.machine(0).s->peerCount(), 2) << "the gap was not the joiner's";
+      c.run(6000);
+      EXPECT_EQ(c.machine(0).s->peerCount(), 1) << "and the timer still runs out in the end";
+    }
+    else
+    {
+      EXPECT_EQ(c.machine(0).s->peerCount(), 1) << "what the shift is for";
+    }
+  }
+}
+
+TEST(LockstepRelay, AGapInTheHostsOwnPumpsDoesNotRunOutThePendingTokenGrace)
+{
+  // A HELLO with the token of a machine that is still talking is held back (TOKEN_GRACE_MS, 4 s on the host's clock) and then taken for
+  // a new player. The host's own gap must not use up that grace.
+  for (const bool tolerant : {true, false})
+  {
+    SCOPED_TRACE(tolerant ? "tolerateSparsePump on" : "tolerateSparsePump off");
+    ClusterOptions o = delayed(10);
+    o.lobby.totalSlots = 4;
+    o.session.tolerateSparsePump = tolerant;
+    Cluster c(3, o);
+    ASSERT_TRUE(c.startRound(1, 0));
+    ASSERT_TRUE(c.runUntil([&] { return c.allStepped(200); }, 60000));
+    const uint32_t token = c.machine(2).s->token();
+    Machine& twin = c.addMachine(1, 0, 0, [&](netplay::SessionOptions& so) { so.reconnectToken = token; });   // machine 2 is still alive
+    c.run(1000);
+    ASSERT_FALSE(joined(twin)) << "held back while the token's owner is still talking";
+    for (int i = 0; i < c.size(); i++) c.machine(i).frozen = true;
+    vnet_loopback_network_step(c.network(), 6000);
+    for (int i = 0; i < c.size(); i++) c.machine(i).frozen = false;
+    c.run(2000);   // 3 s of grace used on the host's pumping, 9 s on its clock
+    if (tolerant)
+    {
+      EXPECT_FALSE(joined(twin)) << "the grace was not used up by the gap";
+      ASSERT_TRUE(c.runUntil([&] { return joined(twin); }, 20000)) << "and it is taken for a new player in the end";
+      EXPECT_NE(twin.s->myId(), 2) << "not the live machine's seat";
+    }
+    else
+    {
+      EXPECT_TRUE(joined(twin)) << "what the shift is for";
     }
   }
 }

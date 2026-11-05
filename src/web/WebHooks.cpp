@@ -385,6 +385,16 @@ EMSCRIPTEN_KEEPALIVE int bitriot_net_state()
   return 0;
 }
 
+// Hands every slot this machine plays back to the AI (RETURN_TO_AI events), so a scripted match ends as an all-bots round.
+EMSCRIPTEN_KEEPALIVE int bitriot_net_handback()
+{
+  if (!s_testMode || s_quit || !s_engine || s_engine->netGame() == nullptr)
+  {
+    return 0;
+  }
+  return s_engine->handBackSlots();
+}
+
 // The host's Start, or a peer's Ready (what pressing the lobby's main button does).
 EMSCRIPTEN_KEEPALIVE int bitriot_net_press_start()
 {

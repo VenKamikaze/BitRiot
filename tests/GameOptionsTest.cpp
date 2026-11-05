@@ -204,6 +204,15 @@ TEST(GameOptionsTest, HostViaARelayAndJoinByRoomCode)
   EXPECT_FALSE(direct.options.viaRelay()) << "direct UDP is as before";
 }
 
+TEST(GameOptionsTest, AViewerMayJoinARoomOnARelay)
+{
+  const Parsed p = parse({ "--relay", "r.example.org", "--room", "K7PQ3X", "--spectate" });
+  EXPECT_FALSE(p.options.error) << p.err;
+  EXPECT_TRUE(p.options.spectate);
+  EXPECT_TRUE(parse({ "--spectate" }).options.error) << "still needs something to watch";
+  EXPECT_TRUE(parse({ "--host", "--relay", "r", "--spectate" }).options.error) << "a host does not watch";
+}
+
 TEST(GameOptionsTest, TheRelayOptionsRefuseTheCombinationsThatMeanNothing)
 {
   EXPECT_TRUE(parse({ "--relay", "r.example.org" }).options.error) << "a relay with nothing to do on it";

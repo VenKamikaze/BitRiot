@@ -201,9 +201,9 @@ GameOptions parseGameOptions(int argc, char* argv[], std::ostream& err)
     err << "--name, --local-players and --players need --host or --join\n";
     options.error = true;
   }
-  if (options.spectate && options.join.empty())
+  if (options.spectate && options.join.empty() && options.room.empty())
   {
-    err << "--spectate is for --join: it joins a game to watch it\n";
+    err << "--spectate is for --join or --room: it joins a game to watch it\n";
     options.error = true;
   }
   if (!options.host && options.players != 0)

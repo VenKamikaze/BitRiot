@@ -91,6 +91,8 @@ class GameEngine
     // call when there is none. main() calls it when the game closes.
     void stopNetplay();
     bool netplayActive() const { return static_cast<bool>(m_net); }
+    // Test hook (brief 12): this machine's players all go back to the AI; how many were handed back.
+    int handBackSlots() { return m_pInputHandler ? m_pInputHandler->handBackAllSlots() : 0; }
     // Starts a relay game as the Host via relay / Join by room code forms would (the same parsing), for the web build's test
     // hooks and the page's own "join this room" link. False, and `error`, if the words are bad or a game is already on.
     bool startRelayFromText(bool host, const std::string& name, const std::string& relay, const std::string& room, int localPlayers,

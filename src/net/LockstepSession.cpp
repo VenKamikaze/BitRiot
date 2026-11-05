@@ -274,6 +274,7 @@ void LockstepSession::pump()
     }
     if (m_roundEndedAt != 0) m_roundEndedAt += gap;
     for (PendingToken& p : m_pendingTokens) p.since += gap;
+    for (Removed& r : m_removed) r.until += gap;   // the memory of a removed peer is 30 s of the host's pumping, too
     m_connectStart = m_now;
   }
 
