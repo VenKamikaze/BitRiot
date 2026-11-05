@@ -286,6 +286,16 @@ function compareMachines(machines, what, minCheckpoints) {
   }
 }
 
+// Rounds cut short: every checkpoint two machines both have must agree, and there must be enough of them.
+function comparePrefix(machines, what, minShared) {
+  const ref = machines[0];
+  for (const m of machines.slice(1)) {
+    let shared = 0, differing = 0, first = null;
+    for (const [k, h] of ref.log.cps) { const o = m.log.cps.get(k); if (o !== undefined) { shared++; if (o !== h) { differing++; if (!first) first = k; } } }
+    check(shared >= minShared && differing === 0, what + ': ' + m.name + ' agrees with ' + ref.name + ' on every checkpoint they share', shared + ' shared, ' + differing + ' differing' + (first ? ', first ' + first : ''));
+  }
+}
+
 // ---- scenarios ------------------------------------------------------------------------------------------------------------------
 
 // The golden record, replayed by the game's wasm build.
@@ -339,20 +349,36 @@ async function playRound(ctx, name, opts) {
   for (const p of pages) await waitNetState(p, [3], 40000, 'the round starts');
   const scripts = opts.keys === false ? [] : pages.map((p, i) => startKeyScript(p, 5 + i));
   const t0 = Date.now();
-  for (const p of pages) await waitNetState(p, [4, 5], opts.roundMs || 400000, 'the round ends');
+  // A round with humans that hide ends when it ends: usually after 1000 to 4000 ticks, sometimes after 12000. Past `maxCheckpoints` (200 =
+  // 6000 ticks, about 200 s) the test stops it and compares what was played so far (every checkpoint the machines share).
+  const maxCheckpoints = opts.maxCheckpoints || 200;
+  let partial = false;
+  for (;;) {
+    const states = await Promise.all(pages.map(netState));
+    if (states.every((x) => x === 4 || x === 5)) break;
+    if (parseLog(host.out).cps.size >= maxCheckpoints) { partial = true; break; }
+    if (Date.now() - t0 > (opts.roundMs || 900000)) throw new Error(name + ': the round did not end in time');
+    await sleep(1000);
+  }
   const seconds = (Date.now() - t0) / 1000;
   for (const s of scripts) await s.stop();
-  const exitCode = await withTimeout(host.exited, 60000, 'the native host to finish');
-  // The native host leaves when its rounds are done: a peer is on the scoreboard, or has been told the host left (HOST_CLOSED = 4).
-  for (const p of pages) {
-    const st = await netState(p), inf = await info(p);
-    check(st === 4 || (st === 5 && inf.endReason === 4), p.__name + ': the round ended cleanly (scoreboard, or the host said it left)', 'state ' + st + ', end reason ' + inf.endReason);
+  let exitCode = null;
+  if (partial) {
+    console.log('  ' + name + ': stopped after ' + parseLog(host.out).cps.size + ' checkpoints (the round was still going)');
+    stopNative(host);
+  } else {
+    exitCode = await withTimeout(host.exited, 60000, 'the native host to finish');
+    // The native host leaves when its rounds are done: a peer is on the scoreboard, or has been told the host left (HOST_CLOSED = 4).
+    for (const p of pages) {
+      const st = await netState(p), inf = await info(p);
+      check(st === 4 || (st === 5 && inf.endReason === 4), p.__name + ': the round ended cleanly (scoreboard, or the host said it left)', 'state ' + st + ', end reason ' + inf.endReason);
+    }
+    check(exitCode === 0, name + ': the native host played the round and exited 0', exitCode + ' ' + host.err.slice(-3).join(' | '));
   }
-  check(exitCode === 0, name + ': the native host played the round and exited 0', exitCode + ' ' + host.err.slice(-3).join(' | '));
   const machines = [{ name: 'native', log: parseLog(host.out) }];
   for (const p of pages) machines.push({ name: p.__tag, log: await parseBrowserLog(p) });
-  compareMachines(machines, name, 10);
-  const winner = machines[0].log.over;
+  if (partial) comparePrefix(machines, name, 100); else compareMachines(machines, name, 10);
+  const winner = machines[0].log.over || '(not finished)';
   console.log('  ' + name + ': ' + winner + ' (' + machines[0].log.cps.size + ' checkpoints, ' + seconds.toFixed(1) + ' s)');
   const infos = [];
   for (const p of pages) infos.push(await info(p));
@@ -407,7 +433,7 @@ const stopNative = (n) => { try { n.child.kill('SIGTERM'); } catch (e) { /* gone
 // round fast. The tabs are NOT really throttled here (the browser still delivers animation frames); "background" is the real thing.
 scenarios.hidden = async (ctx) => {
   console.log('hidden: two tabs that report themselves hidden finish an AI-heavy round, stepped from network events');
-  const r = await playRound(ctx, 'hidden', { transport: 'ws', seed: 2, config: LONG_CONFIG, hidden: true, keys: false, nativeTickMs: 4, roundMs: 300000 });
+  const r = await playRound(ctx, 'hidden', { transport: 'ws', seed: 2, config: LONG_CONFIG, hidden: true, keys: false, nativeTickMs: 4, roundMs: 300000, maxCheckpoints: 100000 });
   const ticks = +/over at tick (\d+)/.exec(r.machines[0].log.over)[1];
   console.log('  hidden: ' + ticks + ' ticks in ' + r.seconds.toFixed(1) + ' s = ' + (ticks / r.seconds).toFixed(0) + ' ticks a second (nominal is 30)');
   check(ticks / r.seconds > 100, 'hidden tabs are not paced by a clock: they step whatever the host confirms (the native host at 4 ms a tick set the pace)', (ticks / r.seconds).toFixed(0));
