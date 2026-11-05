@@ -282,7 +282,8 @@ if(BITRIOT_NETPLAY)
   add_library(bitriot_net STATIC
     ./src/net/NetProtocol.cpp
     ./src/net/LockstepSession.cpp
-    ./src/net/NetMatch.cpp)
+    ./src/net/NetMatch.cpp
+    ./src/net/LobbyModel.cpp)
   target_link_libraries(bitriot_net PUBLIC bitriot_sim vnet::vnet)
   target_include_directories(bitriot_net PUBLIC ${PROJECT_SOURCE_DIR}/src/net)
   target_compile_definitions(bitriot_net PUBLIC BITRIOT_NETPLAY=1)
