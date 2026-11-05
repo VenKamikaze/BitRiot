@@ -658,6 +658,19 @@ TEST(LockstepSession, AHelloOfAnotherProtocolVersionIsRejectedBeforeItsBodyIsRea
   EXPECT_EQ(c.machine(0).s->peerCount(), 0);
 }
 
+TEST(LockstepSession, AVersionOneHelloIsRefusedWithRejectVersion)
+{
+  // Version 2 (brief 08) changed LOBBY, added READY: a build still speaking version 1 must be told so, with the
+  // host's own protocol number, rather than join and then misread LOBBY. The v1 HELLO layout is the same as v2's, so
+  // this is the exact datagram an old build sends.
+  Cluster c(1);
+  const netplay::RejectMsg rj = expectReject(rawHello(c, 1, 0xB111D, 0xDA7A));
+  EXPECT_EQ(rj.reason, netplay::REJECT_VERSION);
+  EXPECT_EQ(rj.hostProtocol, 2);
+  EXPECT_NE(rj.text.find("protocol version 1"), std::string::npos) << rj.text;
+  EXPECT_EQ(c.machine(0).s->peerCount(), 0);
+}
+
 TEST(LockstepSession, AMismatchedBuildIdIsRejectedEvenWithTheSameProtocolVersion)
 {
   Cluster c(2);
@@ -1177,4 +1190,576 @@ TEST(LockstepSession, StrayAndForgedPacketsChangeNothing)
   expectModel(c.machine(0), 120, ownersOf(c.machine(0)));
   EXPECT_EQ(c.machine(0).s->peerCount(), 2);
   EXPECT_GE(c.machine(0).s->stats().badPackets, 4u);
+}
+
+// -- ready flags, back to the lobby, removing a peer (protocol version 2, brief 08) ------------------------------------
+
+namespace
+{
+ClusterOptions readyOptions(const std::string& impair = "")
+{
+  ClusterOptions o;
+  o.session.requireReady = true;
+  o.impair = impair;
+  return o;
+}
+
+// The ready flag of machine `id` as machine `viewer` shows it.
+bool readyAsSeenBy(Cluster& c, int viewer, int id)
+{
+  for (const netplay::LobbyEntry& e : c.machine(viewer).s->lobby().peers)
+  {
+    if (e.id == id) return e.ready;
+  }
+  return false;
+}
+} // namespace
+
+TEST(LockstepLobby, StartWaitsForEveryPeerToBeReadyAndSaysWhy)
+{
+  Cluster c(3, readyOptions());
+  LockstepSession& host = *c.machine(0).s;
+  EXPECT_EQ(host.notReadyCount(), 2);
+  EXPECT_FALSE(host.canStartRound());
+  std::string error;
+  EXPECT_FALSE(host.startRound(1, &error));
+  EXPECT_NE(error.find("waiting for 2 players to be ready"), std::string::npos) << error;
+
+  c.machine(1).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return host.notReadyCount() == 1; }, 2000));
+  EXPECT_FALSE(host.canStartRound());
+  EXPECT_FALSE(host.startRound(1, &error));
+  EXPECT_NE(error.find("waiting for 1 player to be ready"), std::string::npos) << error;
+  // Everybody sees who is ready: the host always is, peer 1 now, peer 2 not.
+  ASSERT_TRUE(c.runUntil([&] { return readyAsSeenBy(c, 2, 1); }, 2000));
+  EXPECT_TRUE(readyAsSeenBy(c, 2, 0));
+  EXPECT_FALSE(readyAsSeenBy(c, 1, 2));
+  EXPECT_EQ(c.machine(2).s->notReadyCount(), 1);
+
+  c.machine(2).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return host.canStartRound(); }, 2000));
+  EXPECT_EQ(host.notReadyCount(), 0);
+  ASSERT_TRUE(c.startRound(1, 0, &error)) << error;
+}
+
+TEST(LockstepLobby, UnreadyingTakesTheStartAwayAgain)
+{
+  Cluster c(2, readyOptions());
+  LockstepSession& host = *c.machine(0).s;
+  c.machine(1).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return host.canStartRound(); }, 2000));
+  c.machine(1).s->setReady(false);
+  ASSERT_TRUE(c.runUntil([&] { return !host.canStartRound(); }, 2000));
+  EXPECT_FALSE(readyAsSeenBy(c, 1, 1) && host.canStartRound());
+  ASSERT_TRUE(c.runUntil([&] { return !readyAsSeenBy(c, 1, 1); }, 2000));
+}
+
+TEST(LockstepLobby, ReadyIsRepeatedUntilTheHostShowsItEvenUnderHeavyLoss)
+{
+  // Eight networks that each lose 60% of everything, a different 60% each: some first answers are lost, and each must still arrive.
+  for (uint64_t seed = 1; seed <= 8; seed++)
+  {
+    SCOPED_TRACE("seed " + std::to_string(seed));
+    ClusterOptions o = readyOptions("loss=60");
+    o.seedBase = seed * 1000;
+    Cluster c(2, o);
+    if (c.machine(1).s->state() != LockstepSession::LOBBY) continue;   // the join itself did not get through in this network
+    LockstepSession& host = *c.machine(0).s;
+    c.machine(1).s->setReady(true);
+    ASSERT_TRUE(c.runUntil([&] { return host.canStartRound(); }, 30000));
+    EXPECT_TRUE(c.runUntil([&] { return readyAsSeenBy(c, 1, 1); }, 30000));   // and the LOBBY that says so gets through
+  }
+}
+
+TEST(LockstepLobby, WithoutRequireReadyTheLobbyStartsAsBefore)
+{
+  // The headless runner and brief 07's tests never send READY.
+  Cluster c(3);
+  EXPECT_TRUE(c.machine(0).s->canStartRound());
+  std::string error;
+  EXPECT_TRUE(c.startRound(1, 0, &error)) << error;
+}
+
+TEST(LockstepLobby, AStaleOrReplayedReadyAnswerCannotUndoANewerOne)
+{
+  Cluster c(2, readyOptions());
+  LockstepSession& host = *c.machine(0).s;
+  // A raw peer cannot be crafted without the host's session id and the peer's address, so replay through the real
+  // peer: ready, unready, ready again, quickly. The host ends up with the last answer whatever order it saw them.
+  c.machine(1).s->setReady(true);
+  c.run(5);
+  c.machine(1).s->setReady(false);
+  c.run(5);
+  c.machine(1).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return host.canStartRound(); }, 3000));
+  c.run(3000);
+  EXPECT_TRUE(host.canStartRound());
+  EXPECT_TRUE(readyAsSeenBy(c, 1, 1));
+}
+
+TEST(LockstepLobby, ReadyIsForgottenWhenARoundStarts)
+{
+  Cluster c(2, readyOptions());
+  c.machine(1).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 2000));
+  ASSERT_TRUE(c.startRound(1, 40));
+  EXPECT_FALSE(c.machine(1).s->wantsReady());
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(40); }, 20000));
+  // Between rounds nobody has to be ready again: the next round may start at once.
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 5000));
+  std::string error;
+  ASSERT_TRUE(c.startRound(2, 40, &error)) << error;
+}
+
+TEST(LockstepLobby, ReadyAnswersOutsideTheLobbyAreIgnored)
+{
+  Cluster c(2, readyOptions());
+  c.machine(1).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 2000));
+  ASSERT_TRUE(c.startRound(1, 0));
+  // A running round: setReady() on the peer is remembered, nothing is sent and the session carries on.
+  c.machine(1).s->setReady(true);
+  c.run(2000);
+  EXPECT_EQ(c.machine(0).s->state(), LockstepSession::RUNNING);
+  EXPECT_EQ(c.machine(0).s->stats().badPackets, 0u);
+}
+
+TEST(LockstepLobby, TheHostCanGoBackToTheLobbyAndPeersFollow)
+{
+  ClusterOptions o = readyOptions();
+  o.delayMs = 20;
+  Cluster c(3, o);
+  c.machine(1).s->setReady(true);
+  c.machine(2).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 3000));
+  ASSERT_TRUE(c.startRound(1, 60));
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(60); }, 20000));
+  LockstepSession& host = *c.machine(0).s;
+  ASSERT_TRUE(c.runUntil([&] { return host.state() == LockstepSession::BETWEEN_ROUNDS && host.canStartRound(); }, 5000));
+
+  // The scoreboard phase is announced as such.
+  EXPECT_EQ(c.machine(1).s->lobby().phase, netplay::PHASE_BETWEEN_ROUNDS);
+  ASSERT_TRUE(host.returnToLobby());
+  EXPECT_EQ(host.state(), LockstepSession::LOBBY);
+  EXPECT_EQ(host.lobby().phase, netplay::PHASE_LOBBY);
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(1).s->state() == LockstepSession::LOBBY && c.machine(2).s->state() == LockstepSession::LOBBY; }, 5000));
+  EXPECT_EQ(c.machine(1).s->lobby().phase, netplay::PHASE_LOBBY);
+
+  // Back in the lobby everybody has to say ready again; nobody carried it over.
+  EXPECT_EQ(host.notReadyCount(), 2);
+  EXPECT_FALSE(host.canStartRound());
+  EXPECT_FALSE(c.machine(1).s->wantsReady());
+  c.machine(1).s->setReady(true);
+  c.machine(2).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return host.canStartRound(); }, 3000));
+
+  // The lobby has its own settings again, and a second round plays on identical inputs.
+  netplay::LobbySettings ls = host.lobby().settings;
+  ls.totalSlots = 4;
+  ls.teams = {0, 0, 1, 1};
+  host.setLobbySettings(ls);
+  std::string error;
+  ASSERT_TRUE(c.startRound(2, 60, &error)) << error;
+  EXPECT_EQ(c.machine(1).round.config.numPlayers(), 4);
+  EXPECT_EQ(c.machine(1).round.config.slots[1].team, 0);
+  EXPECT_EQ(c.machine(1).round.config.slots[3].team, 1);
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(60); }, 20000));
+  expectIdentical(c, {0, 1, 2}, 60);
+}
+
+TEST(LockstepLobby, BackToTheLobbyWaitsForTheLastTickLikeTheNextRound)
+{
+  ClusterOptions o = readyOptions();
+  o.delayMs = 100;
+  Cluster c(2, o);
+  c.machine(1).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 3000));
+  ASSERT_TRUE(c.startRound(1, 50));
+  LockstepSession& host = *c.machine(0).s;
+  EXPECT_FALSE(host.returnToLobby()) << "a round is running";
+  // The moment the host has stepped the last tick, a peer 100 ms away cannot yet have said it holds it.
+  ASSERT_TRUE(c.runUntil([&] { return host.state() == LockstepSession::BETWEEN_ROUNDS; }, 60000));
+  EXPECT_FALSE(host.canStartRound());
+  EXPECT_FALSE(host.returnToLobby());
+  EXPECT_EQ(host.state(), LockstepSession::BETWEEN_ROUNDS);
+  ASSERT_TRUE(c.runUntil([&] { return host.canStartRound(); }, 5000));
+  EXPECT_TRUE(host.returnToLobby());
+}
+
+TEST(LockstepLobby, OnlyTheHostGoesBackAndOnlyFromTheScoreboard)
+{
+  Cluster c(2);
+  EXPECT_FALSE(c.machine(0).s->returnToLobby()) << "already in the lobby";
+  EXPECT_FALSE(c.machine(1).s->returnToLobby()) << "a peer cannot";
+  c.machine(0).s->setReady(true);   // a host has no ready flag to set
+  EXPECT_FALSE(c.machine(0).s->wantsReady());
+}
+
+TEST(LockstepLobby, TheHostCanRemoveAPeerAndItIsToldWhy)
+{
+  Cluster c(3, readyOptions());
+  LockstepSession& host = *c.machine(0).s;
+  ASSERT_EQ(host.peerCount(), 2);
+  EXPECT_FALSE(host.kick(0)) << "the host cannot remove itself";
+  EXPECT_FALSE(host.kick(5)) << "nobody there";
+  EXPECT_TRUE(host.kick(1));
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(1).s->ended(); }, 3000));
+  EXPECT_EQ(c.machine(1).s->endReason(), LockstepSession::END_REMOVED);
+  EXPECT_NE(c.machine(1).s->endText().find("removed"), std::string::npos) << c.machine(1).s->endText();
+  EXPECT_EQ(host.peerCount(), 1);
+  // The lobby view of the others no longer lists it, and the slots were dealt again.
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(2).s->lobby().peers.size() == 2; }, 3000));
+  EXPECT_EQ(c.machine(2).s->lobby().slots[1].owner, 2);
+  // It is not banned: it may join again (a fresh session).
+  Machine& again = c.addMachine(1);
+  ASSERT_TRUE(c.runUntil([&] { return again.s->state() == LockstepSession::LOBBY; }, 3000));
+  EXPECT_EQ(host.peerCount(), 2);
+}
+
+TEST(LockstepLobby, ARemovedPeerWhoseLeavePacketsWereAllLostIsStillToldWhy)
+{
+  Cluster c(2, readyOptions());
+  c.impair(0, "loss=100");   // the host's three LEAVEs go nowhere
+  ASSERT_TRUE(c.machine(0).s->kick(1));
+  c.run(50);
+  c.impair(0, "");
+  EXPECT_FALSE(c.machine(1).s->ended());
+  // The peer is still talking (its keepalives): the host answers with the reason, not with silence.
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(1).s->ended(); }, 3000));
+  EXPECT_EQ(c.machine(1).s->endReason(), LockstepSession::END_REMOVED);
+  EXPECT_EQ(c.machine(0).s->peerCount(), 0);
+}
+
+TEST(LockstepLobby, ARoundInProgressCannotKickAndANewJoinerBetweenRoundsHasToBeReadyOnlyInTheLobby)
+{
+  Cluster c(2, readyOptions());
+  c.machine(1).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 3000));
+  ASSERT_TRUE(c.startRound(1, 0));
+  EXPECT_FALSE(c.machine(0).s->kick(1)) << "no kicking in a running round";
+  EXPECT_EQ(c.machine(0).s->peerCount(), 1);
+}
+
+TEST(LockstepLobby, ATeamChosenForMoreSlotsThanThereAreIsClampedAndTheRoundStillStarts)
+{
+  Cluster c(2);
+  netplay::LobbySettings ls;
+  ls.totalSlots = 4;
+  ls.teams = {3, 3, 2, 2};
+  c.setLobby(ls);
+  c.run(100);
+  EXPECT_EQ(c.machine(1).s->lobby().slots.size(), 4u);
+  EXPECT_EQ(c.machine(1).s->lobby().slots[0].team, 3);
+  // The host takes the slot count down to two: the old teams 3 and 2 are not teams of a two-player round.
+  ls.totalSlots = 2;
+  c.setLobby(ls);
+  c.run(100);
+  ASSERT_EQ(c.machine(1).s->lobby().slots.size(), 2u);
+  EXPECT_EQ(c.machine(1).s->lobby().slots[0].team, 0) << "falls back to the slot's own number";
+  EXPECT_EQ(c.machine(1).s->lobby().slots[1].team, 1);
+  std::string error;
+  ASSERT_TRUE(c.startRound(1, 0, &error)) << error;
+  EXPECT_EQ(c.machine(1).round.config.slots[0].team, 0);
+}
+
+TEST(LockstepLobby, CannotStartBecauseSaysWhy)
+{
+  Cluster c(2, readyOptions());
+  LockstepSession& host = *c.machine(0).s;
+  EXPECT_EQ(host.cannotStartBecause(), "waiting for 1 player to be ready");
+  EXPECT_EQ(c.machine(1).s->cannotStartBecause(), "only the host starts a round");
+  c.machine(1).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return host.canStartRound(); }, 2000));
+  EXPECT_EQ(host.cannotStartBecause(), "");
+  ASSERT_TRUE(c.startRound(1, 0));
+  EXPECT_EQ(host.cannotStartBecause(), "a round is running");
+}
+
+// A peer written by hand on a raw socket (the way the hostile-peer tests are): it joins properly, then sends exactly the
+// READY datagrams a test wants, in any order, for any round.
+namespace
+{
+struct RawPeer
+{
+  Cluster& c;
+  Cluster::Raw raw;
+  uint8_t id = netplay::NO_PEER;
+  uint32_t session = 0;
+  netplay::LobbyMsg lastLobby;
+  bool haveLobby = false;
+
+  explicit RawPeer(Cluster& cluster) : c(cluster), raw(cluster.openRaw())
+  {
+    netplay::Writer w;
+    netplay::Header h;
+    h.type = netplay::MSG_HELLO;
+    netplay::writeHeader(w, h);
+    netplay::HelloMsg m;
+    m.buildId = 0xB111D;
+    m.dataHash = 0xDA7A;
+    m.nonce = 99;
+    m.name = "rawpeer";
+    netplay::encode(w, m);
+    vnet_sendto(raw.v, raw.sock, w.bytes().data(), w.bytes().size(), &c.hostAddr());
+    c.run(300);
+    drain();
+  }
+
+  void drain()
+  {
+    uint8_t buf[VNET_MAX_DATAGRAM];
+    vnet_addr from;
+    for (int n; (n = vnet_recvfrom(raw.v, raw.sock, buf, sizeof(buf), &from)) > 0;)
+    {
+      netplay::Reader r(buf, (size_t) n);
+      netplay::Header h;
+      if (!netplay::readHeader(r, h)) continue;
+      if (h.type == netplay::MSG_WELCOME)
+      {
+        netplay::WelcomeMsg w;
+        if (netplay::decode(r, w)) { id = w.peerId; session = h.session; }
+      }
+      else if (h.type == netplay::MSG_LOBBY)
+      {
+        netplay::LobbyMsg l;
+        if (netplay::decode(r, l)) { lastLobby = l; haveLobby = true; }
+      }
+    }
+  }
+
+  void ready(uint16_t round, uint32_t seq, bool value)
+  {
+    netplay::Writer w;
+    netplay::Header h;
+    h.type = netplay::MSG_READY;
+    h.sender = id;
+    h.session = session;
+    netplay::writeHeader(w, h);
+    netplay::ReadyMsg m;
+    m.round = round;
+    m.seq = seq;
+    m.ready = value;
+    netplay::encode(w, m);
+    vnet_sendto(raw.v, raw.sock, w.bytes().data(), w.bytes().size(), &c.hostAddr());
+    c.run(50);
+  }
+
+  // The host's own list: is this peer ready (from the host's view, which is the LOBBY it sent last)?
+  bool hostShowsReady()
+  {
+    c.run(1200);   // a LOBBY goes out every 500 ms in the lobby, every second in a round
+    drain();
+    for (const netplay::LobbyPeer& p : lastLobby.peers)
+    {
+      if (p.id == id) return p.ready;
+    }
+    return false;
+  }
+};
+} // namespace
+
+TEST(LockstepLobby, TheNewestReadyAnswerWinsWhateverOrderTheyArriveIn)
+{
+  Cluster c(1, readyOptions());
+  RawPeer p(c);
+  ASSERT_NE(p.id, netplay::NO_PEER);
+  ASSERT_TRUE(p.haveLobby || (p.drain(), true));
+  const uint16_t round = (uint16_t) (c.machine(0).s->round() + 1);
+  p.ready(round, 5, true);
+  p.ready(round, 4, false);   // older: it was overtaken in the network
+  EXPECT_TRUE(p.hostShowsReady());
+  p.ready(round, 5, false);   // a duplicate of the same number does not count as newer
+  EXPECT_TRUE(p.hostShowsReady());
+  p.ready(round, 6, false);
+  EXPECT_FALSE(p.hostShowsReady());
+}
+
+TEST(LockstepLobby, AReadyForAnotherRoundIsIgnored)
+{
+  Cluster c(1, readyOptions());
+  RawPeer p(c);
+  ASSERT_NE(p.id, netplay::NO_PEER);
+  const uint16_t round = (uint16_t) (c.machine(0).s->round() + 1);
+  p.ready((uint16_t) (round + 1), 1, true);   // for a later round
+  p.ready((uint16_t) (round + 7), 2, true);
+  p.ready(0, 3, true);                          // for none
+  EXPECT_FALSE(p.hostShowsReady());
+  EXPECT_EQ(c.machine(0).s->notReadyCount(), 1);
+  p.ready(round, 4, true);
+  EXPECT_TRUE(p.hostShowsReady());
+}
+
+TEST(LockstepLobby, AReadyDuringARoundIsIgnoredEvenForTheNextRoundsNumber)
+{
+  Cluster c(1, readyOptions());
+  RawPeer p(c);
+  ASSERT_NE(p.id, netplay::NO_PEER);
+  const uint16_t round = (uint16_t) (c.machine(0).s->round() + 1);
+  p.ready(round, 1, true);
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 2000));
+  std::string error;
+  ASSERT_TRUE(c.machine(0).s->startRound(1, &error)) << error;
+  ASSERT_EQ(c.machine(0).s->state(), LockstepSession::RUNNING);
+  p.ready((uint16_t) (c.machine(0).s->round() + 1), 2, true);   // the number a lobby after this round would have
+  p.ready(c.machine(0).s->round(), 3, true);
+  EXPECT_FALSE(p.hostShowsReady()) << "the round started: nobody is ready for anything until the lobby is back";
+}
+
+TEST(LockstepLobby, AMachineThatJoinedBetweenRoundsCannotSayReadyUntilTheHostIsBackInTheLobby)
+{
+  ClusterOptions o = readyOptions();
+  o.delayMs = 20;
+  Cluster c(2, o);
+  c.machine(1).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 3000));
+  ASSERT_TRUE(c.startRound(1, 40));
+  LockstepSession& host = *c.machine(0).s;
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(40) && host.canStartRound(); }, 60000));
+  Machine& late = c.addMachine(1);
+  ASSERT_TRUE(c.runUntil([&] { return late.s->state() == LockstepSession::LOBBY; }, 5000));
+  ASSERT_TRUE(c.runUntil([&] { return late.s->lobby().phase == netplay::PHASE_BETWEEN_ROUNDS; }, 3000));
+  late.s->setReady(true);
+  EXPECT_FALSE(late.s->wantsReady()) << "the host's lobby is not open";
+  ASSERT_TRUE(host.returnToLobby());
+  ASSERT_TRUE(c.runUntil([&] { return late.s->lobby().phase == netplay::PHASE_LOBBY; }, 3000));
+  late.s->setReady(true);
+  EXPECT_TRUE(late.s->wantsReady());
+  c.machine(1).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return host.canStartRound(); }, 3000));
+}
+
+// A host written by hand on a raw socket, and a real peer session that joins it. With it a test can put any datagram into the
+// peer that the host's own address would send: the peer only believes that address.
+namespace
+{
+struct FakeHost
+{
+  vnet_loopback_network* net;
+  vnet* hv;
+  vnet* pv;
+  int sock;
+  vnet_addr peerAddr;
+  std::unique_ptr<LockstepSession> peer;
+  uint32_t session = 0x5E55;
+
+  FakeHost()
+  {
+    net = vnet_loopback_network_create();
+    auto make = [&]() {
+      vnet_config cfg;
+      vnet_config_init(&cfg);
+      cfg.backend = VNET_BACKEND_LOOPBACK;
+      cfg.loopback_network = net;
+      cfg.ignore_env = 1;
+      int err = 0;
+      return vnet_create(&cfg, &err);
+    };
+    hv = make();
+    pv = make();
+    sock = vnet_open(hv, 0);
+    vnet_addr local;
+    vnet_local_addr(hv, sock, &local);
+    char text[64];
+    std::snprintf(text, sizeof(text), "127.1.0.1:%u", (unsigned) local.port);
+    vnet_addr hostAddr;
+    vnet_resolve(pv, text, &hostAddr);
+    SessionOptions so;
+    so.buildId = 0xB111D;
+    so.dataHash = 0xDA7A;
+    so.name = "peer";
+    so.randomSeed = 5;
+    std::string error;
+    peer = LockstepSession::join(pv, hostAddr, so, &error);
+  }
+  ~FakeHost()
+  {
+    peer.reset();
+    vnet_destroy(pv);
+    vnet_destroy(hv);
+    vnet_loopback_network_destroy(net);
+  }
+  void run(int ms)
+  {
+    for (int i = 0; i < ms; i++)
+    {
+      vnet_loopback_network_step(net, 1);
+      peer->pump();
+    }
+  }
+  template <typename Msg> void send(uint8_t type, const Msg& m)
+  {
+    netplay::Writer w;
+    netplay::Header h;
+    h.type = type;
+    h.sender = netplay::HOST_ID;
+    h.session = session;
+    netplay::writeHeader(w, h);
+    netplay::encode(w, m);
+    vnet_sendto(hv, sock, w.bytes().data(), w.bytes().size(), &peerAddr);
+  }
+  // Answers the peer's HELLO and starts round 1 for it.
+  bool welcomeAndStart()
+  {
+    uint8_t buf[VNET_MAX_DATAGRAM];
+    uint32_t nonce = 0;
+    for (int i = 0; i < 2000 && nonce == 0; i++)
+    {
+      run(1);
+      const int n = vnet_recvfrom(hv, sock, buf, sizeof(buf), &peerAddr);
+      netplay::Reader r(buf, n > 0 ? (size_t) n : 0);
+      netplay::Header h;
+      netplay::HelloMsg hello;
+      if (n > 0 && netplay::readHeader(r, h) && h.type == netplay::MSG_HELLO && netplay::decode(r, hello)) nonce = hello.nonce;
+    }
+    if (nonce == 0) return false;
+    netplay::WelcomeMsg w;
+    w.nonce = nonce;
+    w.peerId = 1;
+    w.slotMask = 2;
+    send(netplay::MSG_WELCOME, w);
+    run(50);
+    netplay::StartMsg s;
+    s.round = 1;
+    s.seed = 7;
+    s.mapWidth = 13;
+    s.mapHeight = 11;
+    s.slots = {{0, 0, false}, {1, 1, false}};
+    s.delay = 2;
+    send(netplay::MSG_START, s);
+    run(50);
+    return peer->state() == LockstepSession::RUNNING;
+  }
+  void lobby(uint8_t phase, uint16_t round)
+  {
+    netplay::LobbyMsg l;
+    l.phase = phase;
+    l.round = round;
+    l.slots = {{0, 0}, {1, 1}};
+    netplay::LobbyPeer a, b;
+    a.id = 0; a.slotMask = 1; a.name = "host"; a.ready = true;
+    b.id = 1; b.slotMask = 2; b.name = "peer";
+    l.peers = {a, b};
+    send(netplay::MSG_LOBBY, l);
+    run(50);
+  }
+};
+}
+
+TEST(LockstepLobby, APeerOnTheScoreboardFollowsOnlyALobbyAnnouncedForTheNextRound)
+{
+  FakeHost f;
+  RoundStart rs;
+  ASSERT_TRUE(f.welcomeAndStart());
+  ASSERT_TRUE(f.peer->takeRoundStart(rs));
+  f.peer->roundFinished();
+  ASSERT_EQ(f.peer->state(), LockstepSession::BETWEEN_ROUNDS);   // round 1 is over here
+  // A lobby packet of another round (an old one that arrived late, or a hostile one) must not pull it off the scoreboard.
+  f.lobby(netplay::PHASE_LOBBY, 1);
+  f.lobby(netplay::PHASE_LOBBY, 5);
+  f.lobby(netplay::PHASE_LOBBY, 0);
+  EXPECT_EQ(f.peer->state(), LockstepSession::BETWEEN_ROUNDS);
+  f.lobby(netplay::PHASE_BETWEEN_ROUNDS, 2);   // the right round, but the host is not in its lobby
+  EXPECT_EQ(f.peer->state(), LockstepSession::BETWEEN_ROUNDS);
+  f.lobby(netplay::PHASE_LOBBY, 2);            // the lobby after round 1
+  EXPECT_EQ(f.peer->state(), LockstepSession::LOBBY);
 }

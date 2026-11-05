@@ -1,6 +1,6 @@
-# Bit Riot lockstep protocol (version 1)
+# Bit Riot lockstep protocol (version 2)
 
-What goes over the wire in native netplay (brief 07), and the rules each side follows. The code is `src/net/`: [`NetProtocol.h`](../../src/net/NetProtocol.h) is every message (encoder, decoder, sizes), [`LockstepSession.h`](../../src/net/LockstepSession.h) is the behaviour, [`NetMatch.h`](../../src/net/NetMatch.h) joins a session to a `Simulation`. This page is what a second implementation (the browser build, brief 12; a tool in another language) needs; where it and the code disagree, the tests are the arbiter (`tests/NetProtocolTest.cpp`, `tests/LockstepSessionTest.cpp`, `tests/NetplayProcessTest.cpp`).
+What goes over the wire in native netplay (brief 07; version 2 is brief 08), and the rules each side follows. The code is `src/net/`: [`NetProtocol.h`](../../src/net/NetProtocol.h) is every message (encoder, decoder, sizes), [`LockstepSession.h`](../../src/net/LockstepSession.h) is the behaviour, [`NetMatch.h`](../../src/net/NetMatch.h) joins a session to a `Simulation`. This page is what a second implementation (the browser build, brief 12; a tool in another language) needs; where it and the code disagree, the tests are the arbiter (`tests/NetProtocolTest.cpp`, `tests/LockstepSessionTest.cpp`, `tests/NetplayProcessTest.cpp`).
 
 The settled decisions behind it are in [`README.md`](README.md): D1 (input-only lockstep), D2 (star topology, the host decides), D7 (every packet repeats what is unacknowledged), D8 (input delay, no rollback).
 
@@ -25,7 +25,7 @@ A datagram is dropped (and counted in `Stats::badPackets`; it does **not** count
 
 ## Versioning
 
-* `PROTOCOL_VERSION` is **1**. It is a `u16`, the **first field of `HELLO`'s body**, so that a host can read the version of any `HELLO` whatever the rest of it looks like.
+* `PROTOCOL_VERSION` is **2**. (Version 2, brief 08, added the `READY` message, the ready byte of each `LOBBY` peer and `LEAVE` reason 4. A version-1 `HELLO` is answered with `REJECT_VERSION` like any other version, and the text names both numbers.) It is a `u16`, the **first field of `HELLO`'s body**, so that a host can read the version of any `HELLO` whatever the rest of it looks like.
 * A host that receives a `HELLO` of another version answers `REJECT` (`REJECT_VERSION`, nonce 0) **before it reads the rest of the body**. So a later version may change every message except the 8-byte header and the first two bytes of `HELLO`.
 * Bump the version whenever the layout or the meaning of anything after the header changes.
 * Separately from the protocol, **the build id and the data hash must match** (below). A mismatch is refused even when the protocol version is the same, because the same protocol between two different simulations desyncs within seconds.
@@ -68,9 +68,9 @@ The checks run in this order: version, build id, data hash, then (for a `HELLO` 
 
 ### 4 LOBBY (host to every peer, every 500 ms in the lobby and between rounds, every second while a round runs, and at once when it changes)
 
-`u8 phase (0 lobby, 1 running, 2 between rounds), u16 round (the next round's number, or the running one), u8 mapWidth, u8 mapHeight, u8 blockPercentage, u8 npcSpawner, u8 nSlots (0..6), nSlots x (u8 owner, u8 team), u8 nPeers (0..6), nPeers x (u8 id, u8 slotMask, u16 rttMs (0xFFFF = not measured), str name)`
+`u8 phase (0 lobby, 1 running, 2 between rounds), u16 round (the next round's number, or the running one), u8 mapWidth, u8 mapHeight, u8 blockPercentage, u8 npcSpawner, u8 nSlots (0..6), nSlots x (u8 owner, u8 team), u8 nPeers (0..6), nPeers x (u8 id, u8 slotMask, u16 rttMs (0xFFFF = not measured), u8 ready (0 or 1), str name)`
 
-`owner` is the peer id that plays the slot, `0xFF` = a computer player. The host (id 0) is in the peer list. For display only: it is also the host's liveness signal in the lobby.
+`owner` is the peer id that plays the slot, `0xFF` = a computer player. The host (id 0) is in the peer list, and is always `ready`; a peer's `ready` is the answer the host last applied from its `READY`. Everything here is for display and for the peers' own bookkeeping: it is also the host's liveness signal in the lobby. `phase` 0 after `phase` 2 with the same `round` as the scoreboard's next one means the host went **back to the lobby** (below): a peer in its own `BETWEEN_ROUNDS` state follows it into the lobby.
 
 ### 5 START (host to every peer; repeated every 80 ms until that peer's first INPUT of the round arrives)
 
@@ -118,9 +118,22 @@ Sent when nothing else went to that machine for 250 ms in states where no round 
 
 ### 13 LEAVE
 
-`u8 reason`: 0 the player quit, 1 the host is closing the session, 2 stopped because of a desync, 3 (host to a peer) you were silent too long and were dropped.
+`u8 reason`: 0 the player quit, 1 the host is closing the session, 2 stopped because of a desync, 3 (host to a peer) you were silent too long and were dropped, 4 (host to a peer, version 2) the host removed you from the lobby. A reason above 4 does not decode.
 
 Sent three times (the game and `bitriot_headless` then keep polling for up to 250 ms so that, under `VNET_IMPAIR` latency, they are on the wire before the context is destroyed; otherwise the others would fall back to the 10 s timeout). From a peer: the host turns its slots into bots. From the host: every peer ends its session. A peer that has been dropped but keeps talking gets a `LEAVE` (kicked) back, at most once a second.
+
+### 14 READY (peer to host, version 2)
+
+`u16 round, u32 seq, u8 ready (0 or 1)`
+
+"I am / am not ready to start." Sent in the lobby only. `round` is the round the next `START` will be (the `round` of the last `LOBBY` the peer saw); the host applies it only in its own lobby and only for that round, so an answer that was in flight when a round started cannot be applied to the lobby after it. `seq` is a counter of the peer's own, starting at 1 for its first answer and never reset in a session; the host applies an answer only if its `seq` is higher than the last one it applied, so reordering and duplicates cannot undo a newer answer. It is a **state**, not an event: the peer repeats it every ~120 ms until the `LOBBY` it receives shows the host's view equal to what it wants. A peer is not ready when it joins, when a round starts, and when it comes back to the lobby; the answer is never sticky across those.
+
+## The lobby, ready and going back to it (version 2)
+
+* The host's `canStartRound()` in the lobby is false while a peer has not said it is ready, **if the host asked for it** (`SessionOptions::requireReady`; the game does, `bitriot_headless host` does not, so its tests and the multi-process test are unchanged). A host alone in its lobby may always start. Ready flags do not reset when the host changes the settings; the lobby shows the settings live and the peers' ready state stays as they set it.
+* **Between rounds nobody is asked to be ready.** The roster is the one that played; the host either starts the next round (as in version 1) or **goes back to the lobby** (`LockstepSession::returnToLobby()`), under the same conditions as the next round (every peer holds the last tick and has reported the hash of the last checkpoint). That sets the host's state to the lobby, clears every ready flag and announces `phase 0` with the next round's number. Each peer follows when it has finished its own round (state `BETWEEN_ROUNDS`) and sees that `LOBBY`; a peer still stepping its last ticks follows a moment later. In the lobby settings can change, machines can join or leave, and everybody says ready again.
+* **Removing a peer.** In the lobby (not in a round) the host can remove a peer: it sends `LEAVE` reason 4 (three times, like any leave), forgets the peer and deals the slots again. The peer ends with `END_REMOVED`. There is no ban: the same machine may send a new `HELLO`. If all three `LEAVE`s are lost, the host remembers the removed address for 30 s and answers any packet from it (at most one a second) with `LEAVE` reason 4, so the peer still ends with the right reason and not with a host timeout.
+* **A joining `bitriot_headless` says ready by itself** as soon as it is in a lobby (it has no one to press a button), so a host that asks for ready (`SessionOptions::requireReady`: the game's menus; `bitriot_headless host --require-ready 1`) can start with it.
 
 ## Tick numbers, and what a peer does with them
 
@@ -186,6 +199,6 @@ Peers report checkpoints, the host compares (above). By the time DESYNC arrives 
 
 and the match stops (the host lingers 1.5 s so the DESYNC reaches everyone, then leaves) with a message naming the files. `diff` of two machines' `-state.txt` finds the first diverging field.
 
-## What version 1 does not do
+## What versions 1 and 2 do not do
 
-No reconnect (the token is issued and unused), no join mid-round, no host migration, no spectators, no encryption or authentication (a peer is whoever sends the right session id from the right address; the session id is random but travels in the clear), and no NAT traversal (vnet has none: one side needs a reachable UDP port, or a relay).
+No reconnect (the token is issued and unused), no moving a peer to another slot (slots are dealt in machine order: the host's, then each peer's, then computer players), no join mid-round, no host migration, no spectators, no encryption or authentication (a peer is whoever sends the right session id from the right address; the session id is random but travels in the clear), and no NAT traversal (vnet has none: one side needs a reachable UDP port, or a relay).

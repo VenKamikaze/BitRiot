@@ -8,9 +8,11 @@
 #include "EntityRendererFactory.h"
 #include "MapRenderer.h"
 #include "WorldRenderer.h"
+#ifdef BITRIOT_NETPLAY
+#include "RmlUI/binders/NetLobbyBinder.h"
 #include "RmlUI/events/EventHandlerNetLobby.h"
+#endif
 #include "RmlUI/events/EventManager.h"
-#include <SDL2/SDL_ttf.h>
 #include <cstddef>
 #include <sstream>
 #include <ctime>
@@ -263,6 +265,10 @@ void GameEngine::pumpEvents()
   {
     netFrame();   // after the devices: it reads the quit key they may have seen
   }
+  else
+  {
+    netIdleFrame();
+  }
 #endif
 }
 
@@ -389,14 +395,22 @@ bool GameEngine::renderFrame()
         m_roundEnding = false;
         finishRecording();
         GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
+#ifdef BITRIOT_NETPLAY
+        menuSystem->hideNetOverlay();   // the scoreboard is drawn by the same context
+        m_netToasts.clear();
+        m_netOverlaySignature.clear();
+#endif
         menuSystem->loadScoreBoard(m_scoreboardWinner, m_sim.roster(), gameLengthSeconds());
         m_scoreboardWinner = nullptr;
 #ifdef BITRIOT_NETPLAY
         if (m_net && m_net->session().state() != netplay::LockstepSession::ENDED)
         {
-          // Only the host starts the next round (its START is what every machine waits for).
-          menuSystem->setScoreboardPlayAgain(m_net->isHost() ? "Play Again" : "Waiting for the host to play again...", m_net->isHost());
+          // Only the host starts the next round (its START is what every machine waits for), or takes everyone back
+          // to the lobby.
+          menuSystem->setScoreboardNet(m_net->isHost(), m_net->isHost() ? "Next round" : "Waiting for the host...",
+                                       m_net->isHost(), m_net->isHost());
           m_hostWantsRound = false;
+          m_hostWantsLobby = false;
         }
 #endif
       }
@@ -417,15 +431,15 @@ bool GameEngine::renderFrame()
         WorldRenderer::renderWorld(m_sim.entityManager(), m_surface);
 
         m_pPanel->renderSurfaceTo(m_surface, (GameSettings::getInstance()->getMapWidth() * Map::TILE_WIDTH), 0);
-#ifdef BITRIOT_NETPLAY
-        if (m_net && !m_netLastStall.empty())
-        {
-          drawNetOverlay(m_netLastStall);
-        }
-#endif
       }
 
       MickSDLRenderer::getInstance()->pushCpuBufferToHardwareBuffer();
+#ifdef BITRIOT_NETPLAY
+      if (m_net)
+      {
+        menuSystem->renderNetOverlay();   // RmlUi, over the picture just pushed (never part of the CPU surface)
+      }
+#endif
       break;
     }
     case GameSettings::GAME_QUIT:
@@ -484,12 +498,45 @@ void GameEngine::initPlayerCharacters(unsigned int numPlayers, std::vector<bool>
 
 #ifdef BITRIOT_NETPLAY
 // ---------------------------------------------------------------------------------------
-// Network play (brief 07)
+// Network play (briefs 07 and 08)
 // ---------------------------------------------------------------------------------------
 
-namespace
+void GameEngine::installNetInterceptor()
 {
-const char* const BASE_TITLE = "Bit Riot Beta";
+  // The scoreboard's buttons: only the host starts a round or goes back to the lobby, and leaving the scoreboard for
+  // the main menu leaves the session. (The hook stays installed; it does nothing once m_net is gone. It is never cleared
+  // from inside an event, which would destroy the function that is running.)
+  EventManager::SetCommandInterceptor([this](const Rml::String& command) -> bool
+  {
+    if (!m_net)
+    {
+      return false;
+    }
+    if (command == "start")
+    {
+      if (m_net->isHost())
+      {
+        m_hostWantsRound = true;
+        menuSystem->setScoreboardNet(true, "Starting...", false, false);
+      }
+      return true;
+    }
+    if (command == "netbacktolobby")
+    {
+      if (m_net->isHost())
+      {
+        m_hostWantsLobby = true;
+        menuSystem->setScoreboardNet(true, "Next round", false, false);
+      }
+      return true;
+    }
+    if (command.rfind("open mainmenu", 0) == 0 || command == "exit")
+    {
+      stopNetplay();
+      return false;   // and the manager carries on: the main menu, or quit
+    }
+    return false;
+  });
 }
 
 bool GameEngine::startNetplay(const NetGame::Params& params, std::string* error)
@@ -509,46 +556,28 @@ bool GameEngine::startNetplay(const NetGame::Params& params, std::string* error)
   m_netRoundPending = false;
   m_netEndedShown = false;
   m_hostWantsRound = false;
+  m_hostWantsLobby = false;
   m_netDesyncHandled = false;
   m_netMessage.clear();
-  m_netLastPage.clear();
-  m_netLastStall.clear();
-
-  // The scoreboard's buttons: only the host starts a round, and leaving the scoreboard for
-  // the main menu leaves the session. (The hook stays installed; it does nothing once
-  // m_net is gone. It is never cleared from inside an event, which would destroy the
-  // function that is running.)
-  EventManager::SetCommandInterceptor([this](const Rml::String& command) -> bool
-  {
-    if (!m_net)
-    {
-      return false;
-    }
-    if (command == "start")
-    {
-      if (m_net->isHost())
-      {
-        m_hostWantsRound = true;
-        menuSystem->setScoreboardPlayAgain("Starting...", false);
-      }
-      return true;
-    }
-    if (command.rfind("open mainmenu", 0) == 0 || command == "exit")
-    {
-      stopNetplay();
-      return false;   // and the manager carries on: the main menu, or quit
-    }
-    return false;
-  });
+  m_netToasts.clear();
+  m_netOverlaySignature.clear();
+  m_netStallTimer = netplay::StallTimer();
+  m_netLocalErrorShown = false;
+  m_netResolve.reset();
+  m_netBackPage = p.host ? "mainmenu.rml" : "netjoin.rml";
+  installNetInterceptor();
 
   GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
+  menuSystem->clearScoreBoard();
   menuSystem->showNetLobby();
-  showNetPage();
+  refreshNetPage();
   return true;
 }
 
 void GameEngine::stopNetplay()
 {
+  m_netResolve.reset();
+  m_netLocalErrorShown = false;
   if (!m_net)
   {
     return;
@@ -557,41 +586,180 @@ void GameEngine::stopNetplay()
   m_net.reset();   // tells the others we are gone
   m_netRoundPending = false;
   m_hostWantsRound = false;
+  m_hostWantsLobby = false;
   m_netMessage.clear();
-  m_netLastStall.clear();
-  if (MickSDLRenderer* r = MickSDLRenderer::getInstanceIfCreated())
+  m_netToasts.clear();
+  m_netOverlaySignature.clear();
+  if (menuSystem)
   {
-    SDL_SetWindowTitle(r->getWindowHandle(), BASE_TITLE);
+    menuSystem->hideNetOverlay();
   }
 }
 
-void GameEngine::leaveNetplayToMenu(const std::string&)
+void GameEngine::leaveNetplayToMenu(const std::string& page)
 {
   stopNetplay();
   m_roundEnding = false;
   m_scoreboardWinner = nullptr;
   menuSystem->clearScoreBoard();
-  menuSystem->showMainMenu();
+  menuSystem->showPage(page.empty() ? "mainmenu.rml" : page);
   GameSettings::getInstance()->setGameState(GameSettings::MENU_RUNNING);
   GameRunningSDLInput::getInstance()->resetInputEvents(); // the quit key that got us here
 }
 
-void GameEngine::showNetPage()
+void GameEngine::showNetLocalError(const netplay::EndMessage& message, const std::string& backPage)
+{
+  m_netLocalError = message;
+  m_netLocalErrorShown = true;
+  m_netBackPage = backPage;
+  menuSystem->clearScoreBoard();
+  menuSystem->showNetLobby();
+  if (Rml::ElementDocument* doc = menuSystem->netLobbyDocument())
+  {
+    NetLobbyBinder::applyEnd(doc, message, "Back");
+  }
+}
+
+// Fills the lobby page for whatever the session is doing now.
+void GameEngine::refreshNetPage()
 {
   using netplay::LockstepSession;
-  const LockstepSession& s = m_net->session();
-  std::string text = m_net->lobbyText();
-  if (!m_netMessage.empty())
+  Rml::ElementDocument* doc = menuSystem->netLobbyDocument();
+  if (!doc || !m_net)
   {
-    text = (s.state() == LockstepSession::ENDED ? m_netMessage + "\n\nPress Leave to go back to the menu." : text + "\n\n" + m_netMessage);
+    return;
   }
-  const bool showStart = m_net->isHost() && s.state() == LockstepSession::LOBBY;
-  const std::string title = m_net->lobbyTitle();
-  const std::string page = title + "\n" + text + (showStart ? "\nS" : "\n-");
-  if (page != m_netLastPage)
+  const LockstepSession& s = m_net->session();
+  if (s.state() == LockstepSession::ENDED)
   {
-    m_netLastPage = page;
-    menuSystem->updateNetLobby(title, text, showStart, "Start match");
+    netplay::EndMessage m = m_net->endMessage();
+    if (!m_netMessage.empty())
+    {
+      // A desync: the words and the files written, under the headline.
+      m.title = "Out of sync";
+      m.lines.clear();
+      std::istringstream in(m_netMessage);
+      std::string line;
+      while (std::getline(in, line))
+      {
+        if (!line.empty()) m.lines.push_back(line);
+      }
+    }
+    NetLobbyBinder::applyEnd(doc, m, m_net->isHost() ? "Leave" : "Back");
+  }
+  else if (s.state() == LockstepSession::CONNECTING)
+  {
+    NetLobbyBinder::applyConnecting(doc, "Connecting...", "Asking " + m_net->params().join + " to let us in...");
+  }
+  else
+  {
+    NetLobbyBinder::applyLobby(doc, m_net->lobbyScreen());
+  }
+}
+
+// The menus' network flow when there is no session yet: the host and join forms, a host name being looked up, a failure.
+void GameEngine::netIdleFrame()
+{
+  NetUiRequests& rq = EventHandlerNetLobby::requests();
+  if (!rq.hostGo && !rq.joinGo && !rq.leave && !m_netResolve && !m_netLocalErrorShown)
+  {
+    return;
+  }
+  if (GameSettings::getInstance()->getGameState() != GameSettings::MENU_RUNNING || !menuSystem)
+  {
+    rq = NetUiRequests();
+    return;
+  }
+
+  if (rq.leave)
+  {
+    // Cancel while looking up, or Back on the error page.
+    rq.leave = false;
+    const bool wasErrorPage = m_netLocalErrorShown;
+    m_netResolve.reset();
+    m_netLocalErrorShown = false;
+    menuSystem->showPage(wasErrorPage || m_netBackPage != "mainmenu.rml" ? m_netBackPage : std::string("mainmenu.rml"));
+    return;
+  }
+  if (rq.hostGo)
+  {
+    rq.hostGo = false;
+    NetGame::Params p;
+    p.host = true;
+    p.port = (uint16_t) rq.form.port;
+    p.name = rq.form.name;
+    p.localPlayers = rq.form.localPlayers;
+    p.requireReady = true;
+    std::string error;
+    if (startNetplay(p, &error))
+    {
+      EventHandlerNetForm::rememberHost(rq.form.name, rq.form.port, rq.form.localPlayers);
+    }
+    else
+    {
+      menuSystem->setFormError(error);
+    }
+    return;
+  }
+  if (rq.joinGo)
+  {
+    rq.joinGo = false;
+    m_netJoinParams = NetGame::Params();
+    m_netJoinParams.host = false;
+    m_netJoinParams.join = rq.form.address;
+    m_netJoinParams.name = rq.form.name;
+    m_netJoinParams.localPlayers = rq.form.localPlayers;
+    m_netJoinParams.requireReady = true;
+    m_netJoinParams.recordDir = m_recordDir;
+    EventHandlerNetForm::rememberJoin(rq.form.name, rq.form.address, rq.form.localPlayers);
+    m_netResolve.reset(new NetResolve(rq.form.address));   // on a worker thread: the menu keeps drawing
+    m_netBackPage = "netjoin.rml";
+    m_netLocalErrorShown = false;
+    menuSystem->showNetLobby();
+    if (Rml::ElementDocument* doc = menuSystem->netLobbyDocument())
+    {
+      NetLobbyBinder::applyConnecting(doc, "Connecting...", "Looking up " + rq.form.address + "...");
+    }
+    return;
+  }
+  if (m_netResolve && m_netResolve->done())
+  {
+    const int rc = m_netResolve->result();
+    const vnet_addr addr = m_netResolve->address();
+    const std::string shown = m_netResolve->hostPort();
+    m_netResolve.reset();
+    std::string error;
+    if (rc == 0)
+    {
+      std::unique_ptr<NetGame> net = NetGame::createResolved(m_netJoinParams, m_sim, addr, &error);
+      if (net)
+      {
+        m_net = std::move(net);
+        m_netRoundPending = false;
+        m_netEndedShown = false;
+        m_hostWantsRound = false;
+        m_hostWantsLobby = false;
+        m_netDesyncHandled = false;
+        m_netMessage.clear();
+        m_netToasts.clear();
+        m_netOverlaySignature.clear();
+        m_netStallTimer = netplay::StallTimer();
+        installNetInterceptor();
+        menuSystem->showNetLobby();
+        refreshNetPage();
+        return;
+      }
+      netplay::EndMessage m;
+      m.title = "Cannot start the network";
+      m.lines.push_back(error);
+      showNetLocalError(m, "netjoin.rml");
+      return;
+    }
+    netplay::EndMessage m;
+    m.title = "Cannot find the host";
+    m.lines.push_back("'" + shown + "' could not be looked up: " + vnet_strerror(rc) + ".");
+    m.lines.push_back("Check the spelling and your connection, or use the host's IP address.");
+    showNetLocalError(m, "netjoin.rml");
   }
 }
 
@@ -602,18 +770,25 @@ void GameEngine::netFrame()
   m_net->pump();
   LockstepSession& s = m_net->session();
   NetUiRequests& rq = EventHandlerNetLobby::requests();
+  rq.hostGo = false;
+  rq.joinGo = false;
 
-  // Leave: the page's button, or the quit key in a round. A peer's slots turn into bots on
-  // the other machines; a host that leaves ends the session for everybody.
+  // Leave: the page's button (Leave, or Back on the error page), or the quit key in a round. A peer's slots turn
+  // into bots on the other machines; a host that leaves ends the session for everybody.
   if (rq.leave)
   {
     rq.leave = false;
-    leaveNetplayToMenu("");
+    // The error page of a join that failed goes back to the join form; every other leave goes to the main menu.
+    // Cancel while the session is still asking the host (a numeric address) is the same Cancel as during the name lookup.
+    const bool failedJoin = !m_net->isHost()
+                            && ((s.state() == LockstepSession::ENDED && s.endReason() != LockstepSession::END_LEFT && m_netEndedShown)
+                                || s.state() == LockstepSession::CONNECTING);
+    leaveNetplayToMenu(failedJoin ? "netjoin.rml" : "mainmenu.rml");
     return;
   }
   if (gs->getGameState() == GameSettings::GAME_RUNNING && !m_roundEnding && m_pInputHandler->quitRequested())
   {
-    leaveNetplayToMenu("");
+    leaveNetplayToMenu("mainmenu.rml");
     return;
   }
 
@@ -629,7 +804,8 @@ void GameEngine::netFrame()
         << (int) d.offender << " differs from the host).\n";
     if (m_net->match().writeDesyncFiles(files, &error))
     {
-      msg << "Written here, for the bug report:\n  " << (files.dumpAtTick.empty() ? std::string("(state at that tick: no longer kept)") : files.dumpAtTick)
+      msg << "Desync at tick " << d.tick << " - dumps written to:\n  "
+          << (files.dumpAtTick.empty() ? std::string("(state at that tick: no longer kept)") : files.dumpAtTick)
           << "\n  " << files.dumpNow << "\n  " << files.record;
     }
     else
@@ -645,7 +821,7 @@ void GameEngine::netFrame()
     s.leave(netplay::LEAVE_DESYNC);   // the DESYNC has had time to reach everybody
   }
 
-  // The session is over (the host went, we were dropped, a desync ended it): say so, on a page.
+  // The session is over (the host went, we were dropped or removed, a desync ended it): say so, on a page.
   if (s.ended())
   {
     if (!m_netEndedShown)
@@ -654,17 +830,13 @@ void GameEngine::netFrame()
       m_roundEnding = false;
       m_scoreboardWinner = nullptr;
       m_hostWantsRound = false;
-      m_netLastStall.clear();
+      m_hostWantsLobby = false;
+      menuSystem->hideNetOverlay();
       menuSystem->clearScoreBoard();
       gs->setGameState(GameSettings::MENU_RUNNING);
       menuSystem->showNetLobby();
-      m_netLastPage.clear();
-      if (MickSDLRenderer* r = MickSDLRenderer::getInstanceIfCreated())
-      {
-        SDL_SetWindowTitle(r->getWindowHandle(), BASE_TITLE);
-      }
     }
-    showNetPage();
+    refreshNetPage();
     return;
   }
 
@@ -675,15 +847,18 @@ void GameEngine::netFrame()
     m_netRound = rs;
     m_netRoundPending = true;
     m_hostWantsRound = false;
+    m_hostWantsLobby = false;
     m_netDesyncHandled = false;
     m_netMessage.clear();
-    m_netLastStall.clear();
+    m_netToasts.clear();
+    m_netOverlaySignature.clear();
+    m_netStallTimer = netplay::StallTimer();
     m_roundEnding = false;
     menuSystem->closeAllMenus();
     gs->setGameState(GameSettings::GAME_INIT);
   }
 
-  // The host's buttons.
+  // The lobby's buttons.
   if (rq.startMatch)
   {
     rq.startMatch = false;
@@ -696,10 +871,38 @@ void GameEngine::netFrame()
       }
       else
       {
-        m_netMessage = error;
+        std::MickLogger::getInstance()->info(this, std::string("Start refused: ").append(error));
+      }
+    }
+    else if (!m_net->isHost() && s.state() == LockstepSession::LOBBY && s.lobby().phase == netplay::PHASE_LOBBY)
+    {
+      s.setReady(!s.wantsReady());
+    }
+  }
+  if (m_net->isHost() && s.state() == LockstepSession::LOBBY)
+  {
+    if (rq.setting >= 0)
+    {
+      m_net->cycleSetting((NetGame::HostSetting) rq.setting);
+    }
+    if (rq.teamSlot >= 0)
+    {
+      m_net->cycleTeam(rq.teamSlot);
+    }
+    if (rq.kickSlot >= 0)
+    {
+      const netplay::LobbyView& v = s.lobby();
+      if (rq.kickSlot < (int) v.slots.size() && v.slots[rq.kickSlot].owner != netplay::NO_PEER && v.slots[rq.kickSlot].owner != netplay::HOST_ID)
+      {
+        m_net->kick(v.slots[rq.kickSlot].owner);
       }
     }
   }
+  rq.setting = -1;
+  rq.teamSlot = -1;
+  rq.kickSlot = -1;
+
+  // The scoreboard's host buttons, once every peer holds the last tick.
   if (m_hostWantsRound && s.state() == LockstepSession::BETWEEN_ROUNDS && s.canStartRound())
   {
     m_hostWantsRound = false;
@@ -707,40 +910,64 @@ void GameEngine::netFrame()
     if (!m_net->startRound(&error))
     {
       std::MickLogger::getInstance()->error(this, error);
-      menuSystem->setScoreboardPlayAgain("Cannot start: " + error, true);
+      menuSystem->setScoreboardNet(true, "Cannot start: " + error, true, true);
+    }
+  }
+  if (m_hostWantsLobby && s.state() == LockstepSession::BETWEEN_ROUNDS && s.canStartRound())
+  {
+    m_hostWantsLobby = false;
+    if (m_net->returnToLobby())
+    {
+      menuSystem->clearScoreBoard();
+      menuSystem->showNetLobby();
     }
   }
 
+  // The lobby page: shown whenever the session is in its lobby and no round or scoreboard is up (a peer that has finished
+  // the scoreboard follows the host back to the lobby here).
   if (gs->getGameState() == GameSettings::MENU_RUNNING && (s.state() == LockstepSession::LOBBY || s.state() == LockstepSession::CONNECTING))
   {
     if (!menuSystem->netLobbyOpen())
     {
+      menuSystem->clearScoreBoard();
       menuSystem->showNetLobby();
-      m_netLastPage.clear();
     }
-    showNetPage();
+    refreshNetPage();
   }
 
-  // What the title bar and the stall overlay say.
-  const uint32_t now = SDL_GetTicks();
-  if (now - m_netLastTitleAt >= 250)
+  updateNetOverlay();
+}
+
+// The overlay over a running round: who the match waits for (after half a second), who left, a desync, the connection.
+void GameEngine::updateNetOverlay()
+{
+  GameSettings* gs = GameSettings::getInstance();
+  if (gs->getGameState() != GameSettings::GAME_RUNNING || m_roundEnding)
   {
-    m_netLastTitleAt = now;
-    const std::string title = std::string(BASE_TITLE) + " - " + m_net->statusLine();
-    if (title != m_netLastTitle)
-    {
-      m_netLastTitle = title;
-      if (MickSDLRenderer* r = MickSDLRenderer::getInstanceIfCreated())
-      {
-        SDL_SetWindowTitle(r->getWindowHandle(), title.c_str());
-      }
-    }
+    return;
   }
-  const std::string stall = gs->getGameState() == GameSettings::GAME_RUNNING && !m_roundEnding ? m_net->stallText() : std::string();
-  if (stall != m_netLastStall)
+  const uint32_t now = SDL_GetTicks();
+  while (!m_netToasts.empty() && (int32_t) (now - m_netToasts.front().second) >= 0)
   {
-    m_netLastStall = stall;
-    requestRedraw();   // the overlay is painted onto the world's picture
+    m_netToasts.pop_front();
+  }
+  MenuSDLRenderer::NetOverlay o;
+  o.stall = netplay::stallSentence(m_netStallTimer.update(m_net->stallText(), now));
+  for (const auto& t : m_netToasts)
+  {
+    o.toasts.push_back(t.first);
+  }
+  if (m_net->session().desynced())
+  {
+    o.desync = m_netMessage.empty() ? std::string("Desync detected - writing the evidence...") : m_netMessage;
+  }
+  o.status = m_net->statusLine();
+  std::string signature = o.stall + "\n" + o.desync + "\n" + o.status + "\n";
+  for (const std::string& t : o.toasts) signature += t + "\n";
+  if (signature != m_netOverlaySignature)
+  {
+    m_netOverlaySignature = signature;
+    menuSystem->setNetOverlay(o);
   }
 }
 
@@ -748,6 +975,21 @@ void GameEngine::stepNetTick()
 {
   netplay::NetMatch& match = m_net->match();
   const uint8_t mask = (uint8_t) m_pInputHandler->localSlotMask();
+  // Who left in this tick (every machine sees the same events in the same tick): the overlay says so.
+  if (match.canStep())
+  {
+    for (const ControlEvent& e : m_net->session().stepInputs().control)
+    {
+      if (e.slot < 0 || e.slot >= 6) continue;
+      const std::string toast = netplay::eventToast(e, m_netSlotNames[e.slot]);
+      if (!toast.empty())
+      {
+        m_netToasts.push_back(std::make_pair(toast, SDL_GetTicks() + 6000u));
+        while (m_netToasts.size() > 3) m_netToasts.pop_front();
+      }
+      m_netSlotNames[e.slot].clear();   // a bot now, or a player we cannot name
+    }
+  }
   // What this machine's players did since the last tick: handed to the session, which
   // gets it to the host; the tick itself steps with the host's confirmed inputs.
   const TickInputs sample = m_pInputHandler->sampleTick();
@@ -798,6 +1040,19 @@ void GameEngine::resetNetGame()
   m_net->match().beginRound(rs);
   resizeWindowIfMapChanged();
 
+  // The names the overlay uses for "<name> left - now AI".
+  for (int i = 0; i < 6; i++)
+  {
+    m_netSlotNames[i].clear();
+    if (i < (int) rs.owner.size() && rs.owner[i] != netplay::NO_PEER)
+    {
+      for (const netplay::LobbyEntry& e : m_net->session().lobby().peers)
+      {
+        if (e.id == rs.owner[i]) m_netSlotNames[i] = e.name;
+      }
+    }
+  }
+
   const int numPlayers = settings->getNumberOfPlayers();
   std::vector<bool>* genders = settings->getPlayerGenders();
   // Which keyboard set or pad a slot had in the menu means nothing here: the menu's indexes are
@@ -821,25 +1076,5 @@ void GameEngine::resetNetGame()
   m_pInputHandler->setPadsMayBindOwnSlots(true);
   m_pPanel->setPlayerPointers(m_pPlayers);
   m_drawNeeded = true;
-}
-
-void GameEngine::drawNetOverlay(const std::string& text)
-{
-  static TTF_Font* font = TTF_OpenFont("assets/fonts/FreeMono.ttf", 16);
-  if (!font || text.empty())
-  {
-    return;
-  }
-  SDL_Color white = { 255, 255, 255, 255 };
-  SDL_Surface* message = TTF_RenderText_Solid(font, text.c_str(), white);
-  if (!message)
-  {
-    return;
-  }
-  SDL_Rect box = { 4, 4, message->w + 12, message->h + 8 };
-  SDL_FillRect(m_surface, &box, SDL_MapRGB(m_surface->format, 150, 0, 0));
-  SDL_Rect dest = { 10, 8, message->w, message->h };
-  SDL_BlitSurface(message, NULL, m_surface, &dest);
-  SDL_FreeSurface(message);
 }
 #endif // BITRIOT_NETPLAY

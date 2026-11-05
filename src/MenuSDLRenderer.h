@@ -67,18 +67,39 @@ class MenuSDLRenderer
     void closeAllMenus();
     bool showMenu();
 
-    // -- netplay (brief 07) ---------------------------------------------------------
-    // The lobby page: closes every page and opens netlobby.rml (Start match / Leave).
-    void showNetLobby();
-    // Opens the main menu page (after a network game is left).
-    void showMainMenu();
-    bool netLobbyOpen() const;
-    // Sets the page's headline and body (plain text; newlines become line breaks) and
-    // whether the "Start match" button shows (and what it says).
-    void updateNetLobby(const std::string& title, const std::string& text, bool showStart, const std::string& startLabel);
     // The scoreboard's "Play Again" button on a machine that cannot start the next round:
     // relabels it (an empty label restores "Play Again") and greys it out when disabled.
     void setScoreboardPlayAgain(const std::string& label, bool enabled);
+#ifdef BITRIOT_NETPLAY
+    // -- netplay (briefs 07 and 08) ---------------------------------------------------
+    // The host and join forms (nethost.rml / netjoin.rml); the main menu reaches them with "open".
+    // The lobby page: closes every page and opens netlobby.rml.
+    void showNetLobby();
+    // Opens the main menu page (after a network game is left).
+    void showMainMenu();
+    // Opens a page by name, closing the others (the join form after a failed join).
+    void showPage(const std::string& file);
+    bool netLobbyOpen() const;
+    // The lobby document, or nullptr when it is not open; the NetLobbyBinder fills it.
+    Rml::ElementDocument* netLobbyDocument() const;
+    // The scoreboard of a network game: "Play Again" becomes the host's "Next round" (or a peer's disabled
+    // "Waiting for the host..."), and the host also gets "Back to lobby".
+    void setScoreboardNet(bool host, const std::string& playAgainLabel, bool playAgainEnabled, bool backToLobbyEnabled);
+    // The in-game overlay (netoverlay.rml): who the match is waiting for, who left, a desync, a status line.
+    struct NetOverlay
+    {
+      std::string stall;                  // "" = hidden
+      std::vector<std::string> toasts;
+      std::string desync;                 // "" = hidden
+      std::string status;
+    };
+    // The error line of the open host or join form.
+    void setFormError(const std::string& text);
+    void setNetOverlay(const NetOverlay& overlay);
+    void hideNetOverlay();
+    // Draws the overlay over what was just presented to the renderer (call after pushCpuBufferToHardwareBuffer).
+    void renderNetOverlay();
+#endif
     virtual ~MenuSDLRenderer();
 
   private:
@@ -96,6 +117,10 @@ class MenuSDLRenderer
     shared_ptr<InputHandler> m_inputHandler = nullptr;
     std::map<int, ControllerPlayerSelect> playerIdToFocussedElement;
     shared_ptr<EventHandlerPlayerSelect> m_eHandlerPlayerSelect;
+    bool m_textInputOn = false;   // SDL_StartTextInput is in force (a text field has the focus)
+#ifdef BITRIOT_NETPLAY
+    Rml::ElementDocument* m_overlay = nullptr;
+#endif
 };
 
 #endif /* MENUSDLRENDERER_H_ */

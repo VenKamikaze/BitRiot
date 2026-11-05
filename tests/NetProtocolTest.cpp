@@ -136,7 +136,7 @@ TEST(NetProtocol, StringsAreBoundedAndControlCharactersReplaced)
 TEST(NetProtocol, HelloRoundTripsAndTheVersionComesFirst)
 {
   HelloMsg m;
-  m.protocol = 1;
+  m.protocol = PROTOCOL_VERSION;
   m.buildId = 0x6767612d056ba8afull;
   m.dataHash = 0x0ca2017527be6327ull;
   m.localPlayers = 2;
@@ -157,7 +157,7 @@ TEST(NetProtocol, HelloRoundTripsAndTheVersionComesFirst)
   // Any HELLO, whatever the rest looks like, gives its version.
   uint16_t version = 0;
   EXPECT_TRUE(decodeHelloVersion(bytes.data() + HEADER_SIZE, bytes.size() - HEADER_SIZE, version));
-  EXPECT_EQ(version, 1);
+  EXPECT_EQ(version, PROTOCOL_VERSION);
   const uint8_t future[] = {9, 0, 1, 2, 3};
   EXPECT_TRUE(decodeHelloVersion(future, sizeof(future), version));
   EXPECT_EQ(version, 9);
@@ -210,9 +210,9 @@ TEST(NetProtocol, LobbyAndStartRoundTrip)
   l.npcSpawner = false;
   l.slots = {{0, 0}, {1, 1}, {NO_PEER, 2}};
   LobbyPeer p0;
-  p0.id = 0; p0.slotMask = 1; p0.rttMs = 0; p0.name = "host";
+  p0.id = 0; p0.slotMask = 1; p0.rttMs = 0; p0.ready = true; p0.name = "host";
   LobbyPeer p1;
-  p1.id = 1; p1.slotMask = 2; p1.rttMs = 123; p1.name = "guest";
+  p1.id = 1; p1.slotMask = 2; p1.rttMs = 123; p1.ready = false; p1.name = "guest";
   l.peers = {p0, p1};
   auto lb = packet(MSG_LOBBY, 0, 9, [&](Writer& w) { encode(w, l); });
   LobbyMsg lback;
@@ -226,6 +226,8 @@ TEST(NetProtocol, LobbyAndStartRoundTrip)
   ASSERT_EQ(lback.peers.size(), 2u);
   EXPECT_EQ(lback.peers[1].rttMs, 123);
   EXPECT_EQ(lback.peers[1].name, "guest");
+  EXPECT_TRUE(lback.peers[0].ready);
+  EXPECT_FALSE(lback.peers[1].ready);
 
   StartMsg s;
   s.round = 2;
@@ -362,6 +364,59 @@ TEST(NetProtocol, ChecksumDesyncPingKeepaliveLeaveRoundTrip)
   EXPECT_EQ(lback.reason, LEAVE_HOST_CLOSED);
 }
 
+TEST(NetProtocol, TheVersionIsTwoAndTheReadyMessageRoundTrips)
+{
+  // Version 2 (brief 08) added READY, the ready flag in LOBBY and LEAVE_REMOVED. A host speaking it
+  // refuses a version-1 HELLO (the session test AVersionOneHelloIsRefused...); this pins the number.
+  EXPECT_EQ(PROTOCOL_VERSION, 2);
+
+  ReadyMsg m;
+  m.round = 7;
+  m.seq = 0x01020304;
+  m.ready = true;
+  auto bytes = packet(MSG_READY, 3, 9, [&](Writer& w) { encode(w, m); });
+  ReadyMsg back;
+  ASSERT_TRUE(decodeBody(bytes, back));
+  EXPECT_EQ(back.round, 7);
+  EXPECT_EQ(back.seq, 0x01020304u);
+  EXPECT_TRUE(back.ready);
+  m.ready = false;
+  bytes = packet(MSG_READY, 3, 9, [&](Writer& w) { encode(w, m); });
+  ASSERT_TRUE(decodeBody(bytes, back));
+  EXPECT_FALSE(back.ready);
+  EXPECT_EQ(messageName(MSG_READY), "READY");
+
+  // A ready byte that is neither 0 nor 1 is nonsense, not "true".
+  bytes.back() = 2;
+  EXPECT_FALSE(decodeBody(bytes, back));
+}
+
+TEST(NetProtocol, ALobbyPeersReadyByteIsStrictAndTheRemovedReasonIsTheLastOne)
+{
+  LobbyMsg l;
+  l.slots = {{0, 0}};
+  LobbyPeer p;
+  p.id = 0; p.slotMask = 1; p.rttMs = 5; p.ready = true; p.name = "ab";
+  l.peers = {p};
+  auto bytes = packet(MSG_LOBBY, 0, 9, [&](Writer& w) { encode(w, l); });
+  LobbyMsg back;
+  ASSERT_TRUE(decodeBody(bytes, back));
+  // The ready byte sits right after the two rtt bytes: HEADER, phase, round(2), map(4), nSlots, 2 slot bytes, nPeers, id, mask, rtt(2).
+  const size_t readyAt = HEADER_SIZE + 1 + 2 + 4 + 1 + 2 + 1 + 1 + 1 + 2;
+  ASSERT_EQ(bytes[readyAt], 1);
+  bytes[readyAt] = 2;
+  EXPECT_FALSE(decodeBody(bytes, back));
+
+  LeaveMsg lv;
+  lv.reason = LEAVE_REMOVED;
+  auto lb = packet(MSG_LEAVE, 0, 9, [&](Writer& w) { encode(w, lv); });
+  LeaveMsg lback;
+  ASSERT_TRUE(decodeBody(lb, lback));
+  EXPECT_EQ(lback.reason, LEAVE_REMOVED);
+  lb.back() = LEAVE_REMOVED + 1;
+  EXPECT_FALSE(decodeBody(lb, lback));
+}
+
 // Every message, cut at every length, is refused; with one byte appended, refused too.
 TEST(NetProtocol, EveryTruncationAndTrailingByteIsRefused)
 {
@@ -378,6 +433,7 @@ TEST(NetProtocol, EveryTruncationAndTrailingByteIsRefused)
   { PingMsg m; all.push_back(packet(MSG_PING, 0, 1, [&](Writer& w) { encode(w, m); })); }
   { KeepaliveMsg m; all.push_back(packet(MSG_KEEPALIVE, 0, 1, [&](Writer& w) { encode(w, m); })); }
   { LeaveMsg m; all.push_back(packet(MSG_LEAVE, 0, 1, [&](Writer& w) { encode(w, m); })); }
+  { ReadyMsg m; m.round = 2; m.seq = 5; m.ready = true; all.push_back(packet(MSG_READY, 1, 1, [&](Writer& w) { encode(w, m); })); }
 
   auto decodeAny = [](const std::vector<uint8_t>& b) -> bool {
     Reader r(b.data(), b.size());
@@ -397,6 +453,7 @@ TEST(NetProtocol, EveryTruncationAndTrailingByteIsRefused)
       case MSG_PING: case MSG_PONG: { PingMsg m; return decode(r, m); }
       case MSG_KEEPALIVE: { KeepaliveMsg m; return decode(r, m); }
       case MSG_LEAVE: { LeaveMsg m; return decode(r, m); }
+      case MSG_READY: { ReadyMsg m; return decode(r, m); }
     }
     return false;
   };
@@ -466,6 +523,7 @@ TEST(NetProtocol, FuzzedDatagramsNeverCrashADecoder)
   { TicksMsg m; m.ticks = {TickInputs(), TickInputs()}; seeds.push_back(packet(MSG_TICKS, 0, 1, [&](Writer& w) { encode(w, m); })); }
   { LobbyMsg m; m.slots = {{0, 0}}; LobbyPeer p; p.name = "a"; m.peers = {p}; seeds.push_back(packet(MSG_LOBBY, 0, 1, [&](Writer& w) { encode(w, m); })); }
   { HelloMsg m; m.name = "abc"; seeds.push_back(packet(MSG_HELLO, NO_PEER, 0, [&](Writer& w) { encode(w, m); })); }
+  { ReadyMsg m; m.round = 1; m.seq = 2; m.ready = true; seeds.push_back(packet(MSG_READY, 1, 1, [&](Writer& w) { encode(w, m); })); }
   { StartMsg m; m.slots = {{0, 0, false}}; seeds.push_back(packet(MSG_START, 0, 1, [&](Writer& w) { encode(w, m); })); }
 
   auto tryAll = [](const std::vector<uint8_t>& b) {
@@ -474,7 +532,7 @@ TEST(NetProtocol, FuzzedDatagramsNeverCrashADecoder)
       Reader r(b.data(), b.size());
       Header h;
       if (!readHeader(r, h)) continue;
-      HelloMsg a; WelcomeMsg b2; RejectMsg c; LobbyMsg d; StartMsg e; InputMsg f; TicksMsg g; ChecksumMsg h2; DesyncMsg i; PingMsg j; KeepaliveMsg k; LeaveMsg l;
+      HelloMsg a; WelcomeMsg b2; RejectMsg c; LobbyMsg d; StartMsg e; InputMsg f; TicksMsg g; ChecksumMsg h2; DesyncMsg i; PingMsg j; KeepaliveMsg k; LeaveMsg l; ReadyMsg rd;
       Reader r1 = r; decode(r1, a);
       Reader r2 = r; decode(r2, b2);
       Reader r3 = r; decode(r3, c);
@@ -487,6 +545,7 @@ TEST(NetProtocol, FuzzedDatagramsNeverCrashADecoder)
       Reader r10 = r; decode(r10, j);
       Reader r11 = r; decode(r11, k);
       Reader r12 = r; decode(r12, l);
+      Reader r13 = r; decode(r13, rd);
       break;
     }
   };

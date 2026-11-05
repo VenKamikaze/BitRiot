@@ -1,0 +1,13 @@
+<rml>
+  <head>
+    <title>Network overlay</title>
+    <link rel="stylesheet" type="text/css" href="rkt.rcss"/>
+    <link type="text/rcss" href="netoverlay.rcss"/>
+  </head>
+  <body class="overlay">
+    <div id="stallbox"></div>
+    <div id="toasts"></div>
+    <div id="desyncbox"></div>
+    <div id="netstatusline"></div>
+  </body>
+</rml>

@@ -35,7 +35,7 @@ namespace netplay
 {
   // Bumped when anything after the header changes. A host refuses a HELLO of another
   // version (REJECT_VERSION) before reading the rest of it.
-  const uint16_t PROTOCOL_VERSION = 1;
+  const uint16_t PROTOCOL_VERSION = 2;
 
   // vnet's VNET_MAX_DATAGRAM, repeated here so this header needs no vnet.h.
   const size_t MAX_PACKET = 1100;
@@ -68,7 +68,8 @@ namespace netplay
     MSG_PING = 10,
     MSG_PONG = 11,
     MSG_KEEPALIVE = 12,
-    MSG_LEAVE = 13
+    MSG_LEAVE = 13,
+    MSG_READY = 14
   };
 
   enum RejectReason : uint8_t
@@ -86,8 +87,10 @@ namespace netplay
     LEAVE_QUIT = 0,          // the player quit (ESC)
     LEAVE_HOST_CLOSED = 1,   // the host ended the session
     LEAVE_DESYNC = 2,        // the sender stopped because of a desync
-    LEAVE_KICKED = 3         // host -> peer: you were silent too long and were dropped
+    LEAVE_KICKED = 3,        // host -> peer: you were silent too long and were dropped
+    LEAVE_REMOVED = 4        // host -> peer: the host removed you from the lobby (version 2)
   };
+  const uint8_t LEAVE_REASON_MAX = LEAVE_REMOVED;
 
   // The common start of every datagram.
   struct Header
@@ -145,6 +148,7 @@ namespace netplay
     uint8_t id = 0;
     uint8_t slotMask = 0;
     uint16_t rttMs = 0xFFFF;   // 0xFFFF = not measured yet
+    bool ready = false;        // version 2: the peer said it is ready (the host is always ready)
     std::string name;
   };
 
@@ -257,6 +261,17 @@ namespace netplay
     uint8_t reason = LEAVE_QUIT;
   };
 
+  // peer -> host (version 2): "I am / am not ready to start". A state, not an event: the peer
+  // repeats it while the host's LOBBY does not show the same, and `seq` (the peer's own counter)
+  // makes a late duplicate of an older answer harmless. `round` is the round the next START
+  // will be, so an answer from before a round started cannot be applied to the lobby after it.
+  struct ReadyMsg
+  {
+    uint16_t round = 0;
+    uint32_t seq = 0;
+    bool ready = false;
+  };
+
   // -- bytes ------------------------------------------------------------------------
 
   class Writer
@@ -314,6 +329,7 @@ namespace netplay
   void encode(Writer& w, const PingMsg& m);
   void encode(Writer& w, const KeepaliveMsg& m);
   void encode(Writer& w, const LeaveMsg& m);
+  void encode(Writer& w, const ReadyMsg& m);
 
   // Each reads the body that follows a header and returns whether the datagram was
   // exactly a well-formed message of that type. `r` is positioned after the header.
@@ -330,6 +346,7 @@ namespace netplay
   bool decode(Reader& r, PingMsg& m);
   bool decode(Reader& r, KeepaliveMsg& m);
   bool decode(Reader& r, LeaveMsg& m);
+  bool decode(Reader& r, ReadyMsg& m);
 
   // The protocol version at the start of a HELLO body, readable whatever follows it
   // (a HELLO of another version may be laid out differently). False if the body has

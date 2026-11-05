@@ -27,7 +27,7 @@ Each brief (`NN-*.md`) is one unit of work, sized for a single implement → rev
 | 05b | [Cross-platform determinism gate](05b-cross-platform-gate.md) | BitRiot | 05 | done |
 | 06 | [vnet core: API, loopback and native UDP](https://github.com/VenKamikaze/vnet/blob/claude/doco/06-vnet-core.md) | vnet | — | tracked in vnet (done) |
 | 07 | [Native lockstep netplay](07-lockstep-netplay.md) | BitRiot (+vnet) | 05b, 06, 14 | done (play-test pending) |
-| 08 | [Lobby UI](08-lobby-ui.md) | BitRiot | 07 | todo |
+| 08 | [Lobby UI](08-lobby-ui.md) | BitRiot | 07 | done (play-test pending) |
 | 09 | [WASM port (local play)](09-wasm-port.md) | BitRiot | 03b | done (play-test pending) |
 | 10 | [vnet relay and WebSocket transport](https://github.com/VenKamikaze/vnet/blob/claude/doco/10-vnet-relay-websocket.md) | vnet | 06 | tracked in vnet (done) |
 | 11 | [vnet WebTransport datagrams](https://github.com/VenKamikaze/vnet/blob/claude/doco/11-vnet-webtransport.md) | vnet | 10 | tracked in vnet (done) |
@@ -41,7 +41,7 @@ Each brief (`NN-*.md`) is one unit of work, sized for a single implement → rev
 
 - **Determinism:** 01 → 02 → 02b → 03a → 03b (done) → 04a (done) → 04b (done) → 05 (done) → 05b (done).
 - **vnet:** 06, 10 and 11 are all done (vnet `claude` 26f4b0f, version 0.3.0). Brief 14 (from vnet's design review) is done too: vnet `claude` eb1feeb, version 0.4.0, tag `v0.4.0`. 07 and 12 should pin `v0.4.0` and read vnet's `doco/integration.md`.
-- **Netplay:** 07 is done, play-test pending (the Outcome has the steps): `src/net/` (protocol, `LockstepSession`, `NetMatch`), the game's `--host`/`--join`, `bitriot_headless host|join`, [`protocol.md`](protocol.md). 08 and 12 build on it; 13 reuses its records.
+- **Netplay:** 07 and 08 are done, play-tests pending (each Outcome has the steps): `src/net/` (protocol, `LockstepSession`, `NetMatch`, `LobbyModel`), the game's `--host`/`--join` and its host, join and lobby menus, `bitriot_headless host|join`, [`protocol.md`](protocol.md) (version 2). 12 builds on them; 13 reuses their records.
 - **WASM:** 09 is done, play-test pending (Outcome has the steps); 12 builds on it.
 
 **Resuming?** [`PROMPT.md`](PROMPT.md) §0 has the hand-off state: what's done, what's ready, and what's waiting on the user.

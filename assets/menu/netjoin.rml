@@ -1,0 +1,26 @@
+<rml>
+  <head>
+    <title>Join an online game</title>
+    <link rel="stylesheet" type="text/css" href="rkt.rcss"/>
+    <link rel="stylesheet" type="text/css" href="common.rcss"/>
+    <link type="text/rcss" href="netform.rcss"/>
+  </head>
+  <body class="background" onload="netforminit">
+    <div class="menu-container">
+      <div class="menu">
+        <h2>Join an online game</h2>
+        <div class="form">
+          <div class="frow"><span class="flabel">Your name</span><input type="text" id="f-name" class="tabbed text" tabindex="1" maxlength="24" /></div>
+          <div class="frow"><span class="flabel">Host address</span><input type="text" id="f-addr" class="tabbed text wide" tabindex="2" maxlength="120" autofocus /></div>
+          <div class="frow"><span class="flabel">Players here</span><button class="tabbed formbtn" id="f-local" tabindex="3" onclick="netlocal">1</button></div>
+          <p class="note">The host's address and port, for example 192.168.1.20:7777 (the port is 7777 if you leave it out). A pad joins in the round with START.</p>
+          <p class="error" id="formerror"></p>
+        </div>
+        <div class="formbuttons">
+          <button class="tabbed" id="formgo" tabindex="4" onclick="netjoingo">Connect</button>
+          <button class="tabbed" id="formback" tabindex="5" escapeAction="1" onclick="open mainmenu.rml">Back</button>
+        </div>
+      </div>
+    </div>
+  </body>
+</rml>

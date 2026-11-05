@@ -3,7 +3,10 @@
 #include "MenuSDLRenderer.h"
 #include "RmlUI/MickRmlUIElementUtil.h"
 #include "RmlUI/events/EventHandlerPlayerSelect.h"
+#ifdef BITRIOT_NETPLAY
+#include "RmlUI/binders/NetLobbyBinder.h"
 #include "RmlUI/events/EventHandlerNetLobby.h"
+#endif
 #include "SDL_events.h"
 #include <RmlUi/Core/Core.h>
 #include <RmlUi/Core/ElementDocument.h>
@@ -70,8 +73,77 @@ void MenuSDLRenderer::initGui(SDL_Renderer* renderer, SDL_Window *screen)
 
   EventManager::getInstance()->RegisterEventHandler("gameoptions.rml", new EventHandlerOptions());
   EventManager::getInstance()->RegisterEventHandler("playerselect.rml", m_eHandlerPlayerSelect.get());
+#ifdef BITRIOT_NETPLAY
   EventManager::getInstance()->RegisterEventHandler(EventHandlerNetLobby::RML_FILENAME, new EventHandlerNetLobby());
-  
+  EventManager::getInstance()->RegisterEventHandler(EventHandlerNetForm::HOST_FILENAME, new EventHandlerNetForm());
+  EventManager::getInstance()->RegisterEventHandler(EventHandlerNetForm::JOIN_FILENAME, new EventHandlerNetForm());
+
+  // The last name, address and port live in a small file in the user's preferences folder, which is only looked up (and
+  // so only created) when an online page first needs it.
+  EventHandlerNetForm::setPrefsPathProvider([]() -> std::string {
+    std::string path;
+    if (char* pref = SDL_GetPrefPath("BitRiot", "BitRiot"))
+    {
+      path = std::string(pref) + "netplay.txt";
+      SDL_free(pref);
+    }
+    return path;
+  });
+
+  // The main menu gets its online entries here and not in mainmenu.rml, so a build without netplay (the web build)
+  // shows exactly the menu it always had.
+  EventManager::SetDocumentLoadedHook([](Rml::ElementDocument& doc, const Rml::String& name) {
+    if (name != "mainmenu.rml")
+    {
+      return;
+    }
+    // The two online buttons go in after "Play", into the list mainmenu.rml has: the tab indexes of what follows move up by two.
+    Rml::Element* play = doc.GetElementById("quickstart");
+    Rml::Element* menu = play ? play->GetParentNode() : nullptr;
+    if (!menu)
+    {
+      return;
+    }
+    Rml::ElementList buttons;
+    doc.GetElementsByTagName(buttons, "button");
+    for (Rml::Element* b : buttons)
+    {
+      const int index = MickRmlUIElementUtil::getTabIndex(b);
+      if (index >= 2)
+      {
+        b->SetAttribute("tabindex", std::to_string(index + 2));
+      }
+    }
+    // Inserted before the first button after Play (Rml has no insert-after: the buttons are followed by <br />).
+    Rml::Element* before = nullptr;
+    for (int i = 0; i < menu->GetNumChildren(); i++)
+    {
+      if (menu->GetChild(i) == play)
+      {
+        // Play, its <br />, then the next child.
+        before = i + 2 < menu->GetNumChildren() ? menu->GetChild(i + 2) : nullptr;
+        break;
+      }
+    }
+    auto add = [&](const char* id, const char* page, int tab, const char* label) {
+      Rml::ElementPtr b = doc.CreateElement("button");
+      b->SetId(id);
+      b->SetClassNames("tabbed");
+      b->SetAttribute("tabindex", std::to_string(tab));
+      b->SetAttribute("onclick", Rml::String("open ") + page);
+      b->SetInnerRML(label);
+      Rml::Element* raw = menu->InsertBefore(std::move(b), before);
+      (void) raw;
+      menu->InsertBefore(doc.CreateElement("br"), before);
+    };
+    add("nethost", "nethost.rml", 2, "Host online game");
+    add("netjoin", "netjoin.rml", 3, "Join online game");
+  });
+#endif
+
+  // SDL2 turns text input on at video init on the desktop; it is wanted only while a text field has the focus.
+  SDL_StopTextInput();
+
   m_playersBinder = make_unique<PlayersSelectBinder>(context);
 
   loadMenu("mainmenu.rml");
@@ -99,6 +171,9 @@ void MenuSDLRenderer::clearScoreBoard()
 
 void MenuSDLRenderer::closeAllMenus()
 {
+#ifdef BITRIOT_NETPLAY
+  m_overlay = nullptr;
+#endif
   context->UnloadAllDocuments();
 }
 
@@ -115,6 +190,12 @@ Rml::ElementDocument* findDocument(Rml::Context* context, const std::string& fil
     }
   }
   return nullptr;
+}
+
+// An <input type="text"> (the only text field the menus have).
+bool isTextField(Rml::Element* e)
+{
+  return e != nullptr && e->GetTagName() == "input" && e->GetAttribute<Rml::String>("type", "text") == "text";
 }
 
 // Plain text to RML: escaped, with line breaks.
@@ -136,16 +217,26 @@ std::string textToRml(const std::string& text)
 }
 } // namespace
 
+#ifdef BITRIOT_NETPLAY
 void MenuSDLRenderer::showNetLobby()
 {
+  m_overlay = nullptr;
   context->UnloadAllDocuments();
   loadMenu(EventHandlerNetLobby::RML_FILENAME, true);
 }
 
 void MenuSDLRenderer::showMainMenu()
 {
+  m_overlay = nullptr;
   context->UnloadAllDocuments();
   loadMenu("mainmenu.rml", true);
+}
+
+void MenuSDLRenderer::showPage(const std::string& file)
+{
+  m_overlay = nullptr;
+  context->UnloadAllDocuments();
+  loadMenu(file, true);
 }
 
 bool MenuSDLRenderer::netLobbyOpen() const
@@ -153,27 +244,99 @@ bool MenuSDLRenderer::netLobbyOpen() const
   return findDocument(context, EventHandlerNetLobby::RML_FILENAME) != nullptr;
 }
 
-void MenuSDLRenderer::updateNetLobby(const std::string& title, const std::string& text, bool showStart, const std::string& startLabel)
+Rml::ElementDocument* MenuSDLRenderer::netLobbyDocument() const
 {
-  Rml::ElementDocument* doc = findDocument(context, EventHandlerNetLobby::RML_FILENAME);
+  return findDocument(context, EventHandlerNetLobby::RML_FILENAME);
+}
+
+void MenuSDLRenderer::setScoreboardNet(bool host, const std::string& playAgainLabel, bool playAgainEnabled, bool backToLobbyEnabled)
+{
+  setScoreboardPlayAgain(playAgainLabel, playAgainEnabled);
+  Rml::ElementDocument* doc = findDocument(context, "scoreboard.rml");
   if (!doc)
   {
     return;
   }
-  if (Rml::Element* e = doc->GetElementById("nettitle"))
+  if (Rml::Element* e = doc->GetElementById("lobbyline"))
   {
-    e->SetInnerRML(textToRml(title));
+    e->SetProperty("display", host ? "block" : "none");
   }
-  if (Rml::Element* e = doc->GetElementById("netlobbytext"))
+  if (Rml::Element* e = doc->GetElementById("backtolobby"))
   {
-    e->SetInnerRML(textToRml(text));
-  }
-  if (Rml::Element* e = doc->GetElementById("netstart"))
-  {
-    e->SetProperty("display", showStart ? "inline-block" : "none");
-    e->SetInnerRML(textToRml(startLabel));
+    e->SetProperty("color", backToLobbyEnabled ? "#ffffff" : "#777777");
   }
 }
+
+void MenuSDLRenderer::setFormError(const std::string& text)
+{
+  for (const char* file : {EventHandlerNetForm::HOST_FILENAME, EventHandlerNetForm::JOIN_FILENAME})
+  {
+    if (Rml::ElementDocument* doc = findDocument(context, file))
+    {
+      if (Rml::Element* e = doc->GetElementById("formerror"))
+      {
+        e->SetInnerRML(textToRml(text));
+      }
+    }
+  }
+}
+
+void MenuSDLRenderer::setNetOverlay(const NetOverlay& o)
+{
+  if (!m_overlay)
+  {
+    m_overlay = EventManager::getInstance()->LoadWindow("netoverlay.rml", false);
+    if (!m_overlay)
+    {
+      return;
+    }
+    m_overlay->Show(Rml::ModalFlag::None, Rml::FocusFlag::None);
+  }
+  auto set = [this](const char* id, const std::string& rml) {
+    if (Rml::Element* e = m_overlay->GetElementById(id))
+    {
+      if (e->GetInnerRML() != rml) e->SetInnerRML(rml);
+    }
+  };
+  auto display = [this](const char* id, bool on) {
+    if (Rml::Element* e = m_overlay->GetElementById(id))
+    {
+      e->SetProperty("display", on ? "block" : "none");
+    }
+  };
+  set("stallbox", NetLobbyBinder::toRml(o.stall));
+  display("stallbox", !o.stall.empty());
+  std::string toasts;
+  for (const std::string& t : o.toasts)
+  {
+    toasts += "<p>" + NetLobbyBinder::toRml(t) + "</p><br />";
+  }
+  set("toasts", toasts);
+  set("desyncbox", NetLobbyBinder::toRml(o.desync));
+  display("desyncbox", !o.desync.empty());
+  set("netstatusline", NetLobbyBinder::toRml(o.status));
+}
+
+void MenuSDLRenderer::hideNetOverlay()
+{
+  if (m_overlay)
+  {
+    m_overlay->Close();
+    m_overlay = nullptr;
+  }
+}
+
+void MenuSDLRenderer::renderNetOverlay()
+{
+  if (!m_overlay)
+  {
+    return;
+  }
+  handleWindowResize();
+  context->Update();
+  context->Render();
+}
+#endif
 
 void MenuSDLRenderer::setScoreboardPlayAgain(const std::string& label, bool enabled)
 {
@@ -216,6 +379,15 @@ bool MenuSDLRenderer::showMenu()
   context->Render();
   RmlUiSDL2SystemInterface* systemInterface = (RmlUiSDL2SystemInterface*) Rml::GetSystemInterface();
 
+  // SDL delivers SDL_TEXTINPUT only while text input is on: on exactly when a text field has the focus, so the game's
+  // own keys never go through an input method.
+  const bool wantText = isTextField(context->GetFocusElement());
+  if (wantText != m_textInputOn)
+  {
+    m_textInputOn = wantText;
+    if (wantText) SDL_StartTextInput(); else SDL_StopTextInput();
+  }
+
   while(SDL_PollEvent(&event))
   {
     // if the player select page is open, fire off it's specific SDLEventHandler
@@ -249,6 +421,11 @@ bool MenuSDLRenderer::showMenu()
           context->ProcessMouseWheel(event.wheel.y, systemInterface->GetKeyModifiers());
           break;
 
+        case SDL_TEXTINPUT:
+          // Typing into a text field (the online host and join forms).
+          context->ProcessTextInput(Rml::String(event.text.text));
+          break;
+
         case SDL_KEYDOWN:
         {
             //printf("keydown: %d, sdl: %d\n", event.key, event.key.keysym.sym);
@@ -269,11 +446,18 @@ bool MenuSDLRenderer::showMenu()
               break;
             }
             else if(event.key.keysym.sym == SDLK_DOWN
-                    || event.key.keysym.sym == SDLK_UP)
+                    || event.key.keysym.sym == SDLK_UP
+                    || (event.key.keysym.sym == SDLK_RETURN && isTextField(context->GetFocusElement())))
             {
               Rml::Element* focussedElement = context->GetFocusElement();
+              if(!focussedElement)
+              {
+                break;
+              }
               int currentTabIndex = MickRmlUIElementUtil::getTabIndex(focussedElement);
-              Rml::Element* nextElement = MickRmlUIElementUtil::getElementWithTabIndex(focussedElement->GetOwnerDocument(), (event.key.keysym.sym == SDLK_DOWN) ? ++currentTabIndex : --currentTabIndex);
+              // Enter in a text field goes on to the next one, as Down does. Pages that hide some of their
+              // controls (the online lobby does, for a peer) have their indexes skipped over.
+              Rml::Element* nextElement = MickRmlUIElementUtil::stepTabIndex(focussedElement->GetOwnerDocument(), currentTabIndex, (event.key.keysym.sym == SDLK_UP) ? -1 : 1);
               if(nextElement)
               {
                 nextElement->Focus();
@@ -299,7 +483,7 @@ bool MenuSDLRenderer::showMenu()
                 MickLogger::getInstance()->debug(this, "Got DPAD down/up.");
                 Rml::Element* focussedElement = context->GetFocusElement();
                 int currentTabIndex = MickRmlUIElementUtil::getTabIndex(focussedElement);
-                Rml::Element* nextElement = MickRmlUIElementUtil::getElementWithTabIndex(focussedElement->GetOwnerDocument(), (event.jbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) ? ++currentTabIndex : --currentTabIndex);
+                Rml::Element* nextElement = MickRmlUIElementUtil::stepTabIndex(focussedElement->GetOwnerDocument(), currentTabIndex, (event.jbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) ? 1 : -1);
                 if(nextElement)
                 {
                   nextElement->Focus();

@@ -32,7 +32,8 @@
             </div>
           </div>
 	  <button class="tabbed" id="quickstart" autofocus tabindex="1" onclick="start">Play Again</button><br />
-	  <button class="tabbed" id="options" tabindex="2" escapeAction="1" onclick="open mainmenu.rml">Main Menu</button><br />
+	  <div id="lobbyline" style="display: none"><button class="tabbed" id="backtolobby" tabindex="2" onclick="netbacktolobby">Back to lobby</button></div>
+	  <button class="tabbed" id="options" tabindex="3" escapeAction="1" onclick="open mainmenu.rml">Main Menu</button><br />
       </div>
     </div>
   </body>

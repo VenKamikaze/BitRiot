@@ -1,0 +1,26 @@
+<rml>
+  <head>
+    <title>Host an online game</title>
+    <link rel="stylesheet" type="text/css" href="rkt.rcss"/>
+    <link rel="stylesheet" type="text/css" href="common.rcss"/>
+    <link type="text/rcss" href="netform.rcss"/>
+  </head>
+  <body class="background" onload="netforminit">
+    <div class="menu-container">
+      <div class="menu">
+        <h2>Host an online game</h2>
+        <div class="form">
+          <div class="frow"><span class="flabel">Your name</span><input type="text" id="f-name" class="tabbed text" tabindex="1" maxlength="24" autofocus /></div>
+          <div class="frow"><span class="flabel">UDP port</span><input type="text" id="f-port" class="tabbed text" tabindex="2" maxlength="5" onchange="netport" /></div>
+          <div class="frow"><span class="flabel">Players here</span><button class="tabbed formbtn" id="f-local" tabindex="3" onclick="netlocal">1</button></div>
+          <p class="note">Friends on your network join with this machine's address and the port above. Friends outside it need UDP port <span id="portnote">7777</span> reachable: forwarded to this machine on your router.</p>
+          <p class="error" id="formerror"></p>
+        </div>
+        <div class="formbuttons">
+          <button class="tabbed" id="formgo" tabindex="4" onclick="nethostgo">Open lobby</button>
+          <button class="tabbed" id="formback" tabindex="5" escapeAction="1" onclick="open mainmenu.rml">Back</button>
+        </div>
+      </div>
+    </div>
+  </body>
+</rml>

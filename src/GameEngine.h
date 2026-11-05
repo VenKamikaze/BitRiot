@@ -23,7 +23,9 @@
 #include "GameOverTimer.h"
 #include "MickSDLRenderer.h"
 #ifdef BITRIOT_NETPLAY
+#include <deque>
 #include "NetGame.h"
+#include "net/LobbyModel.h"
 #endif
 
 class GameEngine
@@ -129,21 +131,33 @@ class GameEngine
     netplay::RoundStart m_netRound;      // the round the session announced, until resetGame() builds it
     bool m_netRoundPending = false;
     bool m_netEndedShown = false;        // the "disconnected" page is up
-    bool m_hostWantsRound = false;       // the host pressed Play Again; waiting for the peers to hold the last tick
-    std::string m_netMessage;            // overrides the lobby page's text (a desync, a failed start)
+    bool m_hostWantsRound = false;       // the host pressed Next round; waiting for the peers to hold the last tick
+    bool m_hostWantsLobby = false;       // the host pressed Back to lobby; same wait
+    std::string m_netMessage;            // a desync's words (shown over the round and on the error page)
     bool m_netDesyncHandled = false;
     uint32_t m_netDesyncDeadline = 0;
-    std::string m_netLastTitle;
-    std::string m_netLastStall;
-    std::string m_netLastPage;
-    uint32_t m_netLastTitleAt = 0;
+    // The menus' side: a join whose address is being looked up, a failure that has no session to explain it, and
+    // the page the error page's button returns to.
+    std::unique_ptr<NetResolve> m_netResolve;
+    NetGame::Params m_netJoinParams;
+    bool m_netLocalErrorShown = false;
+    netplay::EndMessage m_netLocalError;
+    std::string m_netBackPage = "mainmenu.rml";
+    // The overlay over a running round.
+    netplay::StallTimer m_netStallTimer;
+    std::deque<std::pair<std::string, uint32_t>> m_netToasts;   // text, when it goes
+    std::string m_netSlotNames[6];       // who plays each slot (for "<name> left - now AI")
+    std::string m_netOverlaySignature;
     void netFrame();
+    void netIdleFrame();
     void stepNetTick();
     void resetNetGame();
-    void showNetPage();
-    void leaveNetplayToMenu(const std::string& why);
+    void refreshNetPage();
+    void showNetLocalError(const netplay::EndMessage& message, const std::string& backPage);
+    void leaveNetplayToMenu(const std::string& page);
+    void updateNetOverlay();
+    void installNetInterceptor();
     void netRoundFinishedHere();
-    void drawNetOverlay(const std::string& text);
 #endif
     // The deterministic world: setup (start) and the per-tick step. Everything the
     // sim needs lives in there; this class keeps rendering, the InfoPanel, sound,

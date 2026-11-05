@@ -52,6 +52,7 @@ struct Options
   std::string name;
   uint32_t tickMs = 33;
   int delay = 0;
+  bool requireReady = false;   // host: wait for every peer's READY (as a host opened from the game's menus does)
   std::string outDir;
   std::vector<std::pair<int, uint32_t>> takeovers;   // slot, tick
   uint32_t leaveAt = 0;
@@ -123,6 +124,7 @@ Options parseOptions(const std::vector<std::string>& args)
     else if (name == "name") o.name = value;
     else if (name == "tick-ms") o.tickMs = (uint32_t) number(value, "--tick-ms", 1000);
     else if (name == "delay") o.delay = (int) number(value, "--delay", 16);
+    else if (name == "require-ready") o.requireReady = value != "0";
     else if (name == "out") o.outDir = value;
     else if (name == "leave-at") o.leaveAt = (uint32_t) number(value, "--leave-at", 1000000);
     else if (name == "perturb-at") o.perturbAt = (uint32_t) number(value, "--perturb-at", 1000000);
@@ -233,6 +235,7 @@ bool Runner::setup()
   so.localPlayers = m_o.localPlayers;
   so.tickMs = m_o.tickMs;
   so.fixedDelay = m_o.delay;
+  so.requireReady = m_o.requireReady && m_o.host;
   std::string error;
   if (m_o.host)
   {
@@ -504,6 +507,12 @@ int Runner::run()
     }
 
     using netplay::LockstepSession;
+    if (!m_o.host && m_session->state() == LockstepSession::LOBBY)
+    {
+      // A host opened from the game's menus waits for every peer to say ready (protocol 2); this runner has
+      // nobody to press a button, so it is ready as soon as it is in a lobby (a no-op once it is).
+      m_session->setReady(true);
+    }
     if (m_session->state() == LockstepSession::RUNNING && m_net->active() && !m_session->desynced())
     {
       // The clock: one tick every tickMs, a stall forgiven beyond five owed.

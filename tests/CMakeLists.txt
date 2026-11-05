@@ -51,9 +51,14 @@ set(CORE_TEST_SOURCES
   GameOptionsTest.cpp
 )
 
+# The online screens' layout (brief 08) needs RmlUi, so it is a bitriot_tests source.
+if(BITRIOT_NETPLAY)
+  list(APPEND CORE_TEST_SOURCES LobbyLayoutTest.cpp NetGameTest.cpp)
+endif()
+
 # Netplay (brief 07): the wire format and the lockstep session, on vnet's loopback network.
 if(BITRIOT_NETPLAY)
-  list(APPEND SIM_TEST_SOURCES NetProtocolTest.cpp LockstepSessionTest.cpp)
+  list(APPEND SIM_TEST_SOURCES NetProtocolTest.cpp LockstepSessionTest.cpp LobbyModelTest.cpp)
 endif()
 
 add_library(bitriot_sim_test_objs OBJECT ${SIM_TEST_SOURCES})
