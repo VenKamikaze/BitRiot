@@ -863,10 +863,11 @@ TEST(HotJoin, ABotReservedForAJoinerThatVanishedBeforeItsTickIsFreeAgain)
   ASSERT_TRUE(c.startRound(1, 0));
   ASSERT_TRUE(c.runUntil([&] { return c.allStepped(200); }, 60000));
   Machine& a = c.addMachine(1);
-  ASSERT_TRUE(c.runUntil([&] { return a.s->joinStage() == LockstepSession::JOIN_WAITING; }, 20000));
-  c.run(80);        // its READY_AT reaches the host, which deals it the bot...
-  a.frozen = true;  // ...and it is gone before the takeover tick
+  ASSERT_TRUE(c.runUntil([&] { return joined(a); }, 20000));   // the host dealt it the bot, for a tick some way ahead...
+  EXPECT_EQ(a.s->grantedSlots(), 0b0100);
+  a.frozen = true;                                             // ...and it is gone before that tick
   ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->peerCount() == 1; }, 20000));
+  EXPECT_EQ(firstEvent(c.machine(0), 2, ControlEvent::HUMAN_TAKES_OVER), -1) << "the takeover never applied";
   Machine& b = c.addMachine(1);
   ASSERT_TRUE(c.runUntil([&] { return joined(b); }, 20000));
   EXPECT_EQ(b.s->grantedSlots(), 0b0100) << "the bot reserved for the vanished joiner is free again";
@@ -882,6 +883,7 @@ TEST(HotJoin, TheTakeoverTickIsFarEnoughAheadThatTheLiveMatchDoesNotStallAtIt)
   Machine& j = c.addMachine(1);
   ASSERT_TRUE(c.runUntil([&] { return joined(j); }, 20000));
   const uint32_t ts = j.s->takeoverTick();
+  EXPECT_GE(ts, j.s->catchUpHead() + (uint32_t) j.round.delay + 2) << "the takeover is scheduled a delay and a round trip past the head";
   ASSERT_TRUE(c.runUntil([&] { return c.allStepped(ts + 100); }, 60000));
   EXPECT_LE(longestGap(c.machine(0), ts - 20, ts + 60), 70u) << "the host waited for the joiner at its takeover tick";
   EXPECT_LE(longestGap(c.machine(1), ts - 20, ts + 60), 70u);
@@ -901,14 +903,14 @@ TEST(HotJoin, TheRecordIsStreamedInAWindowNotAllAtOnce)
   EXPECT_LE(inFlight, 1100u) << "no more than the window (1,000 ticks and one datagram) beyond what the joiner acknowledged";
 }
 
-TEST(LockstepLobby, ASpectatorDoesNotUseUpASlotOfTheSixWhenAskingToJoin)
+TEST(LockstepLobby, ASpectatorDoesNotUseUpASlotOfTheSixWhenAnotherMachineAsksToJoin)
 {
-  ClusterOptions o;
-  o.localPlayers[0] = 2;
-  Cluster c(5, o);   // 2 + 1 + 1 + 1 + 1 = six players
+  Cluster c(4);      // four players
   Machine& s = c.addMachine(1, 0, 0, [](netplay::SessionOptions& so) { so.spectate = true; });
+  ASSERT_TRUE(c.runUntil([&] { return s.s->state() == LockstepSession::LOBBY; }, 3000));
+  Machine& two = c.addMachine(2);   // 4 + 2 = six: fits, unless the spectator is counted
   c.run(1500);
-  EXPECT_EQ(s.s->state(), LockstepSession::LOBBY) << "a spectator is not a seventh player";
+  EXPECT_EQ(two.s->state(), LockstepSession::LOBBY) << "the spectator was counted among the humans";
   Machine& seventh = c.addMachine(1);
   ASSERT_TRUE(c.runUntil([&] { return seventh.s->ended(); }, 5000));
   EXPECT_EQ(seventh.s->rejectInfo().reason, netplay::REJECT_FULL);
