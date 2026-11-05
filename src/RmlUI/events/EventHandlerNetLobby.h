@@ -8,6 +8,7 @@
 #ifndef EVENTHANDLERNETLOBBY_H
 #define EVENTHANDLERNETLOBBY_H
 
+#include <functional>
 #include <string>
 
 #include "EventHandler.h"
@@ -49,6 +50,9 @@ class EventHandlerNetForm : public EventHandler
     static const char* const JOIN_FILENAME;
     // Where the settings file lives; empty (the default) means nothing is read or written.
     static void setPrefsPath(const std::string& path);
+    // The same, found only when the file is first needed (the game asks SDL for its preferences folder, which creates it:
+    // a player who never opens an online page should not get an empty folder).
+    static void setPrefsPathProvider(std::function<std::string()> provider);
     // Writes what the last successful host or join used (name, port or address, local players).
     static void rememberHost(const std::string& name, int port, int localPlayers);
     static void rememberJoin(const std::string& name, const std::string& address, int localPlayers);

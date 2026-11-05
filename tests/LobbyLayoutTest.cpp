@@ -546,6 +546,26 @@ TEST_F(NetFormTest, ThePlayersHereButtonCyclesOneToFourAndTheFormsFillFromTheSav
   std::remove(path.c_str());
 }
 
+TEST_F(NetFormTest, TheSavedFilesPathIsOnlyAskedForWhenAnOnlinePageNeedsIt)
+{
+  int asked = 0;
+  const std::string path = scratchFile("lazy.txt");
+  EventHandlerNetForm::setPrefsPathProvider([&]() { asked++; return path; });
+  EXPECT_EQ(asked, 0) << "setting the provider must not look anything up";
+  Rml::ElementDocument* doc = loadDocument("nethost.rml");
+  ASSERT_NE(doc, nullptr);
+  EXPECT_EQ(asked, 0) << "opening a page that has not asked for the file yet";
+  EventHandlerNetForm handler;
+  press(handler, doc, "f-name", "netforminit");
+  EXPECT_EQ(asked, 1);
+  EventHandlerNetForm::rememberHost("Lazy", 7300, 1);
+  EXPECT_EQ(asked, 1) << "asked once";
+  netplay::NetPrefs back;
+  EXPECT_TRUE(netplay::loadNetPrefs(path, back));
+  EXPECT_EQ(back.name, "Lazy");
+  std::remove(path.c_str());
+}
+
 TEST_F(NetFormTest, TheFormsOpenWithTheDefaultsWhenThereIsNoSavedFile)
 {
   Rml::ElementDocument* doc = loadDocument("nethost.rml");

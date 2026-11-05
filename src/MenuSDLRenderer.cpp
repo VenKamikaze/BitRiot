@@ -78,12 +78,17 @@ void MenuSDLRenderer::initGui(SDL_Renderer* renderer, SDL_Window *screen)
   EventManager::getInstance()->RegisterEventHandler(EventHandlerNetForm::HOST_FILENAME, new EventHandlerNetForm());
   EventManager::getInstance()->RegisterEventHandler(EventHandlerNetForm::JOIN_FILENAME, new EventHandlerNetForm());
 
-  // The last name, address and port live in a small file in the user's preferences folder.
-  if (char* pref = SDL_GetPrefPath("BitRiot", "BitRiot"))
-  {
-    EventHandlerNetForm::setPrefsPath(std::string(pref) + "netplay.txt");
-    SDL_free(pref);
-  }
+  // The last name, address and port live in a small file in the user's preferences folder, which is only looked up (and
+  // so only created) when an online page first needs it.
+  EventHandlerNetForm::setPrefsPathProvider([]() -> std::string {
+    std::string path;
+    if (char* pref = SDL_GetPrefPath("BitRiot", "BitRiot"))
+    {
+      path = std::string(pref) + "netplay.txt";
+      SDL_free(pref);
+    }
+    return path;
+  });
 
   // The main menu gets its online entries here and not in mainmenu.rml, so a build without netplay (the web build)
   // shows exactly the menu it always had.

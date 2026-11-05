@@ -53,18 +53,30 @@ void EventHandlerNetLobby::ProcessEvent(Rml::Event&, const Rml::String& value)
 namespace
 {
 std::string g_prefsPath;
+std::function<std::string()> g_prefsPathProvider;
 netplay::NetPrefs g_prefs;
 bool g_prefsLoaded = false;
 int g_localPlayers = 1;   // the "Players here" button of the open form
+
+// The file's path: set directly, or asked of the provider the first time it is needed.
+const std::string& prefsPath()
+{
+  if (g_prefsPath.empty() && g_prefsPathProvider)
+  {
+    g_prefsPath = g_prefsPathProvider();
+    g_prefsPathProvider = nullptr;
+  }
+  return g_prefsPath;
+}
 
 netplay::NetPrefs& prefs()
 {
   if (!g_prefsLoaded)
   {
     g_prefsLoaded = true;
-    if (!g_prefsPath.empty())
+    if (!prefsPath().empty())
     {
-      netplay::loadNetPrefs(g_prefsPath, g_prefs);   // a missing or corrupt file leaves the defaults
+      netplay::loadNetPrefs(prefsPath(), g_prefs);   // a missing or corrupt file leaves the defaults
     }
   }
   return g_prefs;
@@ -72,9 +84,9 @@ netplay::NetPrefs& prefs()
 
 void savePrefs()
 {
-  if (!g_prefsPath.empty() && !netplay::saveNetPrefs(g_prefsPath, g_prefs))
+  if (!prefsPath().empty() && !netplay::saveNetPrefs(prefsPath(), g_prefs))
   {
-    std::MickLogger::getInstance()->warn(nullptr, std::string("Could not save ").append(g_prefsPath));
+    std::MickLogger::getInstance()->warn(nullptr, std::string("Could not save ").append(prefsPath()));
   }
 }
 
@@ -113,6 +125,15 @@ void showError(Rml::ElementDocument* doc, const std::string& text)
 void EventHandlerNetForm::setPrefsPath(const std::string& path)
 {
   g_prefsPath = path;
+  g_prefsPathProvider = nullptr;
+  g_prefsLoaded = false;
+  g_prefs = netplay::NetPrefs();
+}
+
+void EventHandlerNetForm::setPrefsPathProvider(std::function<std::string()> provider)
+{
+  g_prefsPath.clear();
+  g_prefsPathProvider = std::move(provider);
   g_prefsLoaded = false;
   g_prefs = netplay::NetPrefs();
 }
