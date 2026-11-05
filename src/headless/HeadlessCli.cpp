@@ -14,6 +14,9 @@
 #include "MatchRecord.h"
 #include "MatchReplay.h"
 #include "Simulation.h"
+#ifdef BITRIOT_NETPLAY
+#include "HeadlessNet.h"
+#endif
 
 namespace headless
 {
@@ -67,6 +70,26 @@ void printHelp(std::ostream& out)
          "  bitriot_headless version [--items]\n"
          "      Print this build's build id, data hash and format versions; --items lists\n"
          "      what the data hash is made of.\n"
+#ifdef BITRIOT_NETPLAY
+         "  bitriot_headless host [--port N] [--port-file F] [--peers N] [--rounds R] [--seed S]\n"
+         "                        [--config SPEC] [--script FILE] [OPTIONS]\n"
+         "  bitriot_headless join HOST:PORT [--rounds R] [--script FILE] [OPTIONS]\n"
+         "      Play lockstep netplay rounds over UDP with no window (brief 07). The host waits\n"
+         "      for --peers N machines (default 1), then plays R rounds (default 1, seed S, S+1,\n"
+         "      ...). stdout is the same on every machine: the round header, a hash at every\n"
+         "      30th tick, control events, and the end of each round with its winner and final\n"
+         "      hash. Exit 0 when every round was played, 1 when the session broke (a desync, a\n"
+         "      lost host, a timeout), 2 on a bad command line, 3 when the host refused us for\n"
+         "      another build or other game data. See doco/netplay/protocol.md.\n"
+         "    OPTIONS: --name S  --local-players N  --script FILE (a record: its ticks are this\n"
+         "      machine's inputs, for the slots it owns)  --tick-ms MS (default 33)  --delay D\n"
+         "      (host: force the input delay)  --out DIR (write round records and desync files)\n"
+         "      --takeover SLOT@TICK  --leave-at TICK  --perturb-at TICK (test only: change the\n"
+         "      state at that tick, to provoke a desync)  --timeout-secs N (default 120)\n"
+         "      host only: --port-file F gets the UDP port once the host listens (--port 0, the\n"
+         "      default, picks a free one). VNET_IMPAIR sets simulated latency and loss; give\n"
+         "      every process its own seed=.\n"
+#endif
          "\n"
          "SPEC is comma-separated key=value pairs, or @file with the same:\n"
          "  players=N  map=WxH  blocks=P  spawner=on|off  teams=a:b:c  humans=0:1\n"
@@ -234,32 +257,8 @@ int cmdReplay(const std::vector<std::string>& args, std::ostream& out, std::ostr
       }
       if (perturbAt != 0 && tick + 1 == perturbAt && !perturbed)
       {
-        // The negative control: one unit of one offset, between two ticks, as if one
-        // platform had rounded a single value differently.
-        // A block is the target: the simulation never moves it, so nothing can
-        // quietly absorb the change (a player's offset is pulled back to the tile's
-        // centre by the next step). An explosion that destroys the block on this very
-        // tick would absorb it too; none does at the ticks the gate and the tests use.
-        // If there is no block, the first entity.
-        const auto& entities = sim.entityManager().getDynamicMap()->entityList;
-        std::shared_ptr<GameEntity> target;
-        for (const auto& entry : entities)
-        {
-          if (target == nullptr)
-          {
-            target = entry.second;
-          }
-          if (entry.second->getType() == BLOCK)
-          {
-            target = entry.second;
-            break;
-          }
-        }
-        if (target != nullptr)
-        {
-          target->setOffsetX(target->getOffsetX() + 1);
-          perturbed = true;
-        }
+        // The negative control (see perturbSimulation).
+        perturbed = perturbSimulation(sim);
       }
     };
   }
@@ -683,6 +682,36 @@ MatchConfig parseConfigSpec(const std::string& spec, const MatchConfig& base)
   return c;
 }
 
+// The negative control: one unit of one offset, between two ticks, as if one platform
+// had rounded a single value differently. A block is the target: the simulation never
+// moves it, so nothing can quietly absorb the change (a player's offset is pulled back to
+// the tile's centre by the next step). An explosion that destroys the block on this very
+// tick would absorb it too; none does at the ticks the gate and the tests use. If there
+// is no block, the first entity.
+bool perturbSimulation(Simulation& sim)
+{
+  const auto& entities = sim.entityManager().getDynamicMap()->entityList;
+  std::shared_ptr<GameEntity> target;
+  for (const auto& entry : entities)
+  {
+    if (target == nullptr)
+    {
+      target = entry.second;
+    }
+    if (entry.second->getType() == BLOCK)
+    {
+      target = entry.second;
+      break;
+    }
+  }
+  if (target == nullptr)
+  {
+    return false;
+  }
+  target->setOffsetX(target->getOffsetX() + 1);
+  return true;
+}
+
 int run(const std::vector<std::string>& args, std::ostream& out, std::ostream& err)
 {
   if (args.empty())
@@ -714,6 +743,12 @@ int run(const std::vector<std::string>& args, std::ostream& out, std::ostream& e
     {
       return cmdVersion(args, out, err);
     }
+#ifdef BITRIOT_NETPLAY
+    if (command == "host" || command == "join" || command == "--host" || command == "--join")
+    {
+      return runNetCommand(args, out, err);
+    }
+#endif
     err << "error: unknown command \"" << command << "\"\n\n";
     printHelp(err);
     return EXIT_USAGE;

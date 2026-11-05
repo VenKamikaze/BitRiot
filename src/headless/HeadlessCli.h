@@ -11,6 +11,7 @@
  *                    [--max-ticks N] [--checkpoint-every K] [--no-rle]
  *   bitriot_headless dump <file> [--tick N]
  *   bitriot_headless version [--items]
+ *   bitriot_headless host|join ...        (netplay builds only; see HeadlessNet.h)
  *   bitriot_headless help
  *
  * The full text is printHelp() in HeadlessCli.cpp, and the files and exit codes are
@@ -28,6 +29,8 @@
 #include <vector>
 
 #include "MatchConfig.h"
+
+class Simulation;
 
 namespace headless
 {
@@ -50,6 +53,11 @@ namespace headless
   // every value the spec does not set. Throws std::invalid_argument with a
   // message naming the bad key.
   MatchConfig parseConfigSpec(const std::string& spec, const MatchConfig& base);
+
+  // Test-only negative control: adds one unit (1/65536) to the x offset of the first block
+  // (the first entity if the round has none), a change no step absorbs. Used by `replay
+  // --perturb-at` and by the netplay desync tests. False if there was nothing to change.
+  bool perturbSimulation(Simulation& sim);
 
   // "0x..." or decimal. Throws std::invalid_argument.
   unsigned long long parseNumber(const std::string& text, const std::string& what);

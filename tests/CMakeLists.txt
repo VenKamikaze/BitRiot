@@ -133,3 +133,24 @@ add_test(
   COMMAND bitriot_sim_tests
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
 )
+
+# Netplay across real processes (brief 07): several bitriot_headless processes over UDP on
+# 127.0.0.1 with simulated loss. Its own executable and ctest entry, because it takes a
+# few tens of seconds of real time; tests/README.md says how to run it on its own.
+if(BITRIOT_NETPLAY)
+  add_executable(bitriot_netplay_process_tests NetplayProcessTest.cpp)
+  target_include_directories(bitriot_netplay_process_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  target_compile_definitions(bitriot_netplay_process_tests PRIVATE ${BITRIOT_TEST_DEFINITIONS})
+  target_compile_options(bitriot_netplay_process_tests PRIVATE ${BITRIOT_TEST_WARNINGS})
+  target_link_libraries(bitriot_netplay_process_tests PRIVATE bitriot_sim GTest::gtest GTest::gtest_main)
+  add_dependencies(bitriot_netplay_process_tests bitriot_headless)
+  if(TARGET bitriot_runtime_links)
+    add_dependencies(bitriot_netplay_process_tests bitriot_runtime_links)
+  endif()
+  add_test(
+    NAME bitriot_netplay_process_tests
+    COMMAND bitriot_netplay_process_tests
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+  )
+  set_tests_properties(bitriot_netplay_process_tests PROPERTIES TIMEOUT 600)
+endif()

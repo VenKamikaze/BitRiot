@@ -837,11 +837,20 @@ int LockstepSession::chooseDelay(uint32_t worstRttMs, uint32_t jitterMs, uint32_
 
 int LockstepSession::proposedDelay() const
 {
+  return computeDelay(nullptr);
+}
+
+int LockstepSession::computeDelay(std::string* note) const
+{
   if (m_opt.fixedDelay > 0)
   {
-    return std::max(1, std::min(m_opt.fixedDelay, 16));
+    const int d = std::max(1, std::min(m_opt.fixedDelay, 16));
+    if (note) *note = "D=" + std::to_string(d) + " (forced)";
+    return d;
   }
   uint32_t worstTotal = 0;
+  uint32_t worstRtt = 0;
+  uint32_t worstJitter = 0;
   bool any = false;
   for (int id = 1; id < MAX_PEERS; id++)
   {
@@ -862,13 +871,25 @@ int LockstepSession::proposedDelay() const
       dev += s > mean ? s - mean : mean - s;
     }
     const uint32_t jitter = (uint32_t) (dev / m.rtt.size());
-    worstTotal = std::max(worstTotal, worst + jitter);
+    if (worst + jitter >= worstTotal)
+    {
+      worstTotal = worst + jitter;
+      worstRtt = worst;
+      worstJitter = jitter;
+    }
   }
   if (!any)
   {
+    if (note) *note = "D=" + std::to_string(DEFAULT_DELAY) + " (nothing measured yet)";
     return DEFAULT_DELAY;
   }
-  return chooseDelay(worstTotal, 0, m_opt.tickMs);
+  const int d = chooseDelay(worstTotal, 0, m_opt.tickMs);
+  if (note)
+  {
+    *note = "D=" + std::to_string(d) + " from a worst round trip of " + std::to_string(worstRtt) + " ms plus jitter "
+          + std::to_string(worstJitter) + " ms at " + std::to_string(m_opt.tickMs) + " ms a tick";
+  }
+  return d;
 }
 
 int LockstepSession::peerRtt(uint8_t id) const
@@ -908,7 +929,7 @@ bool LockstepSession::buildStart(uint64_t seed, StartMsg& out, std::string* erro
   out.mapHeight = (uint8_t) std::max(0, std::min(255, m_settings.mapHeight));
   out.blockPercentage = (uint8_t) std::max(0, std::min(255, m_settings.blockPercentage));
   out.npcSpawner = m_settings.npcSpawner;
-  out.delay = (uint8_t) proposedDelay();
+  out.delay = (uint8_t) computeDelay(&m_delayNote);
   for (int s = 0; s < m_numSlots; s++)
   {
     StartMsg::Slot sl;

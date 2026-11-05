@@ -369,6 +369,7 @@ namespace netplay
       void removePeer(uint8_t id, const char* why);
       void recomputeRoster();
       void rebuildLobbyView();
+      int computeDelay(std::string* note) const;
       void checkTimeouts();
       void trimHistory();
       void compareChecksum(uint8_t peerId, uint32_t tick);
