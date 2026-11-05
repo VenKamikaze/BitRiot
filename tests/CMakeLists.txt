@@ -53,7 +53,7 @@ set(CORE_TEST_SOURCES
 
 # The online screens' layout (brief 08) needs RmlUi, so it is a bitriot_tests source.
 if(BITRIOT_NETPLAY)
-  list(APPEND CORE_TEST_SOURCES LobbyLayoutTest.cpp)
+  list(APPEND CORE_TEST_SOURCES LobbyLayoutTest.cpp NetGameTest.cpp)
 endif()
 
 # Netplay (brief 07): the wire format and the lockstep session, on vnet's loopback network.

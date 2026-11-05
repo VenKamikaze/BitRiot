@@ -1417,3 +1417,38 @@ TEST(LockstepLobby, ARoundInProgressCannotKickAndANewJoinerBetweenRoundsHasToBeR
   EXPECT_FALSE(c.machine(0).s->kick(1)) << "no kicking in a running round";
   EXPECT_EQ(c.machine(0).s->peerCount(), 1);
 }
+
+TEST(LockstepLobby, ATeamChosenForMoreSlotsThanThereAreIsClampedAndTheRoundStillStarts)
+{
+  Cluster c(2);
+  netplay::LobbySettings ls;
+  ls.totalSlots = 4;
+  ls.teams = {3, 3, 2, 2};
+  c.setLobby(ls);
+  c.run(100);
+  EXPECT_EQ(c.machine(1).s->lobby().slots.size(), 4u);
+  EXPECT_EQ(c.machine(1).s->lobby().slots[0].team, 3);
+  // The host takes the slot count down to two: the old teams 3 and 2 are not teams of a two-player round.
+  ls.totalSlots = 2;
+  c.setLobby(ls);
+  c.run(100);
+  ASSERT_EQ(c.machine(1).s->lobby().slots.size(), 2u);
+  EXPECT_EQ(c.machine(1).s->lobby().slots[0].team, 0) << "falls back to the slot's own number";
+  EXPECT_EQ(c.machine(1).s->lobby().slots[1].team, 1);
+  std::string error;
+  ASSERT_TRUE(c.startRound(1, 0, &error)) << error;
+  EXPECT_EQ(c.machine(1).round.config.slots[0].team, 0);
+}
+
+TEST(LockstepLobby, CannotStartBecauseSaysWhy)
+{
+  Cluster c(2, readyOptions());
+  LockstepSession& host = *c.machine(0).s;
+  EXPECT_EQ(host.cannotStartBecause(), "waiting for 1 player to be ready");
+  EXPECT_EQ(c.machine(1).s->cannotStartBecause(), "only the host starts a round");
+  c.machine(1).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return host.canStartRound(); }, 2000));
+  EXPECT_EQ(host.cannotStartBecause(), "");
+  ASSERT_TRUE(c.startRound(1, 0));
+  EXPECT_EQ(host.cannotStartBecause(), "a round is running");
+}

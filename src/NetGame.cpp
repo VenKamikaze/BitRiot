@@ -194,13 +194,13 @@ void NetGame::cycleSetting(HostSetting which)
   switch (which)
   {
     case SET_MAP_WIDTH:
-      m_hostSettings.mapWidth = shown.mapWidth >= GS::MAX_MAP_WIDTH ? GS::MIN_MAP_WIDTH : shown.mapWidth + GS::MAP_SIZE_STEP;
+      m_hostSettings.mapWidth = (shown.mapWidth >= GS::MAX_MAP_WIDTH || shown.mapWidth < GS::MIN_MAP_WIDTH) ? GS::MIN_MAP_WIDTH : shown.mapWidth + GS::MAP_SIZE_STEP;
       break;
     case SET_MAP_HEIGHT:
-      m_hostSettings.mapHeight = shown.mapHeight >= GS::MAX_MAP_HEIGHT ? GS::MIN_MAP_HEIGHT : shown.mapHeight + GS::MAP_SIZE_STEP;
+      m_hostSettings.mapHeight = (shown.mapHeight >= GS::MAX_MAP_HEIGHT || shown.mapHeight < GS::MIN_MAP_HEIGHT) ? GS::MIN_MAP_HEIGHT : shown.mapHeight + GS::MAP_SIZE_STEP;
       break;
     case SET_BLOCKS:
-      m_hostSettings.blockPercentage = shown.blockPercentage >= GS::MAX_BLOCK_PCT ? GS::MIN_BLOCK_PCT : shown.blockPercentage + 5;
+      m_hostSettings.blockPercentage = (shown.blockPercentage >= GS::MAX_BLOCK_PCT || shown.blockPercentage < GS::MIN_BLOCK_PCT) ? GS::MIN_BLOCK_PCT : shown.blockPercentage + 5;
       break;
     case SET_SPAWNER:
       m_hostSettings.npcSpawner = !shown.npcSpawner;
