@@ -101,6 +101,13 @@ namespace netplay
 
     // Seed for session ids, nonces and tokens; 0 = from the system (NetRandom.h).
     uint64_t randomSeed = 0;
+
+    // Host only: canStartRound() in the lobby also wants every peer to have said it is ready
+    // (setReady(), READY on the wire; protocol version 2). Off by default so that the headless
+    // runner and the older tests, which start a round as soon as everyone is connected, are
+    // unchanged; the game turns it on. Between rounds nobody has to be ready again: the roster is
+    // what played the last round, and the host may start the next one or go back to the lobby.
+    bool requireReady = false;
   };
 
   // What the host's lobby will build the next round from.
@@ -154,6 +161,7 @@ namespace netplay
     uint8_t slotMask = 0;
     int rttMs = -1;     // -1: not measured
     bool connected = true;
+    bool ready = false; // a peer's ready flag as the host knows it; the host itself is always ready
   };
 
   struct LobbyView
@@ -188,7 +196,8 @@ namespace netplay
         END_LEFT,            // we left (leave())
         END_DESYNC,          // a desync ended the match (leave() after one)
         END_NETWORK,         // vnet failed
-        END_BAD_HOST         // the host sent something we cannot play
+        END_BAD_HOST,        // the host sent something we cannot play
+        END_REMOVED          // the host removed us from the lobby (version 2)
       };
 
       // Hosts a session on `port` of `v` (0 = ephemeral; localPort() tells which). `v`
@@ -231,6 +240,22 @@ namespace netplay
       static constexpr int MIN_DELAY = 2;
       static constexpr int MAX_DELAY = 8;
       static constexpr int DEFAULT_DELAY = 3;   // loopback and tests, and a peer with no measurement yet
+
+      // Peer: say that this machine is (not) ready to start. Only meaningful in the lobby; it is
+      // forgotten whenever a round starts or the lobby is entered again. The session repeats the
+      // answer until the host's LOBBY shows it.
+      void setReady(bool ready);
+      bool wantsReady() const { return m_wantReady; }
+      // The peers (host side: each peer's own answer; peer side: from LOBBY) that are not ready.
+      int notReadyCount() const;
+      // Host, in the lobby only: remove a peer (it is told: END_REMOVED). False if it is not there
+      // or a round is on. The peer may join again; there is no ban list.
+      bool kick(uint8_t peerId);
+      // Host, between rounds: go back to the lobby (the scoreboard's "Back to lobby"), where the
+      // settings can be changed, peers leave or join and everybody is asked to be ready again.
+      // Allowed under the same conditions as the next round (canStartRound()); false otherwise.
+      // Peers follow when their LOBBY says so and they are done with the round.
+      bool returnToLobby();
 
       // Host: true when a round could start now: in the lobby or between rounds, and
       // every peer has acknowledged the last tick of the previous round (so no peer is
@@ -342,6 +367,8 @@ namespace netplay
         uint64_t lastTicksSent = 0;
         uint64_t lastStartSent = 0;
         std::map<uint32_t, uint64_t> hashes;    // checkpoint hashes it reported
+        bool ready = false;                     // lobby: it said it is ready
+        uint32_t readySeq = 0;                  // the highest READY seq applied
       };
 
       static bool openSocket(vnet* v, uint16_t port, int* sock, uint16_t* localPort, std::string* error);
@@ -358,6 +385,8 @@ namespace netplay
       void onStart(const StartMsg& msg);
       void onLobby(const LobbyMsg& msg);
       void onChecksumHost(Member& m, const ChecksumMsg& msg);
+      void onReady(Member& m, const ReadyMsg& msg);
+      void sendReady();
       void onDesync(const DesyncMsg& msg);
 
       // Sending.
@@ -457,6 +486,11 @@ namespace netplay
       bool m_desynced = false;
       DesyncInfo m_desync;
       uint64_t m_lastDesyncSent = 0;
+
+      // Ready (peer side): what the player wants, and the counter of the answers sent.
+      bool m_wantReady = false;
+      uint32_t m_readySeq = 0;
+      uint64_t m_lastReadySent = 0;
 
       std::string m_delayNote;
       Stats m_stats;

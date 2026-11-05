@@ -239,6 +239,7 @@ std::string messageName(uint8_t type)
     case MSG_PONG: return "PONG";
     case MSG_KEEPALIVE: return "KEEPALIVE";
     case MSG_LEAVE: return "LEAVE";
+    case MSG_READY: return "READY";
     default: return "type " + std::to_string((int) type);
   }
 }
@@ -334,6 +335,7 @@ void encode(Writer& w, const LobbyMsg& m)
     w.u8(p.id);
     w.u8(p.slotMask);
     w.u16(p.rttMs);
+    w.u8(p.ready ? 1 : 0);
     w.str(p.name);
   }
 }
@@ -371,6 +373,12 @@ bool decode(Reader& r, LobbyMsg& m)
     p.id = r.u8();
     p.slotMask = r.u8();
     p.rttMs = r.u16();
+    const uint8_t ready = r.u8();
+    if (ready > 1)
+    {
+      return false;
+    }
+    p.ready = ready != 0;
     p.name = r.str();
     if (!r.ok())
     {
@@ -626,6 +634,22 @@ void encode(Writer& w, const LeaveMsg& m)
 bool decode(Reader& r, LeaveMsg& m)
 {
   m.reason = r.u8();
-  return r.done();
+  return r.done() && m.reason <= LEAVE_REASON_MAX;
+}
+
+void encode(Writer& w, const ReadyMsg& m)
+{
+  w.u16(m.round);
+  w.u32(m.seq);
+  w.u8(m.ready ? 1 : 0);
+}
+
+bool decode(Reader& r, ReadyMsg& m)
+{
+  m.round = r.u16();
+  m.seq = r.u32();
+  const uint8_t ready = r.u8();
+  m.ready = ready != 0;
+  return r.done() && ready <= 1;
 }
 } // namespace netplay

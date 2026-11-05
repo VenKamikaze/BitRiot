@@ -500,6 +500,13 @@ void LockstepSession::hostHandle(const vnet_addr& from, const Header& h, Reader&
       onChecksumHost(m, msg);
       break;
     }
+    case MSG_READY:
+    {
+      ReadyMsg msg;
+      if (!decode(r, msg)) { m_stats.badPackets++; return; }
+      onReady(m, msg);
+      break;
+    }
     case MSG_PONG:
     {
       PingMsg msg;
@@ -551,6 +558,22 @@ void LockstepSession::onInput(Member& m, const InputMsg& msg)
   while (m.recs.count(m.contig + 1))
   {
     m.contig++;
+  }
+}
+
+void LockstepSession::onReady(Member& m, const ReadyMsg& msg)
+{
+  // Only the lobby asks for it, only for the round the next START will be, and only the newest answer counts
+  // (a late duplicate of an older one must not undo a newer one).
+  if (m_state != LOBBY || msg.round != static_cast<uint16_t>(m_round + 1) || msg.seq <= m.readySeq)
+  {
+    return;
+  }
+  m.readySeq = msg.seq;
+  if (m.ready != msg.ready)
+  {
+    m.ready = msg.ready;
+    recomputeRoster();   // the view (and so the next LOBBY) shows it
   }
 }
 
@@ -722,6 +745,7 @@ void LockstepSession::rebuildLobbyView()
     e.id = (uint8_t) id;
     e.name = m.name;
     e.connected = !m.gone;
+    e.ready = id == 0 || m.ready;
     for (int s = 0; s < m_numSlots; s++)
     {
       if (m_owner[s] == id) e.slotMask |= (uint8_t) (1u << s);
@@ -821,6 +845,7 @@ void LockstepSession::broadcastLobby()
     p.id = e.id;
     p.slotMask = e.slotMask;
     p.rttMs = e.rttMs < 0 ? 0xFFFF : (uint16_t) std::min(e.rttMs, 0xFFFE);
+    p.ready = e.ready;
     p.name = e.name;
     msg.peers.push_back(p);
   }
@@ -941,6 +966,97 @@ bool LockstepSession::canStartRound() const
       }
     }
   }
+  if (m_state == LOBBY && m_opt.requireReady && notReadyCount() > 0)
+  {
+    return false;
+  }
+  return true;
+}
+
+int LockstepSession::notReadyCount() const
+{
+  int n = 0;
+  if (m_role == HOST)
+  {
+    for (int id = 1; id < MAX_PEERS; id++)
+    {
+      const Member& m = m_members[id];
+      if (m.present && !m.gone && !m.ready) n++;
+    }
+    return n;
+  }
+  for (const LobbyEntry& e : m_lobby.peers)
+  {
+    if (e.id != HOST_ID && e.connected && !e.ready) n++;
+  }
+  return n;
+}
+
+void LockstepSession::setReady(bool ready)
+{
+  if (m_role != PEER || m_wantReady == ready)
+  {
+    return;
+  }
+  m_wantReady = ready;
+  m_readySeq++;
+  m_lastReadySent = 0;   // sent by the next pump(), and repeated until the host's LOBBY shows it
+}
+
+void LockstepSession::sendReady()
+{
+  bool hostSees = false;
+  for (const LobbyEntry& e : m_lobby.peers)
+  {
+    if (e.id == m_myId) hostSees = e.ready;
+  }
+  if (m_lobby.round == 0 || (hostSees == m_wantReady && m_lastReadySent != 0))
+  {
+    return;   // nothing to say, or the host already shows what we want
+  }
+  if (m_lastReadySent != 0 && m_now - m_lastReadySent < m_opt.resendMs * 3)
+  {
+    return;
+  }
+  if (m_readySeq == 0)
+  {
+    return;   // never asked: the host's default (not ready) stands
+  }
+  ReadyMsg r;
+  r.round = m_lobby.round;
+  r.seq = m_readySeq;
+  r.ready = m_wantReady;
+  sendMsg(MSG_READY, m_hostAddr, r);
+  m_members[0].lastSent = m_now;
+  m_lastReadySent = m_now;
+}
+
+bool LockstepSession::kick(uint8_t peerId)
+{
+  if (m_role != HOST || m_state != LOBBY || peerId == HOST_ID || peerId >= MAX_PEERS || !m_members[peerId].present
+      || m_members[peerId].gone)
+  {
+    return false;
+  }
+  LeaveMsg l;
+  l.reason = LEAVE_REMOVED;
+  for (int k = 0; k < 3; k++) sendMsg(MSG_LEAVE, m_members[peerId].addr, l);
+  removePeer(peerId, "removed by the host");
+  return true;
+}
+
+bool LockstepSession::returnToLobby()
+{
+  if (m_role != HOST || m_state != BETWEEN_ROUNDS || !canStartRound())
+  {
+    return false;
+  }
+  m_state = LOBBY;
+  for (int id = 1; id < MAX_PEERS; id++)
+  {
+    m_members[id].ready = false;
+  }
+  recomputeRoster();
   return true;
 }
 
@@ -998,7 +1114,13 @@ bool LockstepSession::startRound(uint64_t seed, std::string* error)
   }
   if (!canStartRound())
   {
-    if (error) *error = "waiting for the other players to finish the last round";
+    if (error)
+    {
+      const int waiting = m_state == LOBBY ? notReadyCount() : 0;
+      *error = waiting > 0 && m_opt.requireReady
+          ? "waiting for " + std::to_string(waiting) + (waiting == 1 ? " player" : " players") + " to be ready"
+          : "waiting for the other players to finish the last round";
+    }
     return false;
   }
   recomputeRoster();
@@ -1093,7 +1215,9 @@ void LockstepSession::setupRound(const StartMsg& s, uint8_t /*unused*/)
     m.lastTicksSent = 0;
     m.lastStartSent = 0;
     m.hashes.clear();
+    m.ready = false;
   }
+  m_wantReady = false;
   m_state = RUNNING;
   m_lobbyDirty = true;
   if (m_role == HOST)
@@ -1743,6 +1867,10 @@ void LockstepSession::peerHandle(const vnet_addr& from, const Header& h, Reader&
       {
         end(END_KICKED, "the host dropped you (no packets from you for too long)");
       }
+      else if (msg.reason == LEAVE_REMOVED)
+      {
+        end(END_REMOVED, "the host removed you from the game");
+      }
       else if (msg.reason == LEAVE_DESYNC)
       {
         end(END_HOST_CLOSED, "the host stopped the match: the game state diverged");
@@ -1776,7 +1904,15 @@ void LockstepSession::onLobby(const LobbyMsg& msg)
     e.name = p.name;
     e.slotMask = p.slotMask;
     e.rttMs = p.rttMs == 0xFFFF ? -1 : p.rttMs;
+    e.ready = p.ready;
     m_lobby.peers.push_back(e);
+  }
+  // The host went back to the lobby (the scoreboard's "Back to lobby"): so do we, once our own round is over
+  // here. The round number says it is the lobby after the round we played, not an old packet of an earlier one.
+  if (m_state == BETWEEN_ROUNDS && msg.phase == PHASE_LOBBY && msg.round == static_cast<uint16_t>(m_round + 1))
+  {
+    m_state = LOBBY;
+    m_wantReady = false;
   }
 }
 
@@ -2006,6 +2142,7 @@ void LockstepSession::peerSend()
     return;
   }
   // LOBBY
+  sendReady();
   if (m_now - m_members[0].lastSent >= m_opt.keepaliveMs)
   {
     KeepaliveMsg k;

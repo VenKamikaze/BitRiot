@@ -658,6 +658,19 @@ TEST(LockstepSession, AHelloOfAnotherProtocolVersionIsRejectedBeforeItsBodyIsRea
   EXPECT_EQ(c.machine(0).s->peerCount(), 0);
 }
 
+TEST(LockstepSession, AVersionOneHelloIsRefusedWithRejectVersion)
+{
+  // Version 2 (brief 08) changed LOBBY, added READY: a build still speaking version 1 must be told so, with the
+  // host's own protocol number, rather than join and then misread LOBBY. The v1 HELLO layout is the same as v2's, so
+  // this is the exact datagram an old build sends.
+  Cluster c(1);
+  const netplay::RejectMsg rj = expectReject(rawHello(c, 1, 0xB111D, 0xDA7A));
+  EXPECT_EQ(rj.reason, netplay::REJECT_VERSION);
+  EXPECT_EQ(rj.hostProtocol, 2);
+  EXPECT_NE(rj.text.find("protocol version 1"), std::string::npos) << rj.text;
+  EXPECT_EQ(c.machine(0).s->peerCount(), 0);
+}
+
 TEST(LockstepSession, AMismatchedBuildIdIsRejectedEvenWithTheSameProtocolVersion)
 {
   Cluster c(2);
@@ -1177,4 +1190,230 @@ TEST(LockstepSession, StrayAndForgedPacketsChangeNothing)
   expectModel(c.machine(0), 120, ownersOf(c.machine(0)));
   EXPECT_EQ(c.machine(0).s->peerCount(), 2);
   EXPECT_GE(c.machine(0).s->stats().badPackets, 4u);
+}
+
+// -- ready flags, back to the lobby, removing a peer (protocol version 2, brief 08) ------------------------------------
+
+namespace
+{
+ClusterOptions readyOptions(const std::string& impair = "")
+{
+  ClusterOptions o;
+  o.session.requireReady = true;
+  o.impair = impair;
+  return o;
+}
+
+// The ready flag of machine `id` as machine `viewer` shows it.
+bool readyAsSeenBy(Cluster& c, int viewer, int id)
+{
+  for (const netplay::LobbyEntry& e : c.machine(viewer).s->lobby().peers)
+  {
+    if (e.id == id) return e.ready;
+  }
+  return false;
+}
+} // namespace
+
+TEST(LockstepLobby, StartWaitsForEveryPeerToBeReadyAndSaysWhy)
+{
+  Cluster c(3, readyOptions());
+  LockstepSession& host = *c.machine(0).s;
+  EXPECT_EQ(host.notReadyCount(), 2);
+  EXPECT_FALSE(host.canStartRound());
+  std::string error;
+  EXPECT_FALSE(host.startRound(1, &error));
+  EXPECT_NE(error.find("waiting for 2 players to be ready"), std::string::npos) << error;
+
+  c.machine(1).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return host.notReadyCount() == 1; }, 2000));
+  EXPECT_FALSE(host.canStartRound());
+  EXPECT_FALSE(host.startRound(1, &error));
+  EXPECT_NE(error.find("waiting for 1 player to be ready"), std::string::npos) << error;
+  // Everybody sees who is ready: the host always is, peer 1 now, peer 2 not.
+  ASSERT_TRUE(c.runUntil([&] { return readyAsSeenBy(c, 2, 1); }, 2000));
+  EXPECT_TRUE(readyAsSeenBy(c, 2, 0));
+  EXPECT_FALSE(readyAsSeenBy(c, 1, 2));
+  EXPECT_EQ(c.machine(2).s->notReadyCount(), 1);
+
+  c.machine(2).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return host.canStartRound(); }, 2000));
+  EXPECT_EQ(host.notReadyCount(), 0);
+  ASSERT_TRUE(c.startRound(1, 0, &error)) << error;
+}
+
+TEST(LockstepLobby, UnreadyingTakesTheStartAwayAgain)
+{
+  Cluster c(2, readyOptions());
+  LockstepSession& host = *c.machine(0).s;
+  c.machine(1).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return host.canStartRound(); }, 2000));
+  c.machine(1).s->setReady(false);
+  ASSERT_TRUE(c.runUntil([&] { return !host.canStartRound(); }, 2000));
+  EXPECT_FALSE(readyAsSeenBy(c, 1, 1) && host.canStartRound());
+  ASSERT_TRUE(c.runUntil([&] { return !readyAsSeenBy(c, 1, 1); }, 2000));
+}
+
+TEST(LockstepLobby, ReadyIsRepeatedUntilTheHostShowsItEvenUnderHeavyLoss)
+{
+  Cluster c(2, readyOptions("loss=60"));
+  LockstepSession& host = *c.machine(0).s;
+  c.machine(1).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return host.canStartRound(); }, 30000));
+  EXPECT_TRUE(c.runUntil([&] { return readyAsSeenBy(c, 1, 1); }, 30000));   // and the LOBBY that says so gets through
+}
+
+TEST(LockstepLobby, WithoutRequireReadyTheLobbyStartsAsBefore)
+{
+  // The headless runner and brief 07's tests never send READY.
+  Cluster c(3);
+  EXPECT_TRUE(c.machine(0).s->canStartRound());
+  std::string error;
+  EXPECT_TRUE(c.startRound(1, 0, &error)) << error;
+}
+
+TEST(LockstepLobby, AStaleOrReplayedReadyAnswerCannotUndoANewerOne)
+{
+  Cluster c(2, readyOptions());
+  LockstepSession& host = *c.machine(0).s;
+  // A raw peer cannot be crafted without the host's session id and the peer's address, so replay through the real
+  // peer: ready, unready, ready again, quickly. The host ends up with the last answer whatever order it saw them.
+  c.machine(1).s->setReady(true);
+  c.run(5);
+  c.machine(1).s->setReady(false);
+  c.run(5);
+  c.machine(1).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return host.canStartRound(); }, 3000));
+  c.run(3000);
+  EXPECT_TRUE(host.canStartRound());
+  EXPECT_TRUE(readyAsSeenBy(c, 1, 1));
+}
+
+TEST(LockstepLobby, ReadyIsForgottenWhenARoundStarts)
+{
+  Cluster c(2, readyOptions());
+  c.machine(1).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 2000));
+  ASSERT_TRUE(c.startRound(1, 40));
+  EXPECT_FALSE(c.machine(1).s->wantsReady());
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(40); }, 20000));
+  // Between rounds nobody has to be ready again: the next round may start at once.
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 5000));
+  std::string error;
+  ASSERT_TRUE(c.startRound(2, 40, &error)) << error;
+}
+
+TEST(LockstepLobby, ReadyAnswersOutsideTheLobbyAreIgnored)
+{
+  Cluster c(2, readyOptions());
+  c.machine(1).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 2000));
+  ASSERT_TRUE(c.startRound(1, 0));
+  // A running round: setReady() on the peer is remembered, nothing is sent and the session carries on.
+  c.machine(1).s->setReady(true);
+  c.run(2000);
+  EXPECT_EQ(c.machine(0).s->state(), LockstepSession::RUNNING);
+  EXPECT_EQ(c.machine(0).s->stats().badPackets, 0u);
+}
+
+TEST(LockstepLobby, TheHostCanGoBackToTheLobbyAndPeersFollow)
+{
+  ClusterOptions o = readyOptions();
+  o.delayMs = 20;
+  Cluster c(3, o);
+  c.machine(1).s->setReady(true);
+  c.machine(2).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 3000));
+  ASSERT_TRUE(c.startRound(1, 60));
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(60); }, 20000));
+  LockstepSession& host = *c.machine(0).s;
+  ASSERT_TRUE(c.runUntil([&] { return host.state() == LockstepSession::BETWEEN_ROUNDS && host.canStartRound(); }, 5000));
+
+  // The scoreboard phase is announced as such.
+  EXPECT_EQ(c.machine(1).s->lobby().phase, netplay::PHASE_BETWEEN_ROUNDS);
+  ASSERT_TRUE(host.returnToLobby());
+  EXPECT_EQ(host.state(), LockstepSession::LOBBY);
+  EXPECT_EQ(host.lobby().phase, netplay::PHASE_LOBBY);
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(1).s->state() == LockstepSession::LOBBY && c.machine(2).s->state() == LockstepSession::LOBBY; }, 5000));
+  EXPECT_EQ(c.machine(1).s->lobby().phase, netplay::PHASE_LOBBY);
+
+  // Back in the lobby everybody has to say ready again; nobody carried it over.
+  EXPECT_EQ(host.notReadyCount(), 2);
+  EXPECT_FALSE(host.canStartRound());
+  EXPECT_FALSE(c.machine(1).s->wantsReady());
+  c.machine(1).s->setReady(true);
+  c.machine(2).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return host.canStartRound(); }, 3000));
+
+  // The lobby has its own settings again, and a second round plays on identical inputs.
+  netplay::LobbySettings ls = host.lobby().settings;
+  ls.totalSlots = 4;
+  ls.teams = {0, 0, 1, 1};
+  host.setLobbySettings(ls);
+  std::string error;
+  ASSERT_TRUE(c.startRound(2, 60, &error)) << error;
+  EXPECT_EQ(c.machine(1).round.config.numPlayers(), 4);
+  EXPECT_EQ(c.machine(1).round.config.slots[1].team, 0);
+  EXPECT_EQ(c.machine(1).round.config.slots[3].team, 1);
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(60); }, 20000));
+  expectIdentical(c, {0, 1, 2}, 60);
+}
+
+TEST(LockstepLobby, BackToTheLobbyWaitsForTheLastTickLikeTheNextRound)
+{
+  ClusterOptions o = readyOptions();
+  o.delayMs = 100;
+  Cluster c(2, o);
+  c.machine(1).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 3000));
+  ASSERT_TRUE(c.startRound(1, 50));
+  LockstepSession& host = *c.machine(0).s;
+  EXPECT_FALSE(host.returnToLobby()) << "a round is running";
+  // The moment the host has stepped the last tick, a peer 100 ms away cannot yet have said it holds it.
+  ASSERT_TRUE(c.runUntil([&] { return host.state() == LockstepSession::BETWEEN_ROUNDS; }, 60000));
+  EXPECT_FALSE(host.canStartRound());
+  EXPECT_FALSE(host.returnToLobby());
+  EXPECT_EQ(host.state(), LockstepSession::BETWEEN_ROUNDS);
+  ASSERT_TRUE(c.runUntil([&] { return host.canStartRound(); }, 5000));
+  EXPECT_TRUE(host.returnToLobby());
+}
+
+TEST(LockstepLobby, OnlyTheHostGoesBackAndOnlyFromTheScoreboard)
+{
+  Cluster c(2);
+  EXPECT_FALSE(c.machine(0).s->returnToLobby()) << "already in the lobby";
+  EXPECT_FALSE(c.machine(1).s->returnToLobby()) << "a peer cannot";
+  c.machine(0).s->setReady(true);   // a host has no ready flag to set
+  EXPECT_FALSE(c.machine(0).s->wantsReady());
+}
+
+TEST(LockstepLobby, TheHostCanRemoveAPeerAndItIsToldWhy)
+{
+  Cluster c(3, readyOptions());
+  LockstepSession& host = *c.machine(0).s;
+  ASSERT_EQ(host.peerCount(), 2);
+  EXPECT_FALSE(host.kick(0)) << "the host cannot remove itself";
+  EXPECT_FALSE(host.kick(5)) << "nobody there";
+  EXPECT_TRUE(host.kick(1));
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(1).s->ended(); }, 3000));
+  EXPECT_EQ(c.machine(1).s->endReason(), LockstepSession::END_REMOVED);
+  EXPECT_NE(c.machine(1).s->endText().find("removed"), std::string::npos) << c.machine(1).s->endText();
+  EXPECT_EQ(host.peerCount(), 1);
+  // The lobby view of the others no longer lists it, and the slots were dealt again.
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(2).s->lobby().peers.size() == 2; }, 3000));
+  EXPECT_EQ(c.machine(2).s->lobby().slots[1].owner, 2);
+  // It is not banned: it may join again (a fresh session).
+  Machine& again = c.addMachine(1);
+  ASSERT_TRUE(c.runUntil([&] { return again.s->state() == LockstepSession::LOBBY; }, 3000));
+  EXPECT_EQ(host.peerCount(), 2);
+}
+
+TEST(LockstepLobby, ARoundInProgressCannotKickAndANewJoinerBetweenRoundsHasToBeReadyOnlyInTheLobby)
+{
+  Cluster c(2, readyOptions());
+  c.machine(1).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 3000));
+  ASSERT_TRUE(c.startRound(1, 0));
+  EXPECT_FALSE(c.machine(0).s->kick(1)) << "no kicking in a running round";
+  EXPECT_EQ(c.machine(0).s->peerCount(), 1);
 }
