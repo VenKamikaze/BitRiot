@@ -2654,7 +2654,7 @@ void LockstepSession::onLobby(const LobbyMsg& msg)
   // here. The round number says it is the lobby after the round we played, not an old packet of an earlier one.
   // A late joiner still catching up on the round (the host does not wait for it) follows too: the host stops sending that
   // round's ticks once it is back in the lobby, so it would be stuck in the round for good.
-  if ((m_state == BETWEEN_ROUNDS || (m_state == RUNNING && (m_midJoin || m_opt.spectate || m_participateFrom == 0xFFFFFFFFu)))
+  if ((m_state == BETWEEN_ROUNDS || (m_state == RUNNING && (m_midJoin || m_participateFrom == 0xFFFFFFFFu)))   // (a late joiner, a machine that watches by choice, one with no seat this round)
       && msg.phase == PHASE_LOBBY && msg.round == static_cast<uint16_t>(m_round + 1))
   {
     m_state = LOBBY;
