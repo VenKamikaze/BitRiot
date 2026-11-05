@@ -84,6 +84,9 @@ class GameEngine
     // call when there is none. main() calls it when the game closes.
     void stopNetplay();
     bool netplayActive() const { return static_cast<bool>(m_net); }
+    // The main loop's sleep in a network game: up to `ms`, ending early when a datagram
+    // arrives. False when there is no network game (or the backend cannot wait): sleep as usual.
+    bool netplayWait(uint32_t ms) { return m_net && m_net->wait(ms); }
 #endif
 
     // One tick: samples the local devices into a TickInputs (the control events

@@ -48,6 +48,11 @@ class NetGame
 
     // Once a frame, in every state: polls the network, answers, sends keepalives.
     void pump();
+    // Sleeps up to `ms` milliseconds, waking early when a datagram may have arrived (the
+    // main loop's sleep, so that a tick the host has just confirmed is stepped now and not
+    // up to a frame later: that is up to 33 ms less round trip, which is input delay saved).
+    // False if this backend cannot wait (the caller sleeps as usual).
+    bool wait(uint32_t ms);
 
     // The player's own choices, saved when netplay started and put back when it stops
     // (a match overwrites the roster, the player count and the map).

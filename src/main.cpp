@@ -380,7 +380,14 @@ int main(int argc, char* argv[])
         const uint32_t sleepMs = frameLoop->sleepHintMs();
         if(sleepMs > 0)
         {
-          SDL_Delay(sleepMs);
+#ifdef BITRIOT_NETPLAY
+          // In a network game the sleep ends when a datagram arrives, so a tick the host has
+          // just confirmed is not left waiting for the next frame.
+          if(!engine->netplayWait(sleepMs))
+#endif
+          {
+            SDL_Delay(sleepMs);
+          }
         }
       }
     }

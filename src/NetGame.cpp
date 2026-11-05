@@ -91,6 +91,11 @@ void NetGame::pump()
   m_session->pump();
 }
 
+bool NetGame::wait(uint32_t ms)
+{
+  return vnet_wait(m_v, (int) ms) >= 0;
+}
+
 void NetGame::updateLobbySettings()
 {
   if (!m_params.host)

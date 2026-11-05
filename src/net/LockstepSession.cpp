@@ -546,7 +546,9 @@ void LockstepSession::onInput(Member& m, const InputMsg& msg)
 
 void LockstepSession::onChecksumHost(Member& m, const ChecksumMsg& msg)
 {
-  if (m_state != RUNNING || msg.round != m_round)
+  // Also between rounds: a peer's report for the last tick can arrive after the host has
+  // stepped it and moved on to the scoreboard.
+  if ((m_state != RUNNING && m_state != BETWEEN_ROUNDS) || msg.round != m_round)
   {
     return;
   }
@@ -1444,7 +1446,7 @@ void LockstepSession::sendPings()
 
 void LockstepSession::hostSend()
 {
-  if (m_desynced && m_state == RUNNING && m_now - m_lastDesyncSent >= DESYNC_RESEND_MS)
+  if (m_desynced && (m_state == RUNNING || m_state == BETWEEN_ROUNDS) && m_now - m_lastDesyncSent >= DESYNC_RESEND_MS)
   {
     DesyncMsg d;
     d.round = m_desync.round;
@@ -1765,7 +1767,7 @@ void LockstepSession::onTicks(const TicksMsg& msg)
 
 void LockstepSession::onDesync(const DesyncMsg& msg)
 {
-  if (m_state != RUNNING || msg.round != m_round || m_desynced)
+  if ((m_state != RUNNING && m_state != BETWEEN_ROUNDS) || msg.round != m_round || m_desynced)
   {
     return;
   }

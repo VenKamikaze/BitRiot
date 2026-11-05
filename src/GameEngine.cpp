@@ -615,7 +615,7 @@ void GameEngine::netFrame()
   }
 
   // A desync: keep the evidence, give the others a moment to be told, then stop.
-  if (s.desynced() && !m_netDesyncHandled && s.state() == LockstepSession::RUNNING)
+  if (s.desynced() && !m_netDesyncHandled && (s.state() == LockstepSession::RUNNING || s.state() == LockstepSession::BETWEEN_ROUNDS))
   {
     m_netDesyncHandled = true;
     netplay::NetMatch::DesyncFiles files;
@@ -637,7 +637,7 @@ void GameEngine::netFrame()
     std::MickLogger::getInstance()->error(this, m_netMessage);
     m_netDesyncDeadline = SDL_GetTicks() + 1500;
   }
-  if (m_netDesyncHandled && s.state() == LockstepSession::RUNNING && SDL_GetTicks() >= m_netDesyncDeadline)
+  if (m_netDesyncHandled && (s.state() == LockstepSession::RUNNING || s.state() == LockstepSession::BETWEEN_ROUNDS) && SDL_GetTicks() >= m_netDesyncDeadline)
   {
     s.leave(netplay::LEAVE_DESYNC);   // the DESYNC has had time to reach everybody
   }
