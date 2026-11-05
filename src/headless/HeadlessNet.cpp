@@ -175,7 +175,6 @@ class Runner
     uint64_t now() const { return vnet_time(m_v); }
     void idle();
     bool setup();
-    int finish(int code, const std::string& note);
     bool handleDesync(int* exitCode);
     void beginRound(const netplay::RoundStart& rs);
     void stepOnce();
@@ -588,14 +587,6 @@ int Runner::run()
   }
 }
 
-int Runner::finish(int code, const std::string& note)
-{
-  if (!note.empty())
-  {
-    m_err << note << "\n";
-  }
-  return code;
-}
 } // namespace
 
 int runNetCommand(const std::vector<std::string>& args, std::ostream& out, std::ostream& err)

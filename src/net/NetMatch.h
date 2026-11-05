@@ -41,8 +41,6 @@ namespace netplay
     size_t dumpRingSize = 16;
     // Where desync files and round records are written; empty = the working directory.
     std::string outputDir;
-    // Write <outputDir>/round-<n>-peer<id>.brmr when a round finishes.
-    bool recordRounds = false;
   };
 
   class NetMatch
