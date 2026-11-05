@@ -127,6 +127,9 @@ void GameEngine::resetGame()
   GameRunningSDLInput::getInstance()->resetInputEvents();
   initPlayerCharacters(numPlayers, genders);
   m_pInputHandler->setPointers(m_pPlayers, m_pPanel);
+#ifdef BITRIOT_NETPLAY
+  m_pInputHandler->setPadsMayBindOwnSlots(false); // a local round: START always opens the selector
+#endif
   m_pPanel->setPlayerPointers(m_pPlayers);
   m_drawNeeded = true; // a new HUD and (maybe) a new back buffer: nothing is drawn yet
 }
@@ -801,7 +804,8 @@ void GameEngine::resetNetGame()
   // not the host's slot numbers, and a pad chosen for slot 2 there may not even be plugged in.
   // Devices are assigned deliberately instead: every slot starts with none, and this machine's
   // players (in slot order) get the keyboard sets 1, 2, ... (setPointers seeds the lowest free
-  // set for a human with no device). A pad joins a bot with its START button, as mid-round.
+  // set for a human with no device). A pad's START binds it to one of this machine's own slots (lowest without a pad; the keyboard set
+  // is released), and only then to a bot (InputHandler::setPadsMayBindOwnSlots).
   for (int i = 0; i < numPlayers; i++)
   {
     settings->setPlayerKeyboard(i, -1);
@@ -814,6 +818,7 @@ void GameEngine::resetNetGame()
   GameRunningSDLInput::getInstance()->resetInputEvents();
   initPlayerCharacters(numPlayers, genders);
   m_pInputHandler->setPointers(m_pPlayers, m_pPanel, rs.localSlotMask);
+  m_pInputHandler->setPadsMayBindOwnSlots(true);
   m_pPanel->setPlayerPointers(m_pPlayers);
   m_drawNeeded = true;
 }

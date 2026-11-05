@@ -89,6 +89,11 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
     // machine claimed the same bot in the same moment). The slot stops being ours: no pad, no keys,
     // no sampler entry, no indicator, and no event is queued (the simulation never made it ours).
     void revokeSlot(int slot);
+    // A network game (brief 07): a pad whose START is pressed while it drives nobody first takes one of THIS
+    // machine's own human slots that has no pad (lowest first; its keyboard set is released), and only
+    // then opens the join selector for a bot. Purely local: no control event, nothing sent. Off by default,
+    // so local play is unchanged (there START always opens the selector).
+    void setPadsMayBindOwnSlots(bool on) { m_padsBindOwn = on; }
     // The pad was unplugged. If it drove a live player that has no keyboard set, that
     // slot goes back to the AI (a RETURN_TO_AI event in the next sample); a player that
     // also has a keymap stays human on the keys.
@@ -143,10 +148,12 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
     // Produced, not yet sampled.
     vector<ControlEvent> m_pendingControl;
     ControllerRumble* m_rumble = nullptr;
+    bool m_padsBindOwn = false;
 
   private:
     void setJoinIndicator(int team, JoinIndicatorView::JoinState state,
                           JoinIndicatorView::JoinDevice device = JoinIndicatorView::JOIN_DEVICE_CONTROLLER); // no-op without a panel
+    bool bindPadToOwnSlot(int controllerId);
     void setAvailableKeys();
     vector<array<KEY, NUM_ACTION_BUTTONS>> m_availableKeySets; // fixed table of key sets, indexed by attachedKeyboardId (rebuilt each game).
 

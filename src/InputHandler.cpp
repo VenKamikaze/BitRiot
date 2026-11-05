@@ -508,7 +508,7 @@ bool InputHandler::processJoinControllerEvent(int controllerId, Uint8 button)
     {
       confirmJoin(pendingIndex);
     }
-    else
+    else if (!(m_padsBindOwn && bindPadToOwnSlot(controllerId)))
     {
       openJoin(true, controllerId);
     }
@@ -536,6 +536,25 @@ bool InputHandler::processJoinControllerEvent(int controllerId, Uint8 button)
 
   // Any other button from an unbound controller is eaten (it has no player yet).
   return true;
+}
+
+bool InputHandler::bindPadToOwnSlot(int controllerId)
+{
+  for (int slot = 0; slot < (int) p_players.size() && slot < std::GameSettings::MAX_PLAYERS; slot++)
+  {
+    const shared_ptr<PlayerCharacterEntity>& player = p_players.at(slot);
+    if (player && player->isAlive() && isLocalSlot(slot) && m_slotController[slot] == -1)
+    {
+      m_slotController[slot] = controllerId;
+      m_keyMap.erase(slot);        // the pad drives it now; the keyboard set is free again
+      m_sampler.clearSlot(slot);
+      setJoinIndicator(slot + 1, InfoPanel::JOIN_READY, InfoPanel::JOIN_DEVICE_CONTROLLER);
+      MickLogger::getInstance()->debug(this, string("Controller ").append(to_string(controllerId))
+        .append(" bound to this machine's own slot ").append(to_string(slot)));
+      return true;
+    }
+  }
+  return false;
 }
 
 void InputHandler::revokeSlot(int slot)

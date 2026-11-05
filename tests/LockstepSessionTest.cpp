@@ -813,6 +813,20 @@ TEST(LockstepSession, ATakeoverOfABotRidesWithItsInputsAndOnlyTheFirstClaimWins)
   }
 }
 
+TEST(LockstepSession, TakeThenGiveBackInOneTickMeansGivenBack)
+{
+  ClusterOptions o = withDelay(20);
+  o.lobby.totalSlots = 3;
+  Cluster c(2, o);
+  ASSERT_TRUE(c.startRound(3, 0));
+  // The last event for a slot in a record is the machine's intent: no event reaches the tick, and the
+  // machine is told it does not own the slot (it believed it did for a moment).
+  c.machine(1).wantEvents[30] = {ControlEvent(2, ControlEvent::HUMAN_TAKES_OVER), ControlEvent(2, ControlEvent::RETURN_TO_AI)};
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(80); }, 60000));
+  for (const TickInputs& t : c.machine(0).log) EXPECT_TRUE(t.control.empty());
+  EXPECT_EQ(c.machine(1).s->takeRejectedClaims(), std::vector<int>({2}));
+}
+
 TEST(LockstepSession, AHumanGivingItsSlotBackOwnsItNoMore)
 {
   ClusterOptions o = withDelay(20);

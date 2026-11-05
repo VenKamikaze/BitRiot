@@ -1308,10 +1308,20 @@ bool LockstepSession::mergeTick(uint32_t t, TickInputs& out)
     // all, so that with the host's own leaver events a tick never exceeds the protocol's and the
     // record's limit (4 per slot); the excess is dropped, the same way on the one machine that decides.
     uint32_t slotsUsed = 0;
-    for (const ControlEvent& e : rec->events)
+    // Of several events for one slot in a record the LAST is the machine's intent (take, then give back
+    // in one tick, means it gave it back); the earlier ones are dropped.
+    int lastFor[MAX_SLOTS];
+    for (int i = 0; i < MAX_SLOTS; i++) lastFor[i] = -1;
+    for (size_t i = 0; i < rec->events.size(); i++)
     {
+      if (validEvent(rec->events[i], m_numSlots)) lastFor[rec->events[i].slot] = (int) i;
+    }
+    for (size_t ei = 0; ei < rec->events.size(); ei++)
+    {
+      const ControlEvent& e = rec->events[ei];
       if (!validEvent(e, m_numSlots)) continue;
       const int s = e.slot;
+      if (lastFor[s] != (int) ei) continue;
       if (slotsUsed & (1u << s)) continue;
       if (out.control.size() >= MAX_PEER_EVENTS) break;
       if (e.kind == ControlEvent::HUMAN_TAKES_OVER)
@@ -2013,8 +2023,14 @@ void LockstepSession::flushOutgoing(uint32_t maxMs)
   {
     return;
   }
+  // Only datagrams accepted by vnet_sendto() and not yet on the wire (held by simulated latency) need it.
+  auto held = [this]() {
+    vnet_stats st;
+    vnet_get_stats(m_v, &st);
+    return (int64_t) st.tx_datagrams - (int64_t) st.wire_datagrams - (int64_t) st.impair_lost - (int64_t) st.impair_overflow;
+  };
   const uint64_t until = vnet_time(m_v) + maxMs;
-  while (vnet_time(m_v) < until)
+  while (held() > 0 && vnet_time(m_v) < until)
   {
     vnet_poll(m_v);
     vnet_wait(m_v, 5);
