@@ -66,6 +66,7 @@ int g_localPlayers = 1;   // the "Players here" button of the open form
 std::string g_defaultRelay;
 std::string g_defaultRoom;
 bool g_pageSecure = false;
+bool g_relayExplicit = false;
 std::function<void(const std::string&)> g_beforeLoad;
 std::function<void(const std::string&)> g_afterSave;
 
@@ -177,8 +178,9 @@ void EventHandlerNetForm::rememberHost(const std::string& name, int port, int lo
   savePrefs();
 }
 
-void EventHandlerNetForm::setRelayDefaults(const std::string& relay, const std::string& room, bool pageIsSecure)
+void EventHandlerNetForm::setRelayDefaults(const std::string& relay, const std::string& room, bool pageIsSecure, bool relayIsExplicit)
 {
+  g_relayExplicit = relayIsExplicit;
   g_defaultRelay = relay;
   g_defaultRoom = room;
   g_pageSecure = pageIsSecure;
@@ -194,7 +196,8 @@ void EventHandlerNetForm::rememberRelay(const std::string& name, const std::stri
 {
   netplay::NetPrefs& p = prefs();
   p.name = name;
-  p.relay = relay;
+  const std::string pageRelay = !g_defaultRelay.empty() ? g_defaultRelay : netplay::defaultRelayAddress();
+  p.relay = relay == pageRelay ? std::string() : relay;   // the default is not a choice: do not pin the visitor to it
   if (!room.empty()) p.room = room;
   p.localPlayers = localPlayers;
   savePrefs();
@@ -220,7 +223,8 @@ void EventHandlerNetForm::ProcessEvent(Rml::Event& event, const Rml::String& val
     setValue(doc, "f-name", p.name);
     setValue(doc, "f-port", std::to_string(p.hostPort));
     setValue(doc, "f-addr", p.joinAddress);
-    setValue(doc, "f-relay", !p.relay.empty() ? p.relay : (!g_defaultRelay.empty() ? g_defaultRelay : netplay::defaultRelayAddress()));
+    const std::string pageRelay = !g_defaultRelay.empty() ? g_defaultRelay : netplay::defaultRelayAddress();
+    setValue(doc, "f-relay", g_relayExplicit ? pageRelay : (!p.relay.empty() ? p.relay : pageRelay));
     setValue(doc, "f-room", !g_defaultRoom.empty() ? g_defaultRoom : p.room);
     if (Rml::Element* b = doc->GetElementById("f-local"))
     {

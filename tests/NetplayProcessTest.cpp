@@ -531,6 +531,29 @@ TEST(NetplayRelayProcess, ThreeProcessesMeetInARoomByCodeAndPlayUnderLossAndPrin
   EXPECT_NE(host.err().find("delay "), std::string::npos);
 }
 
+TEST(NetplayRelayProcess, OverASlowRelayPathTheHostChoosesADBeyondEight)
+{
+  // 120 ms each way on the peer's sends is about a 240 ms round trip: ceil(240 / 33) + 1 is 9 or more, which only a relay's raised limit
+  // (12; a LAN's is 8) allows.
+  Scratch dir;
+  Relay relay(dir);
+  ASSERT_FALSE(relay.udp().empty());
+  const std::string script = makeScript(dir, 3, 2, 600, 17);
+  const std::string roomFile = dir.file("room");
+  Proc host({"host", "--relay", relay.udp(), "--room-file", roomFile, "--peers", "1", "--rounds", "1", "--seed", "12", "--config", kConfig3,
+             "--script", script, "--tick-ms", "2", "--out", dir.dir("h")}, "", dir.file("h.out"), dir.file("h.err"));
+  const std::string room = waitForText(roomFile);
+  ASSERT_EQ(room.size(), 6u) << host.err();
+  Proc peer({"join", "--relay", relay.udp(), "--room", room, "--rounds", "1", "--script", script, "--tick-ms", "2", "--out", dir.dir("p")},
+            "lat=120,seed=5", dir.file("p.out"), dir.file("p.err"));
+  ASSERT_EQ(host.wait(kTimeout), 0) << host.err() << host.out();
+  ASSERT_EQ(peer.wait(30), 0) << peer.err() << peer.out();
+  const size_t at = host.err().find(", delay ");
+  ASSERT_NE(at, std::string::npos) << host.err();
+  EXPECT_GE(std::atoi(host.err().c_str() + at + 8), 9) << "a D above the LAN limit of 8: " << host.err();
+  EXPECT_EQ(host.out(), peer.out());
+}
+
 TEST(NetplayRelayProcess, ARoomCodeThatDoesNotExistIsRefusedByTheRelayAndTheJoinerSaysSo)
 {
   Scratch dir;

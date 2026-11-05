@@ -59,8 +59,10 @@ class EventHandlerNetForm : public EventHandler
     static const char* const RELAY_JOIN_FILENAME;   // netjoinrelay.rml
     // Brief 12. The relay a form offers when nothing was saved (a native build: the build's default; a web page: derived
     // from where it was loaded, or the page's own ?relay=), a room code to prefill (a web page's ?room=), and whether the
-    // page is served over https (a typed "host" then means wss://host/vnet).
-    static void setRelayDefaults(const std::string& relay, const std::string& room, bool pageIsSecure);
+    // page is served over https (a typed "host" then means wss://host/vnet). `relayIsExplicit`: the relay came from the page's own address
+    // (?relay=, an invite link): it wins over the saved one. A relay equal to the default is never saved, so a site that moves its relay
+    // moves its returning visitors with it.
+    static void setRelayDefaults(const std::string& relay, const std::string& room, bool pageIsSecure, bool relayIsExplicit = false);
     // Called around the settings file (they get its path): `beforeLoad` runs just before it is read (the web build copies the
     // saved text from localStorage into the file then), `afterSave` just after it was written (and copies it back).
     static void setPrefsSyncHooks(std::function<void(const std::string&)> beforeLoad, std::function<void(const std::string&)> afterSave);

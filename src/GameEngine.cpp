@@ -1250,6 +1250,28 @@ void GameEngine::stepNetTick()
   }
 }
 
+#endif // BITRIOT_NETPLAY
+
+bool GameEngine::hiddenPassesWanted() const
+{
+#ifdef BITRIOT_NETPLAY
+  return m_hidden && (m_net || m_netResolve);
+#else
+  return false;
+#endif
+}
+
+void GameEngine::flushNet()
+{
+#ifdef BITRIOT_NETPLAY
+  if (m_net)
+  {
+    m_net->pump();
+  }
+#endif
+}
+
+#ifdef BITRIOT_NETPLAY
 void GameEngine::logNet(const std::string& line)
 {
   m_netLog += line;

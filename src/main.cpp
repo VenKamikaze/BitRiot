@@ -191,7 +191,14 @@ static bool loopIteration()
     }
   }
 
-  const bool keepRunning = frame().keepRunning;
+  const FrameResult result = frame();
+  const bool keepRunning = result.keepRunning;
+  if(result.ticksStepped > 0 && engine)
+  {
+    // The inputs the steps just sampled go out now, not at the next pump (up to a frame or, in a hidden browser tab, a network
+    // event later: that is a whole tick interval of the input delay).
+    engine->flushNet();
+  }
 
   if(renderer->getSurfaceBackBufferHandle() != nullptr)
   {
@@ -285,11 +292,7 @@ static void webLoopIteration()
 // with the engine in its hidden mode (it steps every tick it holds, draws nothing).
 void webHiddenPoll()
 {
-#ifdef BITRIOT_NETPLAY
-  if(!webLoopRunning || !engine || !engine->hidden())
-#else
-  if(true)
-#endif
+  if(!webLoopRunning || !engine || !engine->hiddenPassesWanted())
   {
     return;
   }

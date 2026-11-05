@@ -95,6 +95,7 @@ class GameEngine
     // hooks and the page's own "join this room" link. False, and `error`, if the words are bad or a game is already on.
     bool startRelayFromText(bool host, const std::string& name, const std::string& relay, const std::string& room, int localPlayers,
                             bool pageIsSecure, std::string* error);
+#endif
     // Brief 12: the browser tab is hidden (document.hidden). A hidden tab gets no animation frames, so the page drives
     // the frame loop from network events instead (src/web/WebHooks.cpp); in this mode a network game steps every tick it
     // holds, whenever it is asked, instead of waiting for the clock (the others set the pace), and nothing is drawn.
@@ -109,6 +110,13 @@ class GameEngine
     // and "round R: over at tick T, winner player W, final hash 0xHASH" at the end), so a test can compare machines. Kept
     // for the web build's page hooks; the oldest lines are dropped beyond 64 KB.
     const std::string& netLog() const { return m_netLog; }
+    // True when a hidden tab has something to drive: a network game, or a relay lookup pending. A local game in a hidden tab is not
+    // driven at all (brief 09: it stops, as the browser stops its animation frames).
+    bool hiddenPassesWanted() const;
+    // Sends what a frame's steps produced (the inputs sampled for the ticks just stepped) at once, instead of at the next pump:
+    // a hidden tab otherwise sends them one network wake late, a whole tick interval of D. No-op without a network game.
+    void flushNet();
+#ifdef BITRIOT_NETPLAY
     // Brief 12 (the web build's test and development knobs): fields copied into the parameters of every relay session
     // (an explicit WebTransport URL and a development certificate hash, a vnet impairment spec). Only the relay and
     // impair fields are used.
@@ -117,6 +125,8 @@ class GameEngine
     std::string netRoomCode() const { return m_net ? m_net->roomCode() : std::string(); }
     // The network game, for the web build's page hooks (null when there is none).
     NetGame* netGame() { return m_net.get(); }
+    // What the player typed for the relay of the game in progress ("" if direct or none): an invite link must carry it.
+    std::string netRelayText() const { return m_net && m_net->viaRelay() ? m_net->params().relayDisplay : std::string(); }
     // The main loop's sleep in a network game: up to `ms`, ending early when a datagram
     // arrives. False when there is no network game (or the backend cannot wait): sleep as usual.
     bool netplayWait(uint32_t ms) { return m_net && m_net->wait(ms); }
@@ -153,9 +163,12 @@ class GameEngine
     bool m_drawNeeded = true;
     unique_ptr<MenuSDLRenderer> menuSystem = nullptr;
     std::string m_recordDir;
+    bool m_hidden = false;
+    std::string m_netLog;
     std::string m_recordStamp; // UTC date and time the recorded round started
     std::unique_ptr<MatchRecorder> m_recorder; // a round is being recorded
     void startRecording();
+    // (m_hidden, m_netLog and the checkpoint counter below are used by non-netplay builds' declarations too)
 #ifdef BITRIOT_NETPLAY
     // -- network play ----------------------------------------------------------------
     std::unique_ptr<NetGame> m_net;
@@ -180,8 +193,6 @@ class GameEngine
     std::deque<std::pair<std::string, uint32_t>> m_netToasts;   // text, when it goes
     std::string m_netSlotNames[6];       // who plays each slot (for "<name> left - now AI")
     std::string m_netOverlaySignature;
-    bool m_hidden = false;
-    std::string m_netLog;
     uint32_t m_netLoggedCheckpoint = 0;
     void logNet(const std::string& line);
     NetGame::Params m_netDev;            // development knobs for relay sessions (see setNetDevParams)

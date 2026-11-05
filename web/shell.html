@@ -162,7 +162,8 @@
   document.getElementById('copylink').addEventListener('click', function () {
     var url = new URL(window.location.href);
     url.search = '';
-    var relay = new URLSearchParams(window.location.search).get('relay');
+    // The relay the game is really using (what was typed on the form), so the friend lands on the same one.
+    var relay = window.bitriotRoomRelay;
     if (relay) { url.searchParams.set('relay', relay); }
     url.searchParams.set('room', roomCodeEl.textContent);
     copyText(url.toString(), 'Invite link');
@@ -205,7 +206,8 @@
       window.bitriotFatalMessage = message;
     },
     // Called by the game (src/web/WebHooks.cpp) with the code of the relay room it is in, or "" when it is in none.
-    bitriotRoom: function (code) {
+    bitriotRoom: function (code, relay) {
+      window.bitriotRoomRelay = relay || '';
       roomEl.hidden = !code;
       roomCodeEl.textContent = code;
       roomNoteEl.textContent = '';

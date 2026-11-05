@@ -836,6 +836,18 @@ TEST_F(NetFormTest, TheRelayFormsFillFromTheSavedFileThePagesDefaultsAndRemember
   EXPECT_EQ(valueOf(again, "f-room"), "ZZ99XX");
   EXPECT_EQ(valueOf(again, "f-relay"), "wss://r.example.org/vnet");
 
+  // An explicit ?relay= (an invite link) wins over the saved relay: the friend must land on the host's relay.
+  EventHandlerNetForm::setRelayDefaults("ws://invited.example.org/vnet", "ZZ99XX", false, true);
+  Rml::ElementDocument* invited = loadDocument("netjoinrelay.rml");
+  ASSERT_NE(invited, nullptr);
+  press(handler, invited, "f-name", "netforminit");
+  EXPECT_EQ(valueOf(invited, "f-relay"), "ws://invited.example.org/vnet");
+  // The page's own default is not a choice and is not saved, so a site that moves its relay moves returning visitors too.
+  EventHandlerNetForm::rememberRelay("Zed", "ws://invited.example.org/vnet", "", 1);
+  netplay::NetPrefs def;
+  ASSERT_TRUE(netplay::loadNetPrefs(path, def));
+  EXPECT_EQ(def.relay, "") << "equal to the page default: not saved";
+  EventHandlerNetForm::setRelayDefaults("ws://localhost:8080/vnet", "ZZ99XX", false);
   EventHandlerNetForm::rememberRelay("Zed", "relay.other.org", "QQ22RR", 2);
   netplay::NetPrefs back;
   ASSERT_TRUE(netplay::loadNetPrefs(path, back));

@@ -418,3 +418,21 @@ TEST(NetGameRelay, TheHostsTimeToAnswerStartsWhenTheRelayIsReadyNotWhenTheJoinWa
   vnet_destroy(v);
   close(hole);
 }
+
+// Brief 12 review: the game's own sessions raise the D limit on a relay and tolerate sparse pumps (commenting either out used to pass).
+TEST(NetGameRelay, ARelayGameMayChooseADOfUpToTwelveAndADirectOneEight)
+{
+  NetGame::Params direct;
+  direct.host = true;
+  EXPECT_EQ(NetGame::sessionOptionsFor(direct).maxDelay, 8);
+  NetGame::Params relay;
+  relay.host = true;
+  relay.relay = true;
+  EXPECT_EQ(NetGame::sessionOptionsFor(relay).maxDelay, 12);
+  relay.host = false;
+  EXPECT_EQ(NetGame::sessionOptionsFor(relay).maxDelay, 12);
+  EXPECT_TRUE(NetGame::sessionOptionsFor(direct).tolerateSparsePump);
+  EXPECT_TRUE(NetGame::sessionOptionsFor(relay).tolerateSparsePump);
+  relay.name = "Bob";
+  EXPECT_EQ(NetGame::sessionOptionsFor(relay).name, "Bob");
+}

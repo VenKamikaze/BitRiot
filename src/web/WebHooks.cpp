@@ -25,6 +25,7 @@ int s_frames = 0;
 int s_autostartPlayers = 0;   // from ?autostart=aiN, 0 when absent
 bool s_autostartDone = false;
 bool s_quit = false;          // the game has shut down; the hooks answer 0
+bool s_devKnobs = false;      // a dev knob was honoured (only possible with ?test=1)
 bool s_testMode = false;      // the page was opened with ?test=1: the test hooks answer
 bool s_hidden = false;        // document.hidden
 int s_hiddenPolls = 0;        // frames the page ran for a hidden tab
@@ -106,9 +107,9 @@ EM_JS(void, bitriot_js_copy, (const char* text), {
   }
 });
 
-// Tells the page which room the game is in (Module.bitriotRoom(code); "" when none), for the panel under the canvas.
-EM_JS(void, bitriot_js_room, (const char* code), {
-  if (typeof Module.bitriotRoom === 'function') Module.bitriotRoom(UTF8ToString(code));
+// Tells the page which room the game is in (Module.bitriotRoom(code, relay); "" when none) and the relay it is on, for the panel under the canvas.
+EM_JS(void, bitriot_js_room, (const char* code, const char* relay), {
+  if (typeof Module.bitriotRoom === 'function') Module.bitriotRoom(UTF8ToString(code), UTF8ToString(relay));
 });
 
 // A hidden tab is driven by network events, not by animation frames (brief 12, doco/netplay/12-browser-netplay.md). The
@@ -195,20 +196,27 @@ void webHooksInit(GameEngine* engine)
   s_autostartPlayers = s_testMode ? bitriot_js_autostart_players() : 0;
 #ifdef BITRIOT_NETPLAY
   const bool secure = bitriot_js_page_is_secure() != 0;
-  EventHandlerNetForm::setRelayDefaults(takeString(bitriot_js_default_relay()), queryOf("room"), secure);
+  EventHandlerNetForm::setRelayDefaults(takeString(bitriot_js_default_relay()), queryOf("room"), secure, !queryOf("relay").empty());
   EventHandlerNetForm::setPrefsSyncHooks([](const std::string& path) { bitriot_js_prefs_load(path.c_str()); },
                                          [](const std::string& path) { bitriot_js_prefs_store(path.c_str()); });
   NetGame::setWakeHandler(&webWake);
   // Development and test knobs for the relay connection: an explicit WebTransport URL, the hash of a development certificate,
   // and a vnet impairment (the browser has no environment variables).
   NetGame::Params dev;
-  dev.relayWt = queryOf("relay_wt");
-  dev.relayCertSha256 = queryOf("relay_cert");
-  dev.impair = queryOf("impair");
+  // Only on a ?test=1 page: a link someone else wrote must not route a visitor through another WebTransport relay while the form shows
+  // the real one, or degrade the visitor's connection. (?relay= and ?room= stay open: the relay is on the form for all to see.)
+  if (s_testMode)
+  {
+    dev.relayWt = queryOf("relay_wt");
+    dev.relayCertSha256 = queryOf("relay_cert");
+    dev.impair = queryOf("impair");
+    s_devKnobs = !dev.relayWt.empty() || !dev.relayCertSha256.empty() || !dev.impair.empty();
+  }
   engine->setNetDevParams(dev);
   // ?hiddendriver=off|timer (test knobs): off leaves a hidden tab to the browser (nothing runs), timer drives it from the one-second
   // timer only, no network wake-ups: what tests/web/netplay.js "background" compares the default (wake-ups and the timer) with.
-  const std::string driver = queryOf("hiddendriver");
+  const std::string driver = s_testMode ? queryOf("hiddendriver") : std::string();
+  if (!driver.empty()) s_devKnobs = true;
   if (driver == "off")
   {
     EM_ASM({ document.addEventListener('visibilitychange', function () { Module._bitriot_set_hidden(document.hidden ? 1 : 0); }); });
@@ -236,11 +244,11 @@ void webHooksAfterFrame()
 #ifdef BITRIOT_NETPLAY
   if (s_engine)
   {
-    const std::string room = s_engine->netRoomCode();
+    const std::string room = s_engine->netRoomCode() + "|" + s_engine->netRelayText();
     if (room != s_lastRoom)
     {
       s_lastRoom = room;
-      bitriot_js_room(room.c_str());
+      bitriot_js_room(s_engine->netRoomCode().c_str(), s_engine->netRelayText().c_str());
     }
   }
 #endif
@@ -440,6 +448,12 @@ EMSCRIPTEN_KEEPALIVE const char* bitriot_replay_golden()
              + "\",\"roundOver\":" + (r.roundOver ? "true" : "false") + ",\"mismatchTick\":" + std::to_string(r.mismatchTick)
              + ",\"expectedHash\":\"" + expected + "\",\"actualHash\":\"" + actual + "\",\"message\":\"" + message + "\"}";
   return s_returned.c_str();
+}
+
+// 1 if any of the dev knobs (?relay_wt=, ?relay_cert=, ?impair=, ?hiddendriver=) took effect: always 0 on a page without ?test=1.
+EMSCRIPTEN_KEEPALIVE int bitriot_dev_knobs_active()
+{
+  return s_devKnobs ? 1 : 0;
 }
 
 EMSCRIPTEN_KEEPALIVE int bitriot_hidden_polls()

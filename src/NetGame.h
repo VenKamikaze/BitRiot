@@ -87,6 +87,8 @@ class NetGame
     // Opens the network and the session. A peer's `join` host name is resolved here (the
     // lookup blocks, so this is for the command line, before the first frame; the menus use
     // NetResolve and createResolved). Null and `error` on failure.
+    // The session options a game with these parameters uses (identity, name, D limit, sparse-pump rule): one place, tested.
+    static netplay::SessionOptions sessionOptionsFor(const Params& params);
     static std::unique_ptr<NetGame> create(const Params& params, Simulation& sim, std::string* error);
     // A peer whose address was looked up already (params.join is only shown to the player).
     static std::unique_ptr<NetGame> createResolved(const Params& params, Simulation& sim, const vnet_addr& hostAddr, std::string* error);

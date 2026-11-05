@@ -435,10 +435,10 @@ scenarios.background = async (ctx) => {
   const results = {};
   for (const mode of ['wake', 'timer', 'off']) {
     const context = await ctx.browser.newContext({ viewport: { width: 900, height: 620 } });
-    // D is forced to 8: lockstep moves D ticks per round trip, and a hidden tab's round trip (wake, message, poll, send) is longer than a
-    // lobby ping measured while it was visible, more so on a busy machine; the scenario measures how the tab is driven, not the choice of D.
-    const { host, room } = await nativeHost(ctx, { peers: 2, seed: 2, delay: 8 });
-    const q = wsQuery(ctx, { hiddendriver: mode });
+    // D is forced to 2 and the browsers send with 25 ms of latency: at D=2 every millisecond a hidden tab adds to a round trip shows (the
+    // review of the first version found that inputs were sent one network wake late, which this guards).
+    const { host, room } = await nativeHost(ctx, { peers: 2, seed: 2, delay: 2 });
+    const q = wsQuery(ctx, { hiddendriver: mode, impair: 'lat=25,seed=' + (mode === 'wake' ? 1 : mode === 'timer' ? 2 : 3) });
     const b = await openGame(context, 'bg-' + mode + '-hidden', ctx.server, q);
     const a = await openGame(context, 'bg-' + mode + '-visible', ctx.server, q);
     for (const p of [a, b]) await startGame(p);
@@ -459,8 +459,8 @@ scenarios.background = async (ctx) => {
     stopNative(host);
     await context.close();
   }
-  check(results.wake.hiddenRate >= 25, 'the default (network wake-ups) keeps a throttled hidden tab at nearly the nominal 30 ticks a second', results.wake.hiddenRate.toFixed(1));
-  check(results.wake.visibleRate >= 25, 'and the visible tab and the host are not held back by it', results.wake.visibleRate.toFixed(1));
+  check(results.wake.hiddenRate >= 27, 'the default (network wake-ups) keeps a throttled hidden tab at nearly the nominal 30 ticks a second', results.wake.hiddenRate.toFixed(1));
+  check(results.wake.visibleRate >= 27, 'and the visible tab and the host are not held back by it', results.wake.visibleRate.toFixed(1));
   check(results.timer.hiddenRate < results.wake.hiddenRate / 2, 'a one-second timer alone does not keep up: that is why the wake-ups are used', results.timer.hiddenRate.toFixed(1) + ' vs ' + results.wake.hiddenRate.toFixed(1));
   check(results.off.hiddenRate < 5, 'with nothing driving it a hidden tab stalls the match', results.off.hiddenRate.toFixed(1));
 };
@@ -547,6 +547,89 @@ async function waitRoom(page) {
   for (let i = 0; i < 100; i++) { const r = await callString(page, 'bitriot_net_room'); if (r) return r; await sleep(200); }
   return '';
 }
+
+
+// A LOCAL game in a hidden tab does not run (brief 09: it stops). Nothing drives hidden passes unless a network game is on.
+scenarios['hidden-local'] = async (ctx) => {
+  console.log('hidden-local: a local game in a throttled hidden tab stops (no ticks, no sound)');
+  const page = await openGame(ctx.context(), 'hidden-local', ctx.server);
+  await startGame(page);
+  check((await call(page, 'bitriot_start_ai_match', 4)) === 1, 'a four-CPU local round starts');
+  await page.waitForFunction(() => window.Module._bitriot_tick() > 30, null, { timeout: 30000 });
+  await hidePage(page);
+  await throttleLikeABackgroundTab(page);
+  await sleep(2500);
+  const t0 = await call(page, 'bitriot_tick'), s0 = await call(page, 'bitriot_sounds_played');
+  await sleep(10000);
+  const t1 = await call(page, 'bitriot_tick'), s1 = await call(page, 'bitriot_sounds_played');
+  check(t1 - t0 <= 2, 'the local round does not advance while the tab is hidden', t0 + ' -> ' + t1);
+  check(s1 === s0, 'and makes no sound', s0 + ' -> ' + s1);
+  check((await call(page, 'bitriot_hidden_polls')) === 0, 'no hidden pass ran at all');
+  await finish(page);
+};
+
+// Both machines of a match asleep for 12 s (longer than the 10 s timeout) with nobody awake to talk: neither may conclude the other died.
+scenarios.asleep = async (ctx) => {
+  console.log('asleep: a browser host and a browser guest both blocked for 12 s (more than the 10 s timeout): nobody is dropped');
+  const q = wsQuery(ctx);
+  const ph = await openGame(ctx.context(), 'asleep-host', ctx.server, q), pg = await openGame(ctx.context(), 'asleep-guest', ctx.server, q);
+  await startGame(ph); await startGame(pg);
+  await netStart(ph, true, 'webHost', '');
+  await waitNetState(ph, [2], 60000, 'the room is open');
+  const room = await waitRoom(ph);
+  await netStart(pg, false, 'webGuest', room);
+  await waitNetState(pg, [2], 40000, 'joined');
+  await sleep(1500); await call(pg, 'bitriot_net_press_start'); await sleep(1500); await call(ph, 'bitriot_net_press_start');
+  for (const p of [ph, pg]) await waitNetState(p, [3], 40000, 'the round starts');
+  await sleep(2000);
+  const tA = freeze(ph, 12000), tB = freeze(pg, 12000);
+  await Promise.all([tA(), tB()]);
+  await sleep(4000);
+  const [ia, ib] = [await info(ph), await info(pg)];
+  check(await netState(ph) === 3 && await netState(pg) === 3, 'both are still in the round after a gap longer than the timeout', (await netState(ph)) + ',' + (await netState(pg)) + ' ' + ia.endReason + ',' + ib.endReason);
+  check(ia.sparseGaps >= 1 && ib.sparseGaps >= 1, 'each noticed its own gap', ia.sparseGaps + ',' + ib.sparseGaps);
+  const t0 = await tickOf(pg);
+  await sleep(3000);
+  check((await tickOf(pg)) - t0 >= 60, 'and the match plays on at speed', (await tickOf(pg)) - t0);
+  await finish(ph); await finish(pg);
+};
+
+// The dev knobs only work on a ?test=1 page, and a saved relay never beats the one in the page's address.
+scenarios.knobs = async (ctx) => {
+  console.log('knobs: dev URL parameters are ignored without ?test=1; ?relay= beats a saved relay; invite links carry the relay in use');
+  const base = 'http://127.0.0.1:' + ctx.server.port + '/index.html';
+  const evil = 'relay_wt=' + encodeURIComponent('https://127.0.0.1:1/vnet') + '&relay_cert=' + '00'.repeat(32) + '&impair=lat%3D900&hiddendriver=off';
+  const plain = await ctx.context().newPage();
+  plain.__problems = []; plain.__lines = []; plain.__name = 'knobs-plain';
+  await plain.goto(base + '?' + evil);
+  await plain.waitForFunction(() => window.bitriotReady === true, null, { timeout: 120000 });
+  await plain.click('#start');
+  await plain.waitForFunction(() => window.bitriotStarted === true && window.Module._bitriot_frames() > 5, null, { timeout: 60000 });
+  check((await call(plain, 'bitriot_dev_knobs_active')) === 0, 'relay_wt, relay_cert, impair and hiddendriver are ignored on a page without ?test=1');
+  check((await call(plain, 'bitriot_net_start', 1, 1)) === 0, 'and the test hooks are shut too');
+  await plain.close();
+  const test = await openGame(ctx.context(), 'knobs-test', ctx.server, { relay_wt: 'https://127.0.0.1:1/vnet', relay_cert: '00'.repeat(32), impair: 'lat=900' });
+  await startGame(test);
+  check((await call(test, 'bitriot_dev_knobs_active')) === 1, 'the same knobs work with ?test=1');
+  await finish(test);
+
+  // A saved relay in the browser, and an invite link (?relay=&room=) from a host: the link's relay is the one used.
+  const { host, room } = await nativeHost(ctx, { peers: 1, seed: 3, config: 'players=4,map=13x11,blocks=30' });
+  const context = ctx.context();
+  await context.addInitScript(() => { try { window.localStorage.setItem('bitriot.netplay', 'name=Old\nrelay=ws://127.0.0.1:1/vnet\nroom=AAAAAA\n'); } catch (e) { /* */ } });
+  const page = await openGame(context, 'knobs-invite', ctx.server, { ...wsQuery(ctx), room });
+  await startGame(page);
+  const key = async (k) => { await page.keyboard.press(k); await sleep(250); };
+  await key('ArrowDown'); await key('Enter'); await key('ArrowDown'); await key('Enter');
+  for (let i = 0; i < 3; i++) await key('ArrowDown');   // from the room field: relay, players, Connect
+  await key('Enter');
+  await waitNetState(page, [2, 3], 40000, 'joined with the invite link while another relay was saved');
+  check(true, 'an invite link (?relay=&room=) joins although another relay was saved');
+  const used = await page.evaluate(() => window.bitriotRoomRelay);
+  check(used === 'ws://127.0.0.1:' + ctx.relay.httpPort + '/vnet', 'the page knows the relay in use, for the invite link it offers', used);
+  stopNative(host);
+  await finish(page);
+};
 
 // The real menus, with the keyboard.
 scenarios.ui = async (ctx) => {

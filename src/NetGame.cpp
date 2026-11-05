@@ -149,6 +149,24 @@ std::unique_ptr<NetGame> NetGame::createResolved(const Params& params, Simulatio
   return build(params, sim, &hostAddr, error);
 }
 
+netplay::SessionOptions NetGame::sessionOptionsFor(const Params& params)
+{
+  netplay::SessionOptions so;
+  so.buildId = Simulation::buildId();
+  so.dataHash = Simulation::dataHash();
+  so.name = netplay::cleanPlayerName(params.name);
+  if (so.name.empty()) so.name = params.host ? "host" : "player";
+  so.localPlayers = params.localPlayers;
+  so.tickMs = std::GameSettings::NORMAL_TICKS_SPEED;
+  so.requireReady = params.requireReady;
+  so.tolerateSparsePump = true;   // a hidden tab, a sleeping laptop or a debugger pause must not time the others out
+  if (params.relay)
+  {
+    so.maxDelay = 12;   // two hops through the relay: a longer D than a LAN or a direct link needs
+  }
+  return so;
+}
+
 std::unique_ptr<NetGame> NetGame::build(const Params& params, Simulation& sim, const vnet_addr* resolved, std::string* error)
 {
   std::unique_ptr<NetGame> g(new NetGame());
@@ -185,19 +203,7 @@ std::unique_ptr<NetGame> NetGame::build(const Params& params, Simulation& sim, c
     return nullptr;
   }
 
-  netplay::SessionOptions so;
-  so.buildId = Simulation::buildId();
-  so.dataHash = Simulation::dataHash();
-  so.name = netplay::cleanPlayerName(params.name);
-  if (so.name.empty()) so.name = params.host ? "host" : "player";
-  so.localPlayers = params.localPlayers;
-  so.tickMs = std::GameSettings::NORMAL_TICKS_SPEED;
-  so.requireReady = params.requireReady;
-  so.tolerateSparsePump = true;   // a hidden tab, a sleeping laptop or a debugger pause must not time the others out
-  if (params.relay)
-  {
-    so.maxDelay = 12;   // two hops through the relay: a longer D than a LAN or a direct link needs
-  }
+  const netplay::SessionOptions so = sessionOptionsFor(params);
 
   std::string sessionError;
   if (params.host)
