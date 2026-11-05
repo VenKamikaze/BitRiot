@@ -18,6 +18,7 @@
 
 #include "FrameLoop.h"
 #include "MatchRecord.h"
+#include "MatchReplay.h"
 #include "MenuSDLRenderer.h"
 #include "GameSettings.h"
 #include "GameOverTimer.h"
@@ -90,6 +91,10 @@ class GameEngine
     // hooks and the page's own "join this room" link. False, and `error`, if the words are bad or a game is already on.
     bool startRelayFromText(bool host, const std::string& name, const std::string& relay, const std::string& room, int localPlayers,
                             bool pageIsSecure, std::string* error);
+    // Brief 12 (the web build's full-game determinism check): plays a match record file through THIS engine's simulation with the
+    // game's own code (replayRecord), verifying every checkpoint hash the record carries. Only from a menu with no network game;
+    // otherwise BAD_CONFIG and a message. Leaves GameSettings and the map as the record's round set them: for a test page.
+    ReplayResult replayRecordFile(const std::string& path);
     // Brief 12: the browser tab is hidden (document.hidden). A hidden tab gets no animation frames, so the page drives
     // the frame loop from network events instead (src/web/WebHooks.cpp); in this mode a network game steps every tick it
     // holds, whenever it is asked, instead of waiting for the clock (the others set the pace), and nothing is drawn.

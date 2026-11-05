@@ -10,6 +10,7 @@
 #include "GameEngine.h"
 #include "GameSettings.h"
 #include "MickLogger.h"
+#include "MatchReplay.h"
 #include "MickSDLSound.h"
 #ifdef BITRIOT_NETPLAY
 #include "NetGame.h"
@@ -63,6 +64,19 @@ EM_JS(char*, bitriot_js_default_relay, (), {
   return pointer;
 });
 
+// A string a test left for the game in Module.bitriotTestArgs (strings cannot be passed to an exported function without the
+// runtime's allocator, which this build does not export). NULL (malloc'd otherwise; the caller frees it).
+EM_JS(char*, bitriot_js_test_arg, (const char* key), {
+  const args = Module.bitriotTestArgs || {};
+  const value = args[UTF8ToString(key)];
+  if (value === undefined || value === null) return 0;
+  const text = String(value);
+  const bytes = lengthBytesUTF8(text) + 1;
+  const pointer = _malloc(bytes);
+  stringToUTF8(text, pointer, bytes);
+  return pointer;
+});
+
 EM_JS(int, bitriot_js_page_is_secure, (), {
   return window.location.protocol === 'https:' ? 1 : 0;
 });
@@ -101,7 +115,7 @@ EM_JS(void, bitriot_js_room, (const char* code), {
 // page tells the game when it is hidden; vnet's wake callback (called from the browser event that queued a datagram) posts a
 // message to ourselves, which runs a frame; and a timer does the same once a second, for vnet's own deadlines. A message
 // event is not throttled in a background tab, a timer is (to about once a second, and less after five minutes).
-EM_JS(void, bitriot_js_install_hidden_driver, (), {
+EM_JS(void, bitriot_js_install_hidden_driver, (int wakeToo), {
   const report = function () { Module._bitriot_set_hidden(document.hidden ? 1 : 0); };
   document.addEventListener('visibilitychange', report);
   report();
@@ -112,7 +126,7 @@ EM_JS(void, bitriot_js_install_hidden_driver, (), {
     if (document.hidden) Module._bitriot_hidden_poll();
   };
   Module.bitriotWake = function () {
-    if (!pending && document.hidden) {
+    if (wakeToo && !pending && document.hidden) {
       pending = true;
       channel.port2.postMessage(0);
     }
@@ -134,6 +148,14 @@ static std::string queryOf(const char* key)
   std::string value = raw;
   free(raw);
   return value;
+}
+
+// Text for inside a JSON string.
+static std::string jsonText(const std::string& text)
+{
+  std::string out;
+  for (char c : text) out += (c == '"' || c == '\\' || (unsigned char) c < 0x20) ? ' ' : c;
+  return out;
 }
 
 static std::string takeString(char* raw)
@@ -184,7 +206,17 @@ void webHooksInit(GameEngine* engine)
   dev.relayCertSha256 = queryOf("relay_cert");
   dev.impair = queryOf("impair");
   engine->setNetDevParams(dev);
-  bitriot_js_install_hidden_driver();
+  // ?hiddendriver=off|timer (test knobs): off leaves a hidden tab to the browser (nothing runs), timer drives it from the one-second
+  // timer only, no network wake-ups: what tests/web/netplay.js "background" compares the default (wake-ups and the timer) with.
+  const std::string driver = queryOf("hiddendriver");
+  if (driver == "off")
+  {
+    EM_ASM({ document.addEventListener('visibilitychange', function () { Module._bitriot_set_hidden(document.hidden ? 1 : 0); }); });
+  }
+  else
+  {
+    bitriot_js_install_hidden_driver(driver == "timer" ? 0 : 1);
+  }
 #endif
 }
 
@@ -290,17 +322,19 @@ EMSCRIPTEN_KEEPALIVE void bitriot_hidden_poll()
 // -- network test hooks (?test=1 only). They start relay games and read what the machines played, so that a
 // Playwright test can drive browsers without clicking through the menus, and compare their rounds with a native player's. ----
 
-// Starts a relay game: host 1 opens a room, host 0 joins `room`. The relay is the page's (?relay=, as the forms offer it).
-EMSCRIPTEN_KEEPALIVE int bitriot_net_start(int host, const char* name, const char* room, int localPlayers)
+// Starts a relay game: host 1 opens a room, host 0 joins Module.bitriotTestArgs.room. The player's name is
+// Module.bitriotTestArgs.name. The relay is the page's (?relay=, as the forms offer it).
+EMSCRIPTEN_KEEPALIVE int bitriot_net_start(int host, int localPlayers)
 {
   if (!s_testMode || s_quit || !s_engine)
   {
     return 0;
   }
   const std::string relay = takeString(bitriot_js_default_relay());
+  const std::string name = takeString(bitriot_js_test_arg("name"));
+  const std::string room = takeString(bitriot_js_test_arg("room"));
   std::string error;
-  const bool ok = s_engine->startRelayFromText(host != 0, name, relay, room != nullptr ? room : "", localPlayers,
-                                               bitriot_js_page_is_secure() != 0, &error);
+  const bool ok = s_engine->startRelayFromText(host != 0, name, relay, room, localPlayers, bitriot_js_page_is_secure() != 0, &error);
   if (!ok)
   {
     std::string message = "bitriot_net_start: " + error;
@@ -377,11 +411,36 @@ EMSCRIPTEN_KEEPALIVE const char* bitriot_net_info()
                + ",\"hostSilenceMs\":" + std::to_string(se.hostSilenceMs())
                + ",\"relayRttMs\":" + std::to_string(net->relayRttMs())
                + ",\"endReason\":" + std::to_string((int) se.endReason())
-               + ",\"stall\":\"" + net->stallText() + "\"}";
+               + ",\"endText\":\"" + jsonText(se.endText()) + "\",\"stall\":\"" + jsonText(net->stallText()) + "\"}";
   }
   return s_returned.c_str();
 }
 #endif
+
+// Brief 12 item 4: replays the golden match record (tests/data/golden-round.brmr, preloaded at the same path in a build with
+// BITRIOT_WEB_TEST_FILES) through the game's own Simulation and says how it went, as JSON: status 0 is OK (every checkpoint
+// hash of the record, which was made natively, matched).
+EMSCRIPTEN_KEEPALIVE const char* bitriot_replay_golden()
+{
+  if (!s_testMode || s_quit || !s_engine)
+  {
+    s_returned = "{}";
+    return s_returned.c_str();
+  }
+  const ReplayResult r = s_engine->replayRecordFile("/tests/data/golden-round.brmr");
+  char hash[32];
+  std::snprintf(hash, sizeof(hash), "0x%016llx", (unsigned long long) r.finalHash);
+  char expected[32], actual[32];
+  std::snprintf(expected, sizeof(expected), "0x%016llx", (unsigned long long) r.expectedHash);
+  std::snprintf(actual, sizeof(actual), "0x%016llx", (unsigned long long) r.actualHash);
+  std::string message;
+  for (char c : r.message) message += (c == '"' || c == '\\' || (unsigned char) c < 0x20) ? ' ' : c;
+  s_returned = "{\"status\":" + std::to_string((int) r.status) + ",\"ticks\":" + std::to_string(r.ticksPlayed)
+             + ",\"checkpoints\":" + std::to_string(r.checkpointsChecked) + ",\"finalHash\":\"" + hash
+             + "\",\"roundOver\":" + (r.roundOver ? "true" : "false") + ",\"mismatchTick\":" + std::to_string(r.mismatchTick)
+             + ",\"expectedHash\":\"" + expected + "\",\"actualHash\":\"" + actual + "\",\"message\":\"" + message + "\"}";
+  return s_returned.c_str();
+}
 
 EMSCRIPTEN_KEEPALIVE int bitriot_hidden_polls()
 {

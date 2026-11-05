@@ -10,7 +10,8 @@
 //   Module._bitriot_start_ai_match(n)  start a round of n CPU players; 1 if it started
 //   Module._bitriot_sounds_played()    sounds the mixer has accepted (audio reached SDL_mixer)
 //   Module._bitriot_joystick_count()   SDL_NumJoysticks()
-//   Module._bitriot_net_start(host, name, room, localPlayers)   (brief 12) start a relay game: open a room, or join `room`
+//   Module._bitriot_net_start(host, localPlayers)   (brief 12) start a relay game: open a room, or join Module.bitriotTestArgs.room
+//   Module._bitriot_replay_golden()   replay the golden record through the game (JSON)
 //   Module._bitriot_net_room() / _net_transport() / _net_state() / _net_press_start() / _net_log() / _net_info()
 //   Module._bitriot_hidden_polls() / _is_hidden()
 //

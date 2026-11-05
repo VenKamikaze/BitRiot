@@ -224,6 +224,31 @@ bool GameEngine::startAllAiMatch(int numPlayers)
   return true;
 }
 
+ReplayResult GameEngine::replayRecordFile(const std::string& path)
+{
+  ReplayResult refused;
+  refused.status = ReplayResult::BAD_CONFIG;
+  bool netBusy = false;
+#ifdef BITRIOT_NETPLAY
+  netBusy = static_cast<bool>(m_net);
+#endif
+  if (netBusy || GameSettings::getInstance()->getGameState() != GameSettings::MENU_RUNNING)
+  {
+    refused.message = "a replay needs the menu, with no network game";
+    return refused;
+  }
+  try
+  {
+    const MatchRecord record = MatchRecord::readFile(path);
+    return replayRecord(record, m_sim);
+  }
+  catch (const std::exception& e)
+  {
+    refused.message = std::string("cannot read ") + path + ": " + e.what();
+    return refused;
+  }
+}
+
 int GameEngine::gameLengthSeconds() const
 {
   return (int) ((m_sim.tick() * GameSettings::NORMAL_TICKS_SPEED) / 1000);
