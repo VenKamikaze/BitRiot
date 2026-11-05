@@ -220,7 +220,7 @@ TEST_F(NetGameTest, TheHostsSettingsAndTeamsReachThePeer)
   const netplay::LobbyView& v = m_peer->session().lobby();
   EXPECT_EQ(v.settings.mapWidth, width + 2);
   EXPECT_EQ(v.settings.blockPercentage, m_host->session().lobby().settings.blockPercentage);
-  EXPECT_EQ(v.settings.npcSpawner, !std::GameSettings::getInstance()->isNpcSpawnerEnabled() ? true : false);
+  EXPECT_FALSE(v.settings.npcSpawner) << "the host's menu said on; one press of the button turned it off";
   ASSERT_EQ(v.slots.size(), 3u);
   EXPECT_EQ(v.slots[1].team, 2);   // team 1 -> the next: 2 (of 0..2)
   EXPECT_EQ(v.slots[0].team, 0);

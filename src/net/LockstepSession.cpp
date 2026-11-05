@@ -1031,7 +1031,9 @@ int LockstepSession::notReadyCount() const
 
 void LockstepSession::setReady(bool ready)
 {
-  if (m_role != PEER || m_wantReady == ready)
+  // Only in a lobby that is asking: not while connecting, in a round, on the scoreboard, or when this machine joined
+  // between rounds (the host's lobby is not open then; it asks again when it goes back to the lobby).
+  if (m_role != PEER || m_state != LOBBY || m_lobby.phase != PHASE_LOBBY || m_wantReady == ready)
   {
     return;
   }
