@@ -194,6 +194,13 @@ Brief 07 (merged in 0ccdb66) built native lockstep netplay, driven from the comm
 
 Results after the fix round: GCC and Clang `bitriot_tests` **678**, `bitriot_sim_tests` **532**; ctest 3/3 (the process test now has 8 cases); `-DBITRIOT_NETPLAY=OFF` 526 and 412; web smoke 41 of 41; 200-seed sweep (GCC, tree not rebuilding) 0 failing seeds on both binaries; build id still `0x6767612d056ba8af`. "Ready survives setting changes" stays a documented follow-up.
 
+**Re-review** (Opus, bc77dab..1eaf9b1): **merge**. All eleven fixes were checked, and five mutations were all caught (the two that survived the first review now fail). A kicked machine can rejoin at once (`onHello` never consults the removed-peer memory), and the memory is bounded by the host's own kicks and a 30 s expiry. Under Xvfb the main menu reads Play / Host / Join / Game Options / Exit, with Up/Down in order. Four nits, left as follow-ups:
+
+- **Removing a machine that is still CONNECTING does not stick.** Its WELCOME was lost, a CONNECTING peer ignores `LEAVE`, and its next `HELLO`, with the same nonce, is admitted again. Fix: keep the nonce in `Removed` and answer a matching (address, nonce) `HELLO` with `LEAVE_REMOVED`. A new nonce still gets in, so this is still not a ban. Rare: it needs a lost WELCOME plus a click in that window. A good fit for 13.
+- **`AHostThatWaitsForReadyStartsWithAHeadlessPeer` does not prove the host waited.** It still passes if the headless host drops `requireReady`. It does prove the headless peer can start with a host that requires ready.
+- **Cancel from a command-line `--join` while connecting** opens the join form filled from the saved settings, not from the command line's address. Harmless.
+- **The main-menu hook assumes Play is followed directly by a `<br />`** (`i + 2`). If `mainmenu.rml` changes shape, the two new buttons land one place off.
+
 **Play-test** (pending; two windows on one machine are enough; a second machine and a pad make it better). The commands are untested on Arch (the container is Ubuntu); the dependencies are the same as brief 07's.
 
 ```bash
