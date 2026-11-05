@@ -524,19 +524,20 @@ TEST(NetplayProcess, APeerKilledAtTickXAndRestartedWithItsTokenReclaimsItsSlot)
   Scratch dir;
   const std::string port = dir.file("port");
   // Host (slot 0), peer A (slot 1), peer B (slot 2), one bot (slot 3).
-  Proc host({"host", "--port-file", port, "--peers", "2", "--seed", "5", "--config", kLongConfig, "--tick-ms", "2", "--delay", "12",
+  // 3 ms a tick: the round lasts about nine seconds, and a restarted machine's token is honoured after 3 s of silence.
+  Proc host({"host", "--port-file", port, "--peers", "2", "--seed", "5", "--config", kLongConfig, "--tick-ms", "3", "--delay", "12",
              "--out", dir.dir("h")}, impairSpec(0), dir.file("h.out"), dir.file("h.err"));
   const int p = waitForPort(port);
   ASSERT_GT(p, 0) << host.err();
   const std::string addr = "127.0.0.1:" + std::to_string(p);
-  Proc a({"join", addr, "--tick-ms", "2", "--out", dir.dir("a")}, impairSpec(1), dir.file("a.out"), dir.file("a.err"));
+  Proc a({"join", addr, "--tick-ms", "3", "--out", dir.dir("a")}, impairSpec(1), dir.file("a.out"), dir.file("a.err"));
   const std::string tokenFile = dir.file("tokenB");
-  Proc b({"join", addr, "--tick-ms", "2", "--token-file", tokenFile, "--out", dir.dir("b")}, impairSpec(2), dir.file("b.out"), dir.file("b.err"));
-  ASSERT_TRUE(waitForOutput(host, "checkpoint 1 600 ", 60)) << host.err() << host.out();
+  Proc b({"join", addr, "--tick-ms", "3", "--token-file", tokenFile, "--out", dir.dir("b")}, impairSpec(2), dir.file("b.out"), dir.file("b.err"));
+  ASSERT_TRUE(waitForOutput(host, "checkpoint 1 300 ", 60)) << host.err() << host.out();
   b.killNow();   // kill -9 at tick about 600: the host is not told and still has its address
   const std::string token = slurp(tokenFile);
   ASSERT_FALSE(token.empty()) << "the token was not saved";
-  Proc b2({"join", addr, "--tick-ms", "2", "--token", std::to_string(std::stoul(token)), "--out", dir.dir("b2")}, impairSpec(3),
+  Proc b2({"join", addr, "--tick-ms", "3", "--token", std::to_string(std::stoul(token)), "--out", dir.dir("b2")}, impairSpec(3),
           dir.file("b2.out"), dir.file("b2.err"));
   const int hostCode = host.wait(kTimeout);
   const int aCode = a.wait(30);
@@ -552,7 +553,7 @@ TEST(NetplayProcess, APeerKilledAtTickXAndRestartedWithItsTokenReclaimsItsSlot)
   // Slot 2 went back to the AI when the host saw the same player come back, and was handed to the new process again.
   const uint32_t back = eventTick(out, 2, "RETURN_TO_AI");
   const uint32_t again = eventTick(out, 2, "HUMAN_TAKES_OVER");
-  EXPECT_GT(back, 500u) << out;
+  EXPECT_GT(back, 250u) << out;
   EXPECT_GT(again, back) << out;
   EXPECT_EQ(count(out, "slot 3 HUMAN_TAKES_OVER"), 0) << "it got its own slot back, not the free bot";
   EXPECT_EQ(count(out, "desync"), 0);

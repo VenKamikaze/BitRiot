@@ -836,7 +836,7 @@ TEST(Reconnect, ATokenFromADeadMachineIsHonouredOnceItHasBeenQuietForASecond)
   ASSERT_TRUE(c.runUntil([&] { return joined(back); }, 20000));
   EXPECT_EQ(back.s->myId(), 2);
   EXPECT_EQ(back.s->offeredSlots(), 0b0100);
-  EXPECT_GE(c.now() - t0, 500u) << "held back while the old one might still be talking";
+  EXPECT_GE(c.now() - t0, 2500u) << "held back until the old one has been quiet for 3 s (a throttled browser tab pumps about once a second)";
 }
 
 TEST(HotJoin, ASpectatorWhoseStateIsWrongIsStoppedAlone)
@@ -955,6 +955,77 @@ TEST(LockstepLobby, AMachineRemovedInTheMiddleOfARoundWhoseWelcomeWasLostIsTurne
   }
   EXPECT_TRUE(removed);
   EXPECT_EQ(c.machine(0).s->peerCount(), 0);
+}
+
+TEST(HotJoin, ADemotedLateJoinerIsDealtASlotAgainWhenOneIsFree)
+{
+  // Six humans, a seventh joins late with no bot: it watches. Round 2 has no seat for it either (it is told: no slot in START, no
+  // records, a "Watching" state). A player leaves between rounds: in round 3 it is dealt that seat. It stayed a spectator for the
+  // rest of the session before this fix.
+  ClusterOptions o = delayed(10);
+  o.localPlayers[0] = 2;
+  Cluster c(5, o);
+  ASSERT_TRUE(c.startRound(1, 120));
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(60); }, 60000));
+  Machine& j = c.addMachine(1);
+  ASSERT_TRUE(c.runUntil([&] { return joined(j); }, 20000));
+  ASSERT_EQ(j.s->grantedSlots(), 0);
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(120, {0, 1, 2, 3, 4}) && c.machine(0).s->canStartRound(); }, 30000));
+  ASSERT_TRUE(c.startRound(2, 120));
+  EXPECT_EQ(j.round.localSlotMask, 0) << "no seat in round 2";
+  EXPECT_TRUE(j.s->spectating()) << "and it knows it watches (the banner)";
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(120); }, 60000));
+  EXPECT_EQ(j.s->stats().inputRecordsSent, 0u) << "a watcher sends no records";
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 30000));
+  c.machine(4).s->leave();   // a seat frees up
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->peerCount() == 4 && c.machine(0).s->canStartRound(); }, 10000));
+  ASSERT_TRUE(c.startRound(3, 0));
+  EXPECT_NE(j.round.localSlotMask, 0) << "round 3 has a seat for it";
+  EXPECT_FALSE(j.s->spectating());
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(150); }, 60000));
+  expectSameLogs(c, {0, 1, 2, 3, 5}, 150);
+}
+
+TEST(HotJoin, AByChoiceSpectatorFromTheLobbyFollowsTheHostBackToTheLobbyWhileItIsStillInTheRound)
+{
+  ClusterOptions o = delayed(10);
+  o.session.requireReady = true;
+  Cluster c(2, o);
+  Machine& s = c.addMachine(1, 0, 0, [](netplay::SessionOptions& so) { so.spectate = true; });
+  ASSERT_TRUE(c.runUntil([&] { return s.s->state() == LockstepSession::LOBBY; }, 3000));
+  c.machine(1).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 5000));
+  c.machine(0).roundTicks = 0;
+  ASSERT_TRUE(c.machine(0).s->startRound(1, nullptr));
+  s.fastForwardPerMs = 0;
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).log.size() >= 100 && c.machine(1).log.size() >= 100; }, 60000));
+  // End the round for the players only; the spectator has not stepped it (it is "still in the round").
+  c.machine(0).roundTicks = 100;
+  c.machine(1).roundTicks = 100;
+  s.paused = true;
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->state() == LockstepSession::BETWEEN_ROUNDS
+                                      && c.machine(1).s->state() == LockstepSession::BETWEEN_ROUNDS; }, 60000));
+  ASSERT_EQ(s.s->state(), LockstepSession::RUNNING);
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 20000));
+  ASSERT_TRUE(c.machine(0).s->returnToLobby());
+  EXPECT_TRUE(c.runUntil([&] { return s.s->state() == LockstepSession::LOBBY; }, 5000)) << "the spectator stayed in the old round";
+}
+
+TEST(HotJoin, ALateJoinerThatSaidReadyButWasNeverVerifiedIsNotDroppedInTheLobbyLater)
+{
+  ClusterOptions o = delayed(10);
+  o.lobby.totalSlots = 4;
+  Cluster c(2, o);
+  ASSERT_TRUE(c.startRound(1, 200));
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(40); }, 60000));
+  Machine& j = c.addMachine(1);
+  j.reportHashes = false;   // caught up and ready, but its state is never compared
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->state() == LockstepSession::BETWEEN_ROUNDS; }, 60000));
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 30000));
+  ASSERT_TRUE(c.machine(0).s->returnToLobby());
+  c.run(14000);   // longer than the never-verified timer, which belongs to the round
+  EXPECT_EQ(c.machine(0).s->peerCount(), 2);
+  EXPECT_FALSE(j.s->ended());
 }
 
 TEST(LockstepSession, APeerThatNeverReportsTheLastChecksumIsDroppedAndTheNextRoundCanStart)

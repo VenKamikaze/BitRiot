@@ -441,7 +441,8 @@ namespace netplay
         bool ready = false;                     // lobby: it said it is ready
         uint32_t readySeq = 0;                  // the highest READY seq applied
         // Hot-join, reconnect and spectators (brief 13).
-        bool spectator = false;                 // HELLO_SPECTATE: never dealt a slot, never waited for
+        bool spectator = false;                 // watching this round: HELLO_SPECTATE, or no slot was left for it (recomputed with every roster)
+        bool spectatorByChoice = false;         // HELLO_SPECTATE: for the whole session
         bool midJoin = false;                   // joined (or reconnected) while a round was running
         bool verified = false;                  // one of its checksums matched the host's (a late joiner is trusted from then on)
         bool readyAt = false;                   // READY_AT received

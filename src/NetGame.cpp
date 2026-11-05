@@ -289,7 +289,9 @@ std::string NetGame::joinText() const
   {
     return "";
   }
-  return netplay::joinSentence(s.joinStage(), s.catchUpFraction(), s.takeoverReason(), m_params.spectate);
+  // A machine with no slot in a round's START (a late joiner the seats ran out for) watches that round like one that asked to.
+  const bool watchingFromStart = s.joinStage() == netplay::LockstepSession::JOIN_NONE && s.spectating();
+  return netplay::joinSentence(s.joinStage(), s.catchUpFraction(), s.takeoverReason(), m_params.spectate || watchingFromStart);
 }
 
 std::string NetGame::statusLine() const

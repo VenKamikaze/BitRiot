@@ -1,6 +1,7 @@
 #include "LockstepSession.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -20,8 +21,8 @@ const uint64_t REMOVED_MEMORY_MS = 30000;   // how long a removed peer's packets
 const uint32_t CHECKSUM_RESEND_MS = 400;
 // A reconnect token from another address is honoured when its old owner has been silent this long, or (a live duplicate) never:
 // the HELLO is held back for TOKEN_GRACE_MS and then taken for a new player.
-const uint64_t TOKEN_QUIET_MS = 1000;
-const uint64_t TOKEN_GRACE_MS = 1500;
+const uint64_t TOKEN_QUIET_MS = 3000;   // above brief 12's sparse-pump bound (a hidden browser tab pumps about once a second; 12 tolerates 1.5 s)
+const uint64_t TOKEN_GRACE_MS = 4000;   // must stay above TOKEN_QUIET_MS: a crashed machine's token is honoured before the HELLO is taken for a new player
 // Streaming the record to a late joiner (brief 13). A window of packets is sent whenever the joiner's acknowledgement moves
 // (so the speed is a window per round trip), and the first two again if it has not moved for CATCHUP_RESEND_MS.
 const size_t CATCHUP_WINDOW_PACKETS = 8;
@@ -576,6 +577,7 @@ void LockstepSession::onHello(const vnet_addr& from, const uint8_t* body, size_t
   m.nonce = h.nonce;
   m.localPlayers = h.localPlayers;
   m.spectator = spectate;
+  m.spectatorByChoice = spectate;
   m.lastHeard = m_now;
   m.ackedTicks = 0xFFFFFFFFu;   // it has played nothing: nothing to wait for between rounds
   recomputeRoster();
@@ -595,6 +597,7 @@ bool LockstepSession::admitHotJoiner(int id, const vnet_addr& from, const HelloM
   m.localPlayers = h.localPlayers;
   m.lastHeard = m_now;
   m.spectator = (h.flags & HELLO_SPECTATE) != 0;
+  m.spectatorByChoice = m.spectator;
   m.midJoin = true;
   m.offerMask = offer;
   // Ticks 1..D are empty on every machine; the record is streamed from there.
@@ -931,6 +934,13 @@ void LockstepSession::recomputeRoster()
     rebuildLobbyView();   // slot ownership changes by takeovers while a round runs
     return;
   }
+  // Who watches is decided afresh with every roster: a machine that asked to (HELLO_SPECTATE) always does; one the slots ran out
+  // for (late joiners are not held to the six-human cap) watches until the roster is dealt again, and is dealt a slot as soon as
+  // there is one.
+  for (int id = 1; id < MAX_PEERS; id++)
+  {
+    m_members[id].spectator = m_members[id].spectatorByChoice;
+  }
   int humans = 0;
   for (int id = 0; id < MAX_PEERS; id++)
   {
@@ -949,6 +959,14 @@ void LockstepSession::recomputeRoster()
     {
       m_owner[next++] = (uint8_t) id;
     }
+  }
+  for (int id = 1; id < MAX_PEERS; id++)
+  {
+    Member& sm = m_members[id];
+    if (!sm.present || sm.gone || sm.spectator) continue;
+    bool any = false;
+    for (int s = 0; s < m_numSlots; s++) any = any || m_owner[s] == id;
+    if (!any) sm.spectator = true;
   }
   rebuildLobbyView();
 }
@@ -1054,7 +1072,7 @@ void LockstepSession::checkTimeouts()
         continue;
       }
       // A late joiner that says it is ready but whose checksums never agree or never arrive is not given a slot for good.
-      if (m.present && !m.gone && m.midJoin && !m.spectator && m.readyAt && !m.verified && !m.takeoverDecided
+      if (m_state == RUNNING && m.present && !m.gone && m.midJoin && !m.spectator && m.readyAt && !m.verified && !m.takeoverDecided
           && m_now - m.readyAtSince > m_opt.timeoutMs)
       {
         LeaveMsg l;
@@ -1433,16 +1451,6 @@ bool LockstepSession::startRound(uint64_t seed, std::string* error)
   {
     return false;
   }
-  // A machine that the slots ran out for (late joiners are not held to the six-human cap) watches this round: it is not dealt a
-  // slot, not waited for, not asked to be ready; it plays again when it joins a round with a bot free.
-  for (int id = 1; id < MAX_PEERS; id++)
-  {
-    Member& sm = m_members[id];
-    if (!sm.present || sm.gone || sm.spectator) continue;
-    bool any = false;
-    for (int s = 0; s < m_numSlots; s++) any = any || m_owner[s] == id;
-    if (!any) sm.spectator = true;
-  }
   // Humans who left in the previous round are gone for good.
   for (int id = 1; id < MAX_PEERS; id++)
   {
@@ -1504,7 +1512,8 @@ void LockstepSession::setupRound(const StartMsg& s, bool joining)
   // watches never is. Everybody else produces records from the start.
   m_midJoin = joining;
   m_joinStage = joining ? JOIN_CATCHING_UP : JOIN_NONE;
-  m_participateFrom = (joining || m_opt.spectate) ? 0xFFFFFFFFu : 0u;
+  // No slot in START (and not a late joiner, whose slots come from TAKEOVER_AT): this machine watches the round, sends no records.
+  m_participateFrom = (joining || m_opt.spectate || localMask == 0) ? 0xFFFFFFFFu : 0u;
   m_grantedMask = 0;
   m_grantedPending = 0;
   m_takeoverTick = 0;
@@ -1995,6 +2004,12 @@ bool LockstepSession::mergeTick(uint32_t t, TickInputs& out)
     out.control.push_back(e);
   }
   m_hostEvents.clear();
+  // A merged tick holds at most 4 * MAX_SLOTS = 24 events, the limit of the wire format and of MatchRecord. The peers' events
+  // are capped at MAX_PEER_EVENTS (18) minus the scheduled takeovers of this tick, which are never refused and number at most six
+  // (one per slot): peers + takeovers <= 18, and the host's own leaver events (one per slot) add at most 6. Leaving
+  // `- scheduledTotal` out would still hold in every case a test builds (it takes an 18-event flood in the very tick of a
+  // takeover to exceed 24), which is why that mutation survives: this assert is the guard for it.
+  assert(out.control.size() <= (size_t) 4 * MAX_SLOTS);
   return true;
 }
 
@@ -2596,7 +2611,8 @@ uint8_t LockstepSession::takeGrantedSlots()
 
 bool LockstepSession::spectating() const
 {
-  return m_opt.spectate || (m_joinStage == JOIN_DONE && m_grantedMask == 0);
+  return m_opt.spectate || (m_joinStage == JOIN_DONE && m_grantedMask == 0)
+         || (m_state == RUNNING && m_joinStage == JOIN_NONE && m_participateFrom == 0xFFFFFFFFu);
 }
 
 void LockstepSession::sendReadyAt()
@@ -2638,7 +2654,7 @@ void LockstepSession::onLobby(const LobbyMsg& msg)
   // here. The round number says it is the lobby after the round we played, not an old packet of an earlier one.
   // A late joiner still catching up on the round (the host does not wait for it) follows too: the host stops sending that
   // round's ticks once it is back in the lobby, so it would be stuck in the round for good.
-  if ((m_state == BETWEEN_ROUNDS || (m_state == RUNNING && (m_midJoin || m_opt.spectate)))
+  if ((m_state == BETWEEN_ROUNDS || (m_state == RUNNING && (m_midJoin || m_opt.spectate || m_participateFrom == 0xFFFFFFFFu)))
       && msg.phase == PHASE_LOBBY && msg.round == static_cast<uint16_t>(m_round + 1))
   {
     m_state = LOBBY;
@@ -2705,7 +2721,7 @@ void LockstepSession::onStart(const StartMsg& msg)
 
 bool LockstepSession::supersedes() const
 {
-  return m_opt.spectate || (m_midJoin && (m_joinStage != JOIN_DONE || m_grantedMask == 0));
+  return m_opt.spectate || m_participateFrom == 0xFFFFFFFFu || (m_midJoin && (m_joinStage != JOIN_DONE || m_grantedMask == 0));
 }
 
 void LockstepSession::onTicks(const TicksMsg& msg)
