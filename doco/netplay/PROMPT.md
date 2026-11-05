@@ -7,46 +7,65 @@ You are the **coordinator** for a multi-brief project across two repos:
 
 The goal is deterministic lockstep online multiplayer for Bit Riot, a browser (WASM) build, and vnet underneath both.
 
-## 0. Where things stand (hand-off, 29 Oct 2026, end of the third session)
+## 0. Where things stand (hand-off, 5 Nov 2026, after brief 07)
 
 **Done and merged into `claude`:**
 
-- **BitRiot:** 01, 02, 02b, 03a, 03b, 04a, 04b, 05, **05b** and **09**.
-  - Status: 02b, 03a, 05 and 05b are `done`. 03b, 04a and 04b are `done (play-test pending)` for their controller parts only. 09 is `done (play-test pending)` (see "Waiting on the user").
-  - **05b** (merge a7d6737) is the cross-platform determinism gate.
-    - `scripts/determinism-gate.sh` replays the golden record plus six all-AI rounds that the reference plays itself, under 17 variants. Every one matches the GCC `-O2` reference on every tick. The variants: GCC and Clang at `-O0`/`-O2`/`-O3 -march=native -ffast-math`, libc++, ASan+UBSan, valgrind, an init-pattern build, `MALLOC_PERTURB_`, aarch64 under qemu, and wasm under Node 22 and 24 (legacy and exnref exceptions).
-    - The negative control, `bitriot_headless replay --perturb-at N` (in the headless CLI, not in `bitriot_sim`), is caught at its tick on every variant. Planted faults (32-bit `size_t`, evaluation order, signed overflow, uninitialised heap) are caught by the variants that should catch them.
-    - `gcc-m32` is not available here: `g++-multilib` conflicts with the aarch64 cross compiler on Ubuntu.
-    - wasm replays at roughly 40k ticks/s, against 67k natively.
-    - It had one review, one fix round (one blocker: a machine with no emsdk failed the gate) and one re-review, which said merge as is.
-  - **09** (merge 452b742) is the WASM build of the whole game.
-    - `scripts/setup-emsdk.sh [--with-ports]` installs the same pin as vnet, Emscripten 6.0.13. `--with-ports` seeds the six blocked ports from the `emscripten-ports` branch, checked by SHA-512.
-    - The rest: `cmake/EmscriptenGame.cmake` (RmlUi 4.3 built from the submodule's file list), `web/shell.html` (the click to start also unlocks audio), `emscripten_set_main_loop` around 03b's `frame()`, a software-renderer fallback, the GL dependency removed, and a Playwright smoke test (`node tests/web/smoke.js build-wasm`, 41 checks).
-    - **Native rendering changed:** 09 fixed three clipping bugs in the RmlUi glue (`RenderInterfaceSDL2.cpp`). The shipped menus draw the same, checked by screenshot, but the native play-test should look at the menus too.
-    - It had one review and one fix round; the fixes were small, so there was no re-review.
-  - **Test counts on `claude`:** `bitriot_tests` 517 and `bitriot_sim_tests` 412, on GCC Release and Clang Release. The six golden digests, `golden-round.brmr` and the build id (`0x6767612d056ba8af`) are unchanged, because neither brief changed sim behaviour.
-- **vnet:** unchanged this session: 06, 10, 11 and 14 are done, and `claude` is at 579a410, tag `v0.4.0`. CI is green on `claude`: run 36, all seven jobs. Read a run's logs with the GitHub MCP tools (`actions_list`, `get_job_logs`), and check the latest run on a branch before reporting it done. BitRiot has no CI workflow.
+- **BitRiot:** 01, 02, 02b, 03a, 03b, 04a, 04b, 05, 05b, 09 and **07**.
+  - `done`: 02b, 03a, 05 and 05b.
+  - `done (play-test pending)`: 03b, 04a and 04b (controller parts only), 09 (browser) and 07 (two real windows). See "Waiting on the user".
+- **07, native lockstep netplay** (merge 0ccdb66):
+  - **vnet `v0.4.0` is a git submodule at `ext/vnet`.** In an existing checkout run `git submodule update --init ext/vnet`. `BITRIOT_NETPLAY` is AUTO/ON/OFF: AUTO turns netplay on when the submodule is present and is re-evaluated at every configure. It is OFF for Emscripten and MinGW and in the 05b gate.
+  - **`bitriot_net`** (`src/net/`, outside `bitriot_sim`): the wire protocol, `LockstepSession` (host and peer, no SDL, no `Simulation`) and `NetMatch` (drives the `Simulation`, records final inputs, keeps a ring of 16 state dumps).
+  - **The game:** `--host [port]`, `--join host:port`, `--name`, `--local-players`, `--players`, with a minimal RmlUi lobby page (`assets/menu/netlobby.rml`).
+  - **`bitriot_headless host|join`**.
+  - **[`protocol.md`](protocol.md)** documents every message.
+  - **Rules:** only the host starts a round; ESC leaves (the peer's slots become bots); host loss shows a "Disconnected" page; a desync writes dumps and the record.
+  - **Review:** one Opus review, then a fix round, which closed an undetected desync in a round's last ticks, a peer able to freeze the session with an over-full tick, and netplay silently building OFF. Then one re-review and a small second pass, in which a pad can now bind this machine's own slot with START.
+  - **Not changed:** no `bitriot_sim` source, so the build id is still `0x6767612d056ba8af` and the golden digests are untouched.
+- **Earlier this session:**
+  - **05b** (merge a7d6737): `scripts/determinism-gate.sh`, 17 variants identical on every tick.
+  - **09** (merge 452b742): the WASM build, `scripts/setup-emsdk.sh [--with-ports]`, `tests/web/smoke.js`.
+  - **The user's first web build failed** on a fresh emsdk (SDL2_ttf's port wants plain FreeType under the parent's cache lock). It is fixed in 76f516d: configure runs `embuilder build freetype`.
+- **Test counts on `claude`:**
+  - `bitriot_tests` 599 and `bitriot_sim_tests` 485, on GCC Release and Clang Release.
+  - `ctest` 3/3. The multi-process netplay test has 7 cases and takes about 70 s.
+  - The 200-seed sweep has 0 failures on both binaries.
+  - The determinism gate passes: 17 variants, with `gcc-m32` not available.
+  - The web smoke test passes 41/41.
+- **vnet:** unchanged. `claude` is at 579a410, tag `v0.4.0`, CI green (run 36). Read run logs with the GitHub MCP tools (`actions_list`, `get_job_logs`). BitRiot has no CI workflow.
 
-**Next ready: 07** (native lockstep netplay), with both repos attached. It depends on 05b, 06 and 14, all done. Then 08 (lobby UI), then 12 (browser netplay) and 13 (disconnects and hot-join). 08 and 13 both depend on 07, so nothing can run in parallel with 07 unless the user adds work.
-- Read 05's follow-ups for 07: `HELLO` carries the build id and data hash, a recorder runs on every peer, and `bitriot_headless --host/--join`.
-- Read 05b's Outcome: run the gate after any sim change, and hash only at checkpoints.
-- Read 09's follow-ups for 12: hidden tabs stop `requestAnimationFrame`, settings need IDBFS, the web test hooks must be gated before a public page, and vnet must use the same `-fwasm-exceptions` flags.
+**Next ready: 08** (lobby UI). It depends on 07 only. Read 07's Outcome first: decisions 9–12, the lobby page, `NetGame` and the follow-ups for 08.
+- After 08: 12 (browser netplay, which needs 07, 08, 09, 10 and 14) and 13 (disconnects and hot-join, which needs 05, 07 and 08). 12 and 13 can run in parallel in separate worktrees.
+- Nothing can run in parallel with 08.
 
 **In flight:** nothing. Every feature branch in both repos is merged.
 
-**Decisions taken in the third session while the user was away** (they may revisit them):
+**Decisions taken while the user was away** (they may revisit them; the details are in each brief's Outcome):
 
-- **05b's negative control is a `bitriot_headless replay --perturb-at` option**, not a flag inside the sim. This keeps `bitriot_sim` and the build id untouched. It perturbs a block's x offset by 1/65536, because a player's offset is pulled back to the tile centre by the next step.
-- **05b goes beyond the brief:** sanitizer, valgrind, init-pattern, malloc-perturb and libc++ variants, plus six extra all-AI records. The brief's goal names UB, uninitialised state and libstdc++ vs libc++.
-- **wasm exceptions:** `-fwasm-exceptions`, which in Emscripten 6.0.13 means the legacy instructions. Standard exnref (`-sWASM_LEGACY_EXCEPTIONS=0`) also matches, under Node 22 and 24.
-- **09's deviations from the brief:**
-  - SDL_image is built with BMP as well as PNG, because the player-select faces are BMP.
-  - RmlUi is compiled from its file list, not its own CMakeLists, which CMake 4 on Arch refuses.
-  - The loop callback is a wrapper (`webLoopIteration`) around the unchanged `frame()`.
-  - The game starts from the click (`callMain`), so audio opens inside the gesture.
-  - Audio failing to open is non-fatal on the web only.
-  - `?autostart=ai5`/`ai6` raise the map height to fit the portraits.
-- **No RmlUi upgrade.** 09 didn't need one. It stays a user decision and would be its own brief.
+- **07:**
+  - **vnet is a submodule, not FetchContent:** it matches RmlUi and needs no network at configure time.
+  - **`host`/`join` are `bitriot_headless` commands**; `--host`/`--join` are accepted as aliases.
+  - **The game's lobby is a minimal RmlUi page,** not a text-mode one.
+  - **D is chosen once per round** from the host's pings. On localhost it comes out as 2 or 3.
+  - **Pacing:** nobody is more than D ticks ahead by construction, because a record exists only after stepping. The brief's catch-up rule is implemented but cannot fire in this design; it is kept for 13.
+  - **Control events ride in the record of their tick:**
+    - the host validates them;
+    - the lower peer id wins a same-tick claim, and the loser is told and revokes the slot;
+    - the last event per slot in a record wins;
+    - at most 18 peer events per tick, plus the host's leaver events.
+  - **A checksum is sent every 30 ticks and on the round's last tick.** The next round waits for every final hash.
+  - **Closing the window or SIGTERM mid-round leaves the round** but keeps the process, like ESC.
+  - **In a network game a pad's START first binds the pad to this machine's own slot,** then to a bot. This is local only and nothing goes on the wire.
+- **05b:**
+  - **The negative control is `bitriot_headless replay --perturb-at`,** not a flag in the sim.
+  - **Extra variants:** sanitizers, valgrind, libc++, init-pattern and malloc-perturb.
+  - **wasm uses `-fwasm-exceptions`**, which means the legacy instructions in Emscripten 6.0.13.
+- **09:**
+  - **SDL_image is built with BMP as well as PNG.**
+  - **RmlUi is built from its file list,** because CMake 4 refuses its own CMakeLists.
+  - **The game starts from the click,** for audio.
+  - **No RmlUi upgrade.** That is the user's call.
 
 **Waiting on the user** (ask about these; don't block on them):
 
@@ -59,14 +78,29 @@ The goal is deterministic lockstep online multiplayer for Bit Riot, a browser (W
    - Ctrl+W (Player 1's keys) asks before closing the tab.
 
    Rebinding the web keys is the user's call.
-3. **vnet `claude` → `main`** merge: the user's call.
-4. **Tags:** the cloud session can't push tags (HTTP 403), so the user tags any future vnet release from a PC. The releasing brief's Outcome gives the commands. This session tagged nothing.
+3. **Netplay play-test (07):** two real windows on one machine, `./BitRiot --host 7777 --players 4` and `./BitRiot --join 127.0.0.1:7777`. Check:
+   - a full match, then the scoreboard and a second round started by the host;
+   - a peer's ESC turning its player into a bot;
+   - the host's ESC and `kill -9` (the peer is told "Disconnected");
+   - a pad's START binding your own slot;
+   - a takeover of a bot;
+   - identical `--record` files on both;
+   - optionally, a second machine.
+
+   The steps are at the end of 07's Outcome.
+4. **vnet `claude` → `main`** merge: the user's call.
+5. **Tags:** the cloud session can't push tags (HTTP 403), so the user tags any future vnet release from a PC. The releasing brief's Outcome gives the commands. No tag was needed in this session.
 
 **Known open issues:**
 
 - **Bot livelock** (in `TODO`): a boxed-in bot with its own eggs never bombs out. It is rare (e.g. test-alone seed 4652) and not root-caused.
 - **Co-op stalemate** (in `TODO`).
 - **vnet relay limits:** a forged-source flood can delay new handshakes while it lasts. This is documented in vnet's `relay-protocol.md`.
+- **Netplay limits (07 follow-ups):**
+  - no authentication or encryption, and no NAT traversal;
+  - `canStartRound()` waits for every peer's final hash with no time limit (unreachable today; 13 should bound it);
+  - a debugger pause over 10 s drops a machine;
+  - over a relay (12) D may need more than 8.
 - **`RuntimeException::what()`** returns a pointer into a local string. It is pre-existing and in `bitriot_sim`; Clang warns `-Wreturn-stack-address`. Fix it in a brief that owns the sim, and rerun the gate.
 
 **Lessons so far:**
@@ -79,6 +113,9 @@ The goal is deterministic lockstep online multiplayer for Bit Riot, a browser (W
 - **Reviews find real bugs** even when every test passes: 04's join-indicator recursion, 05's allocation bomb, 14's `vnet_wait` loop, 09's smoke test that could not see a blank canvas, and 05b's gate failing on a machine with no emsdk. Tests that pass `nullptr` or skip the real glue hide them, so ask reviewers to probe the untested glue and try to break the tests.
 - **Golden digests:** the six pinned rounds in `SimulationTest` and the golden match record `tests/data/golden-round.brmr` (brief 05) must stay byte-identical across refactors. A legitimate sim change moves them, and the commit must say so (see `tests/README.md`).
 - **Any edit to a `bitriot_sim` source changes the build id,** even a logging tweak, because the id is a hash of the sim's source text. Keep non-sim changes out of `bitriot_sim` files.
+- **Never run a seed sweep in a build tree that is being rebuilt.** 07's first sweep showed phantom failures that way.
+- **A fix round can open a new gap.** 07's device-assignment fix left pad-only players unable to play, and the re-review caught it, so keep the re-review whenever a fix changes behaviour.
+- **Build-environment bugs hide behind a warm cache.** The web build passed every check here and failed on the user's fresh emsdk. When a brief adds a toolchain step, have someone try it on a clean cache.
 - **After any sim change, run `scripts/determinism-gate.sh`.** It takes about 6 minutes with warm builds and needs emsdk for the wasm rows.
 
 ## 1. Set up
@@ -105,11 +142,9 @@ Then read the brief(s) you are about to start, plus the **Outcome** sections of 
 
 1. **Find ready briefs.** From the status tables in both repos, list every brief whose dependencies are all done.
 2. **Tracks that can run in parallel now:**
-   - BitRiot netplay: 07 (01–05b, 06 and 14 are done). It is the only ready brief.
-   - BitRiot WASM: 09 is done; 12 needs 07 and 08 first.
-   - vnet: no briefed work left (06, 10, 11 and 14 are done; `v0.4.0`).
-
-   Later briefs (08, then 12 and 13) follow the dependency table.
+   - BitRiot netplay: 08 (07 is done). It is the only ready brief.
+   - After 08, 12 (browser netplay) and 13 (disconnects and hot-join) can run in parallel.
+   - vnet: no briefed work left (06, 10, 11 and 14 are done; `v0.4.0`). 12 may need vnet changes; brief them in vnet's `doco/` if so.
 3. **Check the prerequisites.** Some briefs depend on **open questions** (`Qn` in the table). If the user hasn't answered one, **ask the user before starting that brief**. Implementer subagents cannot ask.
    - All four are answered: Q1 (countdown 2 s / 60 ticks), Q2 (fixed-point up front, brief 02b), Q3 (vnet: MIT, public) and Q4 (online cap stays 6). Check the README in case new questions have been added.
 4. **In-flight work:** none (see §0).
