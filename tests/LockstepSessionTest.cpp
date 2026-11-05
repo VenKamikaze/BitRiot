@@ -1256,11 +1256,19 @@ TEST(LockstepLobby, UnreadyingTakesTheStartAwayAgain)
 
 TEST(LockstepLobby, ReadyIsRepeatedUntilTheHostShowsItEvenUnderHeavyLoss)
 {
-  Cluster c(2, readyOptions("loss=60"));
-  LockstepSession& host = *c.machine(0).s;
-  c.machine(1).s->setReady(true);
-  ASSERT_TRUE(c.runUntil([&] { return host.canStartRound(); }, 30000));
-  EXPECT_TRUE(c.runUntil([&] { return readyAsSeenBy(c, 1, 1); }, 30000));   // and the LOBBY that says so gets through
+  // Eight networks that each lose 60% of everything, a different 60% each: some first answers are lost, and each must still arrive.
+  for (uint64_t seed = 1; seed <= 8; seed++)
+  {
+    SCOPED_TRACE("seed " + std::to_string(seed));
+    ClusterOptions o = readyOptions("loss=60");
+    o.seedBase = seed * 1000;
+    Cluster c(2, o);
+    if (c.machine(1).s->state() != LockstepSession::LOBBY) continue;   // the join itself did not get through in this network
+    LockstepSession& host = *c.machine(0).s;
+    c.machine(1).s->setReady(true);
+    ASSERT_TRUE(c.runUntil([&] { return host.canStartRound(); }, 30000));
+    EXPECT_TRUE(c.runUntil([&] { return readyAsSeenBy(c, 1, 1); }, 30000));   // and the LOBBY that says so gets through
+  }
 }
 
 TEST(LockstepLobby, WithoutRequireReadyTheLobbyStartsAsBefore)

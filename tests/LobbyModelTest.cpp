@@ -556,6 +556,9 @@ TEST(LobbyModelPrefs, ACorruptFileIsReadAsFarAsItMakesSense)
   EXPECT_EQ(p.hostPort, 7002);        // the bad value was skipped, the later good one taken
   EXPECT_EQ(p.localPlayers, 1);       // 9 is not a player count
   EXPECT_EQ(p.joinAddress, "");       // a bad address is dropped
+  NetPrefs z;
+  EXPECT_TRUE(parseNetPrefs("port=99999\nport=abc\nport=0\n", z));
+  EXPECT_EQ(z.hostPort, 7777) << "a port that is not 1..65535 never replaces the default";
   NetPrefs q;
   EXPECT_TRUE(parseNetPrefs(std::string("name=\xff\xfe\x01" "x\n\0\0\0\n", 12), q));
   EXPECT_EQ(q.name, "??x");           // cleaned, never raw bytes
