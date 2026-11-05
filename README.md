@@ -101,7 +101,9 @@ Two to six players on different machines (each may have local players too), over
 ./BitRiot --join 192.168.1.20:7777 --name Bob       # on another machine (or 127.0.0.1:7777 on the same one)
 ```
 
-The host presses Enter in the lobby to start; only the host starts the next round. ESC leaves (a leaving player becomes a computer player; if the host leaves the session ends). `--local-players N` puts N players on one machine, `--record <dir>` writes the match records. `VNET_IMPAIR="lat=80,jit=20,loss=5,seed=1"` simulates a bad network. The protocol is in `doco/netplay/protocol.md`; `bitriot_headless host|join` plays networked rounds with no window.
+You do not need the flags: the main menu has **Host online game** and **Join online game**. Hosting asks for a name and a UDP port (7777; a friend outside your network needs that port forwarded to your machine) and opens a lobby with a row for each of up to six seats (you, other machines, computer players), where the host picks the map, blocks, enemies, player count and teams, every other player presses **Ready**, and the host removes a player or starts. Joining asks for a name and the host's address (`host:port`); a refusal is explained (a different game version, build or data, a full game, a match in progress, no answer). The last name, address and port are remembered in `netplay.txt` in the game's preferences folder (`SDL_GetPrefPath`). After a round the host chooses **Next round** or **Back to lobby**; peers see "Waiting for the host...".
+
+With the flags the host presses Enter in the lobby to start (it does not wait for Ready); only the host starts the next round. ESC leaves (a leaving player becomes a computer player; if the host leaves the session ends). `--local-players N` puts N players on one machine, `--record <dir>` writes the match records. `VNET_IMPAIR="lat=80,jit=20,loss=5,seed=1"` simulates a bad network. The protocol is in `doco/netplay/protocol.md`; `bitriot_headless host|join` plays networked rounds with no window.
 
 ### CMake with MinGW
 
