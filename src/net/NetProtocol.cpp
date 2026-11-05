@@ -689,7 +689,7 @@ bool decode(Reader& r, ReadyAtMsg& m)
 {
   m.round = r.u16();
   m.tick = r.u32();
-  return r.done();
+  return r.done() && m.round != 0;   // rounds start at 1
 }
 
 void encode(Writer& w, const TakeoverAtMsg& m)

@@ -18,10 +18,14 @@ const size_t MAX_PEER_EVENTS = 18;
 const uint32_t DESYNC_RESEND_MS = 100;
 const uint64_t REMOVED_MEMORY_MS = 30000;   // how long a removed peer's packets are answered with LEAVE_REMOVED
 const uint32_t CHECKSUM_RESEND_MS = 400;
+// A reconnect token from another address is honoured when its old owner has been silent this long, or (a live duplicate) never:
+// the HELLO is held back for TOKEN_GRACE_MS and then taken for a new player.
+const uint64_t TOKEN_QUIET_MS = 1000;
+const uint64_t TOKEN_GRACE_MS = 1500;
 // Streaming the record to a late joiner (brief 13). A window of packets is sent whenever the joiner's acknowledgement moves
 // (so the speed is a window per round trip), and the first two again if it has not moved for CATCHUP_RESEND_MS.
 const size_t CATCHUP_WINDOW_PACKETS = 8;
-const uint32_t CATCHUP_WINDOW_TICKS = 1100;
+const uint32_t CATCHUP_WINDOW_TICKS = 1000;   // (a datagram holds about 150 ticks: 7 datagrams of the 8 at most)
 const uint32_t CATCHUP_RESEND_MS = 100;
 const uint32_t CATCHUP_NEAR_TICKS = 150;     // closer to the head than this and the ordinary TICKS repeat does the rest
 const uint32_t CATCHUP_INFO_MS = 250;        // WELCOME_MIDMATCH repeats (the head moves while it catches up)
@@ -394,20 +398,60 @@ void LockstepSession::onHello(const vnet_addr& from, const uint8_t* body, size_t
     return;
   }
 
+  // A machine the host removed whose WELCOME was lost still repeats the HELLO it was removed under: tell it, whether or not an
+  // entry of it is still around (in a round a removed member stays, gone). A new nonce (a restarted game) is not a repeat, and
+  // gets in; there is no ban.
+  for (const Removed& rm : m_removed)
+  {
+    if (m_now < rm.until && rm.nonce == h.nonce && vnet_addr_equal(&rm.addr, &from))
+    {
+      LeaveMsg l;
+      l.reason = LEAVE_REMOVED;
+      sendMsg(MSG_LEAVE, from, l);
+      return;
+    }
+  }
+
   // Who is this? A reconnect token names the player whatever address it comes from (a browser's new context may
-  // have another address while the old one is still registered); without one, the address does.
+  // have another address while the old one is still registered); without one, the address does. But a token only
+  // counts if the old incarnation has gone quiet: two live machines that share a token (two windows on one prefs file) must
+  // not evict each other. A HELLO whose token belongs to a machine that is still talking from another address is held back
+  // for TOKEN_GRACE_MS (a crashed machine falls silent in that time, and then the token is honoured); if the old one is
+  // still talking after that, this HELLO is a new player and the token is ignored.
   int known = -1;
   bool byToken = false;
   if (h.token != 0)
   {
     for (int id = 1; id < MAX_PEERS; id++)
     {
-      if (m_members[id].present && m_members[id].token == h.token)
+      Member& o = m_members[id];
+      if (!o.present || o.token != h.token) continue;
+      const bool sameAddr = vnet_addr_equal(&o.addr, &from);
+      const bool quiet = o.gone || sameAddr || m_now - o.lastHeard >= TOKEN_QUIET_MS;
+      if (quiet)
       {
         known = id;
         byToken = true;
         break;
       }
+      // Alive, from another address.
+      size_t at = 0;
+      while (at < m_pendingTokens.size() && !(m_pendingTokens[at].nonce == h.nonce && vnet_addr_equal(&m_pendingTokens[at].addr, &from))) at++;
+      if (at == m_pendingTokens.size())
+      {
+        PendingToken pt;
+        pt.addr = from;
+        pt.nonce = h.nonce;
+        pt.since = m_now;
+        if (m_pendingTokens.size() >= 8) m_pendingTokens.erase(m_pendingTokens.begin());
+        m_pendingTokens.push_back(pt);
+        return;   // wait: it repeats the HELLO
+      }
+      if (m_now - m_pendingTokens[at].since < TOKEN_GRACE_MS)
+      {
+        return;
+      }
+      break;      // the old one is alive: a new player, the token means nothing here
     }
   }
   if (known < 0)
@@ -430,21 +474,6 @@ void LockstepSession::onHello(const vnet_addr& from, const uint8_t* body, size_t
       m.lastHeard = m_now;
       sendWelcome(m, from);
       return;
-    }
-  }
-  else
-  {
-    // A machine the host removed whose WELCOME was lost still repeats the HELLO it was removed under: tell it. A new nonce
-    // (a restarted game) is not a repeat, and gets in; there is no ban.
-    for (const Removed& rm : m_removed)
-    {
-      if (m_now < rm.until && rm.nonce == h.nonce && vnet_addr_equal(&rm.addr, &from))
-      {
-        LeaveMsg l;
-        l.reason = LEAVE_REMOVED;
-        sendMsg(MSG_LEAVE, from, l);
-        return;
-      }
     }
   }
 
@@ -800,16 +829,16 @@ void LockstepSession::compareChecksum(uint8_t peerId, uint32_t tick)
     d.hostHash = mine->second;
     d.peerHash = theirs->second;
     d.offender = peerId;
-    if (pm.midJoin)
+    if (pm.midJoin || pm.spectator)
     {
-      // A machine that joined mid-round and fast-forwarded to here diverged. The match is what it is: the host and the
+      // A machine that joined mid-round (or only watches: its state decides nothing) and fast-forwarded to here diverged. The match is what it is: the host and the
       // players are fine, so only that machine is stopped (it is told, and writes its evidence), and the match goes on.
       evictDesynced(peerId, d);
       return;
     }
     declareDesync(d);
   }
-  else if (pm.midJoin)
+  else if (pm.midJoin || pm.spectator)
   {
     pm.verified = true;   // its state agrees with the host's: it may be given a slot
   }
@@ -1036,7 +1065,8 @@ void LockstepSession::checkTimeouts()
       }
       // R3 (brief 07's review): between rounds, a peer that has every tick but never reports the last checkpoint's hash
       // holds up the next round for good. Past a bound it is dropped.
-      if (m_state == BETWEEN_ROUNDS && m.present && !m.gone && !m.spectator && m_lastHostHashTick != 0 && !m_desynced
+      if (m_state == BETWEEN_ROUNDS && m.present && !m.gone && !m.spectator && !(m.midJoin && m.takeoverMask == 0)
+          && m_lastHostHashTick != 0 && !m_desynced
           && m.ackedTicks != 0xFFFFFFFFu && m.ackedTicks >= m_finalTick && m.hashes.count(m_lastHostHashTick) == 0
           && m_now - m_roundEndedAt > m_opt.finalHashWaitMs)
       {
@@ -1403,6 +1433,16 @@ bool LockstepSession::startRound(uint64_t seed, std::string* error)
   {
     return false;
   }
+  // A machine that the slots ran out for (late joiners are not held to the six-human cap) watches this round: it is not dealt a
+  // slot, not waited for, not asked to be ready; it plays again when it joins a round with a bot free.
+  for (int id = 1; id < MAX_PEERS; id++)
+  {
+    Member& sm = m_members[id];
+    if (!sm.present || sm.gone || sm.spectator) continue;
+    bool any = false;
+    for (int s = 0; s < m_numSlots; s++) any = any || m_owner[s] == id;
+    if (!any) sm.spectator = true;
+  }
   // Humans who left in the previous round are gone for good.
   for (int id = 1; id < MAX_PEERS; id++)
   {
@@ -1426,7 +1466,8 @@ void LockstepSession::setupRound(const StartMsg& s, bool joining)
   for (int i = 0; i < m_numSlots; i++)
   {
     m_owner[i] = s.slots[i].owner;
-    if (s.slots[i].owner == m_myId) localMask |= (uint8_t) (1u << i);
+    // (A late joiner's slots come only from TAKEOVER_AT: a reconnect's old slot is in START's owners, but it is a bot by now.)
+    if (s.slots[i].owner == m_myId && !joining) localMask |= (uint8_t) (1u << i);
   }
 
   m_roundStart = RoundStart();
@@ -1697,6 +1738,14 @@ void LockstepSession::submitLocal(const TickInputs& sample, uint8_t sampledMask)
   if (m_nextLocal < m_participateFrom)
   {
     m_nextLocal++;   // a watcher, or a joiner not yet given a slot: no record (the host does not want one)
+    // Nor can it claim a bot: the host never hears of it, so the local layer is told it was not granted.
+    for (const ControlEvent& e : sample.control)
+    {
+      if (e.kind == ControlEvent::HUMAN_TAKES_OVER && validEvent(e, m_numSlots) && !(m_grantedMask & (1u << e.slot)))
+      {
+        m_rejectedClaims.push_back(e.slot);
+      }
+    }
     return;
   }
   InputRecord rec;
@@ -1853,6 +1902,17 @@ bool LockstepSession::mergeTick(uint32_t t, TickInputs& out)
   // Members in id order: the host first. For each: its control requests first (a takeover
   // makes the slot its own before the slot's bytes are read), then the bytes of the slots
   // it owns.
+  // Scheduled takeovers are never refused or delayed, so they are counted out of the peers' share of a tick (18 + 6 leavers = 24
+  // would be 30 with six more): the peers get what is left of MAX_PEER_EVENTS after them.
+  size_t scheduledTotal = 0, scheduled = 0;
+  for (int id = 1; id < MAX_PEERS; id++)
+  {
+    const Member& sm = m_members[id];
+    if (sm.present && !sm.gone && sm.midJoin && sm.takeoverMask != 0 && !sm.takeoverApplied && sm.takeoverTick == t)
+    {
+      for (int s = 0; s < m_numSlots; s++) if (sm.takeoverMask & (1u << s)) scheduledTotal++;
+    }
+  }
   const uint8_t reserved = reservedSlots();   // dealt to a late joiner, whose takeover has not applied yet: nobody else may claim them
   for (int id = 0; id < MAX_PEERS; id++)
   {
@@ -1864,15 +1924,11 @@ bool LockstepSession::mergeTick(uint32_t t, TickInputs& out)
       for (int s = 0; s < m_numSlots; s++)
       {
         if (!(m.takeoverMask & (1u << s)) || m_owner[s] != NO_PEER) continue;
-        if (out.control.size() >= MAX_PEER_EVENTS)
-        {
-          m.takeoverTick = t + 1;   // a tick that is full of events: the takeover waits one tick (the host waits for it from then)
-          break;
-        }
         m_owner[s] = (uint8_t) id;
         out.control.push_back(ControlEvent(s, ControlEvent::HUMAN_TAKES_OVER));
+        scheduled++;
       }
-      if (m.takeoverTick == t) m.takeoverApplied = true;
+      m.takeoverApplied = true;
     }
     const InputRecord* rec = nullptr;
     if (t > (uint32_t) m_delay && m.waited(t))
@@ -1908,7 +1964,7 @@ bool LockstepSession::mergeTick(uint32_t t, TickInputs& out)
       const int s = e.slot;
       if (lastFor[s] != (int) ei) continue;
       if (slotsUsed & (1u << s)) continue;
-      if (out.control.size() >= MAX_PEER_EVENTS) break;
+      if (out.control.size() - scheduled >= MAX_PEER_EVENTS - scheduledTotal) break;
       if (e.kind == ControlEvent::HUMAN_TAKES_OVER)
       {
         if (m_owner[s] != NO_PEER || (reserved & (1u << s))) continue;   // taken already, a human's own slot, or dealt to a joiner
@@ -2147,6 +2203,7 @@ void LockstepSession::sendCatchUp(Member& m)
   {
     from = sendTickRange(m, from);
   }
+  if (m.sentUpTo > acked) m_stats.maxCatchUpInFlight = std::max<uint64_t>(m_stats.maxCatchUpInFlight, m.sentUpTo - acked);
   m.lastTicksSent = m_now;
 }
 
@@ -2579,10 +2636,15 @@ void LockstepSession::onLobby(const LobbyMsg& msg)
   }
   // The host went back to the lobby (the scoreboard's "Back to lobby"): so do we, once our own round is over
   // here. The round number says it is the lobby after the round we played, not an old packet of an earlier one.
-  if (m_state == BETWEEN_ROUNDS && msg.phase == PHASE_LOBBY && msg.round == static_cast<uint16_t>(m_round + 1))
+  // A late joiner still catching up on the round (the host does not wait for it) follows too: the host stops sending that
+  // round's ticks once it is back in the lobby, so it would be stuck in the round for good.
+  if ((m_state == BETWEEN_ROUNDS || (m_state == RUNNING && (m_midJoin || m_opt.spectate)))
+      && msg.phase == PHASE_LOBBY && msg.round == static_cast<uint16_t>(m_round + 1))
   {
     m_state = LOBBY;
     m_wantReady = false;
+    m_midJoin = false;
+    m_joinStage = JOIN_NONE;
   }
 }
 

@@ -127,10 +127,10 @@ namespace netplay
     // Host: confirmed ticks of a round kept for late joiners; past it the round cannot be joined (REJECT_IN_PROGRESS). The
     // default is MatchRecord's own bound (1,048,576 ticks, about 9.7 hours of play).
     uint32_t historyLimit = 1u << 20;
-    // TEST ONLY (peer): a TAKEOVER_AT that arrives within this many ms of the first READY_AT is dropped, as if lost, so the joiner
+    // TEST ONLY, never set by the game or the headless runner (peer): a TAKEOVER_AT that arrives within this many ms of the first READY_AT is dropped, as if lost, so the joiner
     // steps past the tick the host waits for before it hears of it (the backfill of neutral records).
     uint32_t testDropTakeoverForMs = 0;
-    // TEST ONLY (peer): READY_AT reports a tick this much lower than the truth, a joiner that is not near the live tick.
+    // TEST ONLY, never set by the game or the headless runner (peer): READY_AT reports a tick this much lower than the truth, a joiner that is not near the live tick.
     uint32_t testReadyAtLag = 0;
   };
 
@@ -401,6 +401,7 @@ namespace netplay
         uint64_t packetsDropped = 0;      // vnet refused a send (EAGAIN/EIO) - a lost packet
         uint64_t badPackets = 0;          // undecodable, wrong session, wrong sender
         uint64_t inputRecordsSent = 0;    // peer: per-tick input records put on the wire (a spectator sends none)
+        uint64_t maxCatchUpInFlight = 0;  // host: the most ticks streamed to a late joiner beyond what it had acknowledged
       };
       const Stats& stats() const { return m_stats; }
       // The RTT to a peer (host side), -1 if none yet.
@@ -627,6 +628,8 @@ namespace netplay
       uint32_t m_participateFrom = 0;
       uint64_t m_lastReadyAtSent = 0;
       uint64_t m_firstReadyAtSent = 0;
+      struct PendingToken { vnet_addr addr; uint32_t nonce; uint64_t since; };
+      std::vector<PendingToken> m_pendingTokens;   // host: HELLOs whose token belongs to a machine that is still talking
 
       std::string m_delayNote;
       Stats m_stats;

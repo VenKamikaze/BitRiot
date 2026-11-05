@@ -453,6 +453,9 @@ TEST(NetProtocol, TheHotJoinMessagesRoundTripAndTheirDecodersAreStrict)
   EXPECT_EQ(raback.round, 9);
   EXPECT_EQ(raback.tick, 123456u);
   EXPECT_EQ(messageName(MSG_READY_AT), "READY_AT");
+  ra.round = 0;
+  rb = packet(MSG_READY_AT, 2, 5, [&](Writer& o) { encode(o, ra); });
+  EXPECT_FALSE(decodeBody(rb, raback)) << "rounds start at 1";
 
   TakeoverAtMsg ta;
   ta.round = 9;

@@ -153,6 +153,7 @@ class GameEngine
     uint32_t m_netPeersHere = 0;
     bool m_netPeersKnown = false;
     bool m_netTokenSaved = false;
+    bool m_netNamesFresh = true;
     void netFrame();
     void netIdleFrame();
     void stepNetTick();

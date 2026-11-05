@@ -39,6 +39,7 @@ set(SIM_TEST_SOURCES
   BuildIdTest.cpp
   HeadlessCliTest.cpp
   FastForwardBenchmarkTest.cpp
+  SoundMuteTest.cpp
 )
 
 set(CORE_TEST_SOURCES

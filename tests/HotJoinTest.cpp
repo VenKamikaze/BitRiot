@@ -522,6 +522,7 @@ TEST(Reconnect, APeerThatComesBackWithItsTokenFromAnotherAddressGetsItsSlotBackW
   Machine& back = c.addMachine(1, 0, 0, [&](netplay::SessionOptions& so) { so.reconnectToken = token; so.name = "peer1"; });
   ASSERT_TRUE(c.runUntil([&] { return joined(back); }, 20000));
   EXPECT_EQ(back.s->myId(), 1) << "the same peer id";
+  EXPECT_EQ(back.round.localSlotMask, 0) << "its old slot is in START's owners but a bot now: the slots come from TAKEOVER_AT only";
   EXPECT_EQ(back.s->token(), token) << "the same token";
   EXPECT_EQ(back.s->offeredSlots(), 0b0010);
   EXPECT_EQ(back.s->grantedSlots(), 0b0010) << "its old slot, not the free bot";
@@ -739,6 +740,219 @@ TEST(LockstepLobby, AJoiningSessionStillConnectingEndsWhenTheHostRemovedIt)
   c.impair(0, "");
   ASSERT_TRUE(c.runUntil([&] { return p.s->ended(); }, 3000));
   EXPECT_EQ(p.s->endReason(), LockstepSession::END_REMOVED);
+}
+
+
+// -- the review fix round ---------------------------------------------------------------------------------------------
+
+TEST(HotJoin, ASpectatorOrWaitingJoinerWhoClaimsABotIsToldItWasNotGranted)
+{
+  // Without this the local layer binds a keyboard set to a bot the simulation never gives it (and the set is gone when the real slot
+  // is dealt).
+  ClusterOptions o = delayed(10);
+  Cluster c(2, o);   // no bot
+  ASSERT_TRUE(c.startRound(1, 0));
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(200); }, 60000));
+  Machine& j = c.addMachine(1);
+  ASSERT_TRUE(c.runUntil([&] { return joined(j); }, 20000));
+  ASSERT_EQ(j.s->grantedSlots(), 0);
+  const uint32_t at = j.s->nextStepTick() + 2;
+  j.wantEvents[at] = {ControlEvent(1, ControlEvent::HUMAN_TAKES_OVER)};
+  ASSERT_TRUE(c.runUntil([&] { return j.s->nextStepTick() > at; }, 5000));
+  const std::vector<int> rejected = j.s->takeRejectedClaims();
+  ASSERT_EQ(rejected.size(), 1u);
+  EXPECT_EQ(rejected[0], 1);
+}
+
+TEST(HotJoin, ALateJoinerStillCatchingUpFollowsTheHostBackToTheLobbyAndTheReadyGateOpens)
+{
+  ClusterOptions o = delayed(10);
+  o.lobby.totalSlots = 4;
+  o.session.requireReady = true;
+  Cluster c(2, o);
+  c.machine(1).s->setReady(true);
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 5000));
+  ASSERT_TRUE(c.startRound(1, 300));
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(150); }, 60000));
+  Machine& j = c.addMachine(1);
+  j.fastForwardPerMs = 0;   // it never gets anywhere
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->state() == LockstepSession::BETWEEN_ROUNDS
+                                      && c.machine(1).s->state() == LockstepSession::BETWEEN_ROUNDS; }, 60000));
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 20000));
+  ASSERT_TRUE(c.machine(0).s->returnToLobby());
+  ASSERT_TRUE(c.runUntil([&] { return j.s->state() == LockstepSession::LOBBY; }, 5000)) << "stuck in the old round";
+  EXPECT_EQ(j.s->joinStage(), LockstepSession::JOIN_NONE);
+  c.machine(1).s->setReady(true);
+  j.s->setReady(true);
+  EXPECT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 5000)) << "Start stays blocked: " << c.machine(0).s->cannotStartBecause();
+}
+
+TEST(HotJoin, ALateJoinerThatNeverFinishesCatchingUpIsNotDroppedForMissingTheLastChecksum)
+{
+  ClusterOptions o = delayed(10);
+  o.lobby.totalSlots = 4;
+  Cluster c(2, o);
+  ASSERT_TRUE(c.startRound(1, 200));
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(100); }, 60000));
+  Machine& j = c.addMachine(1);
+  j.fastForwardPerMs = 0;
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->state() == LockstepSession::BETWEEN_ROUNDS; }, 60000));
+  c.run(12000);   // past finalHashWaitMs
+  EXPECT_EQ(c.machine(0).s->peerCount(), 2) << "it is not waited for, so it is not dropped for what it could not report";
+  EXPECT_FALSE(j.s->ended());
+}
+
+TEST(Reconnect, TwoLiveMachinesWithTheSameTokenAreTwoPlayersAndNeitherEvictsTheOther)
+{
+  ClusterOptions o = delayed(10);
+  o.lobby.totalSlots = 4;
+  Cluster c(2, o);   // the host and peer 1, both running
+  ASSERT_TRUE(c.startRound(1, 0));
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(200); }, 60000));
+  const uint32_t token = c.machine(1).s->token();
+  Machine& twin = c.addMachine(1, 0, 0, [&](netplay::SessionOptions& so) { so.reconnectToken = token; });
+  ASSERT_TRUE(c.runUntil([&] { return joined(twin); }, 20000));
+  EXPECT_NE(twin.s->myId(), 1) << "a second player, not the first one again";
+  EXPECT_NE(twin.s->token(), token);
+  EXPECT_EQ(twin.s->offeredSlots(), 0);
+  EXPECT_FALSE(c.machine(1).s->ended());
+  c.run(2000);
+  EXPECT_FALSE(c.machine(1).s->ended());
+  EXPECT_EQ(c.machine(0).s->peerCount(), 2 + 0 + 1 - 1 + 0) << "peer 1 and the twin";
+}
+
+TEST(Reconnect, ATokenFromADeadMachineIsHonouredOnceItHasBeenQuietForASecond)
+{
+  // The crash-restart counterpart of the test above: the old process is silent, the new one reclaims.
+  ClusterOptions o = delayed(10);
+  o.lobby.totalSlots = 4;
+  Cluster c(3, o);
+  ASSERT_TRUE(c.startRound(1, 0));
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(200); }, 60000));
+  const uint32_t token = c.machine(2).s->token();
+  c.machine(2).frozen = true;
+  Machine& back = c.addMachine(1, 0, 0, [&](netplay::SessionOptions& so) { so.reconnectToken = token; });
+  const uint64_t t0 = c.now();
+  ASSERT_TRUE(c.runUntil([&] { return joined(back); }, 20000));
+  EXPECT_EQ(back.s->myId(), 2);
+  EXPECT_EQ(back.s->offeredSlots(), 0b0100);
+  EXPECT_GE(c.now() - t0, 500u) << "held back while the old one might still be talking";
+}
+
+TEST(HotJoin, ASpectatorWhoseStateIsWrongIsStoppedAlone)
+{
+  ClusterOptions o = delayed(10);
+  Cluster c(2, o);
+  Machine& s = c.addMachine(1, 0, 0, [](netplay::SessionOptions& so) { so.spectate = true; });
+  s.hashFor = [](uint32_t t) { return 0xBAD0000ull + t; };
+  ASSERT_TRUE(c.runUntil([&] { return s.s->state() == LockstepSession::LOBBY; }, 3000));
+  c.machine(0).roundTicks = 0;
+  ASSERT_TRUE(c.machine(0).s->startRound(1, nullptr));
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).log.size() >= 400 && c.machine(1).log.size() >= 400; }, 60000));
+  EXPECT_FALSE(c.machine(0).s->desynced()) << "a spectator decides nothing";
+  EXPECT_FALSE(c.machine(1).s->desynced());
+  EXPECT_TRUE(s.s->desynced()) << "it was told";
+  EXPECT_EQ(c.machine(0).s->peerCount(), 1);
+}
+
+TEST(HotJoin, ABotReservedForAJoinerThatVanishedBeforeItsTickIsFreeAgain)
+{
+  ClusterOptions o = delayed(10);
+  o.lobby.totalSlots = 3;   // the host, peer 1, one bot
+  Cluster c(2, o);
+  ASSERT_TRUE(c.startRound(1, 0));
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(200); }, 60000));
+  Machine& a = c.addMachine(1);
+  ASSERT_TRUE(c.runUntil([&] { return a.s->joinStage() == LockstepSession::JOIN_WAITING; }, 20000));
+  c.run(80);        // its READY_AT reaches the host, which deals it the bot...
+  a.frozen = true;  // ...and it is gone before the takeover tick
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->peerCount() == 1; }, 20000));
+  Machine& b = c.addMachine(1);
+  ASSERT_TRUE(c.runUntil([&] { return joined(b); }, 20000));
+  EXPECT_EQ(b.s->grantedSlots(), 0b0100) << "the bot reserved for the vanished joiner is free again";
+}
+
+TEST(HotJoin, TheTakeoverTickIsFarEnoughAheadThatTheLiveMatchDoesNotStallAtIt)
+{
+  ClusterOptions o = delayed(40);
+  o.lobby.totalSlots = 4;
+  Cluster c(2, o);
+  ASSERT_TRUE(c.startRound(1, 0));
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(300); }, 60000));
+  Machine& j = c.addMachine(1);
+  ASSERT_TRUE(c.runUntil([&] { return joined(j); }, 20000));
+  const uint32_t ts = j.s->takeoverTick();
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(ts + 100); }, 60000));
+  EXPECT_LE(longestGap(c.machine(0), ts - 20, ts + 60), 70u) << "the host waited for the joiner at its takeover tick";
+  EXPECT_LE(longestGap(c.machine(1), ts - 20, ts + 60), 70u);
+}
+
+TEST(HotJoin, TheRecordIsStreamedInAWindowNotAllAtOnce)
+{
+  ClusterOptions o = delayed(10);
+  o.lobby.totalSlots = 4;
+  Cluster c(2, o);
+  ASSERT_TRUE(c.startRound(1, 0));
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(4000); }, 400000));
+  Machine& j = c.addMachine(1);
+  ASSERT_TRUE(c.runUntil([&] { return joined(j); }, 60000));
+  const uint64_t inFlight = c.machine(0).s->stats().maxCatchUpInFlight;
+  EXPECT_GT(inFlight, 300u) << "a window was streamed";
+  EXPECT_LE(inFlight, 1100u) << "no more than the window (1,000 ticks and one datagram) beyond what the joiner acknowledged";
+}
+
+TEST(LockstepLobby, ASpectatorDoesNotUseUpASlotOfTheSixWhenAskingToJoin)
+{
+  ClusterOptions o;
+  o.localPlayers[0] = 2;
+  Cluster c(5, o);   // 2 + 1 + 1 + 1 + 1 = six players
+  Machine& s = c.addMachine(1, 0, 0, [](netplay::SessionOptions& so) { so.spectate = true; });
+  c.run(1500);
+  EXPECT_EQ(s.s->state(), LockstepSession::LOBBY) << "a spectator is not a seventh player";
+  Machine& seventh = c.addMachine(1);
+  ASSERT_TRUE(c.runUntil([&] { return seventh.s->ended(); }, 5000));
+  EXPECT_EQ(seventh.s->rejectInfo().reason, netplay::REJECT_FULL);
+}
+
+TEST(HotJoin, ALateJoinerThatTheSlotsRanOutForWatchesTheNextRoundToo)
+{
+  ClusterOptions o = delayed(10);
+  o.localPlayers[0] = 2;
+  Cluster c(5, o);   // six players, no bot
+  ASSERT_TRUE(c.startRound(1, 120));
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(60); }, 60000));
+  Machine& j = c.addMachine(1);
+  ASSERT_TRUE(c.runUntil([&] { return joined(j); }, 20000));
+  EXPECT_EQ(j.s->grantedSlots(), 0);
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 30000));
+  ASSERT_TRUE(c.startRound(2, 0));
+  EXPECT_EQ(j.round.localSlotMask, 0) << "no slot left for it in round 2 either";
+  j.frozen = true;
+  const size_t before = c.machine(0).log.size();
+  c.run(2000);
+  EXPECT_GE(c.machine(0).log.size() - before, 2000u / 33 - 5) << "it is a spectator: not waited for";
+}
+
+TEST(LockstepLobby, AMachineRemovedInTheMiddleOfARoundWhoseWelcomeWasLostIsTurnedAwayToo)
+{
+  Cluster c(1);
+  ASSERT_TRUE(c.startRound(1, 0));
+  c.run(300);
+  Cluster::Raw raw = c.openRaw();
+  rawHelloWithNonce(c, raw, 4242);
+  rawAnswers(raw);   // the WELCOME_MIDMATCH is "lost"
+  ASSERT_EQ(c.machine(0).s->peerCount(), 1);
+  ASSERT_TRUE(c.machine(0).s->kick(1));
+  rawAnswers(raw);
+  rawHelloWithNonce(c, raw, 4242);
+  bool removed = false;
+  for (const auto& a : rawAnswers(raw))
+  {
+    if (a.first == netplay::MSG_LEAVE && a.second == netplay::LEAVE_REMOVED) removed = true;
+    EXPECT_NE(a.first, netplay::MSG_WELCOME_MIDMATCH) << "it was let back in mid-round";
+  }
+  EXPECT_TRUE(removed);
+  EXPECT_EQ(c.machine(0).s->peerCount(), 0);
 }
 
 TEST(LockstepSession, APeerThatNeverReportsTheLastChecksumIsDroppedAndTheNextRoundCanStart)

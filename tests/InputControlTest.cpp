@@ -211,6 +211,23 @@ TEST_F(InputControlTest, ASlotTheHostGaveALateJoinerIsLocalAtOnceOnTheLowestFree
   EXPECT_EQ(m_handler->localSlotMask(), 0b1100u);
 }
 
+TEST_F(InputControlTest, AReconnectedJoinerStartsWithNoLocalSlotSoItsGrantedSlotGetsTheFirstKeyboardSet)
+{
+  // A reconnect's old slot is in START's owners, but the session gives a late joiner no local slot at the start (its mask is 0):
+  // if it did, setPointers would bind WASD to it and grantSlot would then hand out the arrows, leaving WASD driving nothing.
+  configurePlayers(4);
+  std::GameSettings* settings = std::GameSettings::getInstance();
+  settings->setPlayerAI(0, false);
+  settings->setPlayerAI(1, false);
+  settings->setNpcSpawnerEnabled(false);
+  startRound();
+  m_handler = std::make_unique<InputHandler>();
+  m_handler->setPointers(allPlayers(), &m_view, 0);   // what RoundStart::localSlotMask == 0 gives
+  m_handler->grantSlot(1);
+  ASSERT_EQ(m_handler->m_keyMap.count(1), 1u);
+  EXPECT_EQ(m_handler->m_keyMap.at(1)[InputHandler::ACTION1_KEY], KEY_LCTRL) << "WASD + Left Ctrl, the first set";
+}
+
 TEST_F(InputControlTest, WithoutThatFlagStartStillOnlyOpensTheSelector)
 {
   startRound4();

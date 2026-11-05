@@ -1,4 +1,5 @@
 #include "GameEngine.h"
+#include "SoundMute.h"
 #include "SimRandom.h"
 #include "GameSettings.h"
 #include "MickBaseInput.h"
@@ -869,6 +870,17 @@ void GameEngine::netFrame()
     gs->setGameState(GameSettings::GAME_INIT);
   }
   netJoinFrame();
+  // The host went back to the lobby while we were still catching up on the round: leave it and show the lobby.
+  if (s.state() == LockstepSession::LOBBY && gs->getGameState() == GameSettings::GAME_RUNNING)
+  {
+    m_roundEnding = false;
+    m_scoreboardWinner = nullptr;
+    menuSystem->hideNetOverlay();
+    m_netToasts.clear();
+    m_netOverlaySignature.clear();
+    gs->setGameState(GameSettings::MENU_RUNNING);
+    menuSystem->showNetLobby();
+  }
 
   // The lobby's buttons.
   if (rq.startMatch)
@@ -1100,8 +1112,28 @@ void GameEngine::netJoinFrame()
   {
     // About a frame's worth of ticks at a time: 8 ms of stepping (thousands of ticks natively, fewer in the browser), then the
     // network, the window and the picture get their turn.
-    m_ticksThisFrame += (int) m_net->match().fastForward(3000, 8000);
+    {
+      SoundMute quiet;   // the replayed ticks make no noise (the simulation plays through MickBaseSound::getInstance())
+      m_ticksThisFrame += (int) m_net->match().fastForward(3000, 8000);
+    }
     netRoundMaybeOver();
+  }
+  // Caught up: the names of who plays what, for "<name> left - now AI", are those of now (the replay changed many owners).
+  if (s.joinStage() != LockstepSession::JOIN_NONE && !s.catchingUp() && !m_netNamesFresh)
+  {
+    m_netNamesFresh = true;
+    const netplay::LobbyView& v = s.lobby();
+    for (int i = 0; i < 6; i++)
+    {
+      m_netSlotNames[i].clear();
+      if (i < (int) v.slots.size() && v.slots[i].owner != netplay::NO_PEER)
+      {
+        for (const netplay::LobbyEntry& e : v.peers)
+        {
+          if (e.id == v.slots[i].owner) m_netSlotNames[i] = e.name;
+        }
+      }
+    }
   }
 }
 
@@ -1125,6 +1157,7 @@ void GameEngine::resetNetGame()
   m_net->match().beginRound(rs);
   resizeWindowIfMapChanged();
 
+  m_netNamesFresh = false;
   // The names the overlay uses for "<name> left - now AI".
   for (int i = 0; i < 6; i++)
   {
