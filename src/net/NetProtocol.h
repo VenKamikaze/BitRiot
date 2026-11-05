@@ -159,7 +159,13 @@ namespace netplay
     uint16_t round = 0;
     uint32_t tick = 0;
     uint8_t slotMask = 0;
+    uint8_t reason = 0;        // TAKEOVER_GRANTED iff slotMask != 0; else why the machine only watches
   };
+  // TakeoverAtMsg::reason.
+  const uint8_t TAKEOVER_GRANTED = 0;
+  const uint8_t TAKEOVER_NO_FREE_BOT = 1;   // every slot is a person's
+  const uint8_t TAKEOVER_SPECTATOR = 2;     // the machine asked to only watch (HELLO_SPECTATE)
+  const uint8_t TAKEOVER_TOO_SLOW = 3;      // its round trip needs a longer input delay than this round has: it would stall everyone
 
   // host -> peer, in answer to any HELLO it will not accept. Carries the host's own
   // numbers so the peer can say what differs.

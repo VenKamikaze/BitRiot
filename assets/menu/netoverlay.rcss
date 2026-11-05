@@ -56,13 +56,14 @@ body.overlay {
 #joinbox {
   display: none;
   position: absolute;
-  left: 20%;
+  left: 5%;
   top: 45%;
-  width: 60%;
+  width: 90%;
   padding: 8px 12px;
   background-color: rgba(20,40,110,225);
   color: white;
-  font-size: 15pt;
+  font-size: 13pt;
+  white-space: normal;
   font-weight: bold;
   text-align: center;
 }

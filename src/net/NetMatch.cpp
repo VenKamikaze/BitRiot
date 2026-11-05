@@ -12,6 +12,16 @@ namespace netplay
 NetMatch::NetMatch(LockstepSession& session, Simulation& sim, const Options& options)
   : m_session(session), m_sim(sim), m_opt(options), m_recorder(options.checkpointInterval, true)
 {
+  // A late joiner is only dealt a bot that is alive (the host asks the simulation).
+  Simulation* simulation = &m_sim;
+  m_session.setSlotFilter([simulation](int slot) {
+    if (!simulation->started())
+    {
+      return true;
+    }
+    const std::shared_ptr<PlayerCharacterEntity> player = simulation->entityManager().getPlayerPointer(slot + 1);
+    return player && player->isAlive();
+  });
 }
 
 std::string NetMatch::path(const std::string& name) const

@@ -25,8 +25,7 @@ const uint32_t CATCHUP_WINDOW_TICKS = 1100;
 const uint32_t CATCHUP_RESEND_MS = 100;
 const uint32_t CATCHUP_NEAR_TICKS = 150;     // closer to the head than this and the ordinary TICKS repeat does the rest
 const uint32_t CATCHUP_INFO_MS = 250;        // WELCOME_MIDMATCH repeats (the head moves while it catches up)
-// The history the host keeps of one round: MatchRecord's own bound (about 9.7 hours of play).
-const size_t MAX_HISTORY_TICKS = 1u << 20;
+
 
 std::string hex64(uint64_t v)
 {
@@ -1468,6 +1467,7 @@ void LockstepSession::setupRound(const StartMsg& s, bool joining)
   m_grantedMask = 0;
   m_grantedPending = 0;
   m_takeoverTick = 0;
+  m_takeoverReason = 0;
   m_lastReadyAtSent = 0;
   if (!joining)
   {
@@ -1516,6 +1516,7 @@ void LockstepSession::setupRound(const StartMsg& s, bool joining)
     m.readyAtTick = 0;
     m.takeoverTick = 0;
     m.takeoverMask = 0;
+    m.takeoverReason = 0;
     m.takeoverApplied = false;
     m.takeoverDecided = false;
     m.offerMask = 0;
@@ -1565,9 +1566,23 @@ uint8_t LockstepSession::freeBotSlots() const
   const uint8_t reserved = reservedSlots();
   for (int s = 0; s < m_numSlots; s++)
   {
-    if (m_owner[s] == NO_PEER && !(reserved & (1u << s))) mask |= (uint8_t) (1u << s);
+    if (m_owner[s] == NO_PEER && !(reserved & (1u << s)) && (!m_slotFilter || m_slotFilter(s))) mask |= (uint8_t) (1u << s);
   }
   return mask;
+}
+
+// The input delay a machine's recent round trips need (the same formula as the round's own D, over the newest samples only:
+// what it is like now that it has caught up, not while it was busy fast-forwarding).
+uint32_t LockstepSession::delayNeededBy(const Member& m) const
+{
+  if (m.rtt.empty())
+  {
+    return 0;
+  }
+  uint32_t worst = 0;
+  const size_t n = std::min<size_t>(m.rtt.size(), 3);
+  for (size_t i = m.rtt.size() - n; i < m.rtt.size(); i++) worst = std::max(worst, m.rtt[i]);
+  return (uint32_t) chooseDelay(worst, 0, m_opt.tickMs);
 }
 
 void LockstepSession::onReadyAt(Member& m, const ReadyAtMsg& msg)
@@ -1592,6 +1607,7 @@ void LockstepSession::onReadyAt(Member& m, const ReadyAtMsg& msg)
     t.round = m_round;
     t.tick = m.takeoverTick;
     t.slotMask = m.takeoverMask;
+    t.reason = m.takeoverReason;
     sendMsg(MSG_TAKEOVER_AT, m.addr, t);   // again for every READY_AT: the joiner repeats it until this arrives
     m.lastSent = m_now;
   }
@@ -1603,7 +1619,9 @@ void LockstepSession::onReadyAt(Member& m, const ReadyAtMsg& msg)
 void LockstepSession::scheduleTakeover(Member& m)
 {
   const int id = (int) (&m - &m_members[0]);
-  if (m.readyAtTick + (uint32_t) m_delay + 30 < m_confirmed)
+  const int rttNow = peerRtt((uint8_t) id);
+  const uint32_t rttTicks = rttNow > 0 ? ((uint32_t) rttNow + m_opt.tickMs - 1) / std::max<uint32_t>(1, m_opt.tickMs) : 0;
+  if (m.readyAtTick + (uint32_t) m_delay + 8 + rttTicks < m_confirmed)
   {
     return;   // not near the live tick: it could not make its first record in time. (It says READY_AT again.)
   }
@@ -1615,8 +1633,19 @@ void LockstepSession::scheduleTakeover(Member& m)
   {
     return;   // not trusted yet: one of its checksums has to agree with the host's first
   }
+  // Its round trip has to be one this round's input delay can carry, or the host would stall for it on every tick: a machine
+  // that is too far away watches instead. (Two round trips measured since it caught up are needed, or two seconds.)
+  if (!m.spectator && m.rtt.size() < 2 && m_now - m.readyAtSince < 2000)
+  {
+    return;
+  }
   uint8_t chosen = 0;
-  if (!m.spectator)
+  uint8_t reason = m.spectator ? TAKEOVER_SPECTATOR : TAKEOVER_NO_FREE_BOT;
+  if (!m.spectator && delayNeededBy(m) > (uint32_t) m_delay)
+  {
+    reason = TAKEOVER_TOO_SLOW;
+  }
+  else if (!m.spectator)
   {
     const uint8_t free = freeBotSlots();
     int count = 0;
@@ -1631,12 +1660,11 @@ void LockstepSession::scheduleTakeover(Member& m)
   }
   m.takeoverDecided = true;
   m.takeoverMask = chosen;
+  m.takeoverReason = chosen != 0 ? TAKEOVER_GRANTED : reason;
   if (chosen != 0)
   {
     // After the newest confirmed tick, a round trip, and the input delay: by then the joiner is stepping near the head and
     // makes its record for that tick on time (and backfills with neutral inputs if the message was slow).
-    const int rtt = peerRtt((uint8_t) id);
-    const uint32_t rttTicks = rtt > 0 ? ((uint32_t) rtt + m_opt.tickMs - 1) / std::max<uint32_t>(1, m_opt.tickMs) : 0;
     m.takeoverTick = m_confirmed + (uint32_t) m_delay + 2 + rttTicks;
     m.contig = m.takeoverTick - 1;   // records before it are not wanted
     m.recs.clear();
@@ -1947,7 +1975,7 @@ void LockstepSession::confirmTicks()
     TickInputs merged;
     mergeTick(t, merged);
     m_ticks[t] = merged;
-    if (m_history.size() + 1 == t && m_history.size() < MAX_HISTORY_TICKS)
+    if (m_history.size() + 1 == t && m_history.size() < m_opt.historyLimit)
     {
       m_history.push_back(merged);   // the record of the round, for a machine that joins later
     }
@@ -2146,10 +2174,11 @@ void LockstepSession::sendStartTo(Member& m)
 
 void LockstepSession::sendPings()
 {
-  const uint32_t interval = m_state == RUNNING ? 1000 : m_opt.pingMs;
   for (int id = 1; id < MAX_PEERS; id++)
   {
     Member& m = m_members[id];
+    // A late joiner that is about to be given a slot is measured often: its round trip decides whether it can have one.
+    const uint32_t interval = (m_state == RUNNING && !(m.midJoin && !m.takeoverDecided)) ? 1000 : m_opt.pingMs;
     if (!m.present || m.gone || m_now - m.lastPing < interval)
     {
       continue;
@@ -2463,6 +2492,7 @@ void LockstepSession::onTakeoverAt(const TakeoverAtMsg& msg)
   m_takeoverTick = msg.tick;
   m_grantedMask = (uint8_t) (msg.slotMask & slotBits(m_numSlots));
   m_grantedPending = m_grantedMask;
+  m_takeoverReason = m_grantedMask != 0 ? TAKEOVER_GRANTED : (msg.reason != TAKEOVER_GRANTED ? msg.reason : TAKEOVER_NO_FREE_BOT);
   if (m_grantedMask == 0)
   {
     return;   // it watches

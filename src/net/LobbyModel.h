@@ -177,7 +177,7 @@ namespace netplay
   // A late joiner's banner over the round (brief 13): "Joining... catching up 43%" while it replays the host's record,
   // "Joining... waiting for a free player" once it has caught up and the host is deciding, and for a machine that only
   // watches ("Watching" if it chose to, "Watching - no player is free to take over" if no bot was free). "" otherwise.
-  std::string joinSentence(LockstepSession::JoinStage stage, double catchUpFraction, bool spectating, bool spectatingByChoice);
+  std::string joinSentence(LockstepSession::JoinStage stage, double catchUpFraction, uint8_t takeoverReason, bool spectatingByChoice);
 
   // LockstepSession::waitingText() ("waiting for Bob, Carol") as the overlay's sentence ("Waiting for Bob, Carol...").
   std::string stallSentence(const std::string& waitingText);

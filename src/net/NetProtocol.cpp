@@ -697,6 +697,7 @@ void encode(Writer& w, const TakeoverAtMsg& m)
   w.u16(m.round);
   w.u32(m.tick);
   w.u8(m.slotMask);
+  w.u8(m.reason);
 }
 
 bool decode(Reader& r, TakeoverAtMsg& m)
@@ -704,6 +705,7 @@ bool decode(Reader& r, TakeoverAtMsg& m)
   m.round = r.u16();
   m.tick = r.u32();
   m.slotMask = r.u8();
-  return r.done() && (m.slotMask & ~0x3Fu) == 0;
+  m.reason = r.u8();
+  return r.done() && (m.slotMask & ~0x3Fu) == 0 && m.reason <= TAKEOVER_TOO_SLOW && ((m.slotMask != 0) == (m.reason == TAKEOVER_GRANTED));
 }
 } // namespace netplay

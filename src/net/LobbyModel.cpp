@@ -649,8 +649,9 @@ std::string eventToast(const ControlEvent& e, const std::string& who)
   return name + " left - now AI";
 }
 
-std::string joinSentence(LockstepSession::JoinStage stage, double catchUpFraction, bool spectating, bool spectatingByChoice)
+std::string joinSentence(LockstepSession::JoinStage stage, double catchUpFraction, uint8_t takeoverReason, bool spectatingByChoice)
 {
+  const bool spectating = stage == LockstepSession::JOIN_DONE ? takeoverReason != TAKEOVER_GRANTED : spectatingByChoice;
   switch (stage)
   {
     case LockstepSession::JOIN_CATCHING_UP:
@@ -669,7 +670,11 @@ std::string joinSentence(LockstepSession::JoinStage stage, double catchUpFractio
   {
     return "";
   }
-  return spectatingByChoice ? "Watching" : "Watching - no player is free to take over";
+  if (takeoverReason == TAKEOVER_TOO_SLOW)
+  {
+    return "Watching - your connection is too slow for this round's input delay";
+  }
+  return (spectatingByChoice || takeoverReason == TAKEOVER_SPECTATOR) ? "Watching" : "Watching - no player is free to take over";
 }
 
 std::string stallSentence(const std::string& waitingText)

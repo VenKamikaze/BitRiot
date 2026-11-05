@@ -103,14 +103,17 @@ TEST(LobbyModelPrefs, TheReconnectTokenIsSavedWithItsHostAndNotWrittenWhenThereI
 TEST(LobbyModelRows, AJoinersBannerSaysWhereItIs)
 {
   using netplay::LockstepSession;
-  EXPECT_EQ(joinSentence(LockstepSession::JOIN_CATCHING_UP, 0.0, false, false), "Joining... catching up 0%");
-  EXPECT_EQ(joinSentence(LockstepSession::JOIN_CATCHING_UP, 0.436, false, false), "Joining... catching up 43%");
-  EXPECT_EQ(joinSentence(LockstepSession::JOIN_CATCHING_UP, 1.0, false, false), "Joining... catching up 99%") << "never 100% while it is still catching up";
-  EXPECT_EQ(joinSentence(LockstepSession::JOIN_WAITING, 1.0, false, false), "Joining... waiting for a free player");
-  EXPECT_EQ(joinSentence(LockstepSession::JOIN_DONE, 1.0, false, false), "");
-  EXPECT_EQ(joinSentence(LockstepSession::JOIN_NONE, 1.0, false, false), "");
-  EXPECT_EQ(joinSentence(LockstepSession::JOIN_DONE, 1.0, true, false), "Watching - no player is free to take over");
-  EXPECT_EQ(joinSentence(LockstepSession::JOIN_DONE, 1.0, true, true), "Watching");
+  const uint8_t G = TAKEOVER_GRANTED;
+  EXPECT_EQ(joinSentence(LockstepSession::JOIN_CATCHING_UP, 0.0, G, false), "Joining... catching up 0%");
+  EXPECT_EQ(joinSentence(LockstepSession::JOIN_CATCHING_UP, 0.436, G, false), "Joining... catching up 43%");
+  EXPECT_EQ(joinSentence(LockstepSession::JOIN_CATCHING_UP, 1.0, G, false), "Joining... catching up 99%") << "never 100% while it is still catching up";
+  EXPECT_EQ(joinSentence(LockstepSession::JOIN_WAITING, 1.0, G, false), "Joining... waiting for a free player");
+  EXPECT_EQ(joinSentence(LockstepSession::JOIN_DONE, 1.0, G, false), "");
+  EXPECT_EQ(joinSentence(LockstepSession::JOIN_NONE, 1.0, G, false), "");
+  EXPECT_EQ(joinSentence(LockstepSession::JOIN_DONE, 1.0, TAKEOVER_NO_FREE_BOT, false), "Watching - no player is free to take over");
+  EXPECT_EQ(joinSentence(LockstepSession::JOIN_DONE, 1.0, TAKEOVER_SPECTATOR, true), "Watching");
+  EXPECT_NE(joinSentence(LockstepSession::JOIN_DONE, 1.0, TAKEOVER_TOO_SLOW, false).find("too slow"), std::string::npos);
+  EXPECT_EQ(joinSentence(LockstepSession::JOIN_NONE, 1.0, G, true), "Watching") << "a spectator that chose to, from the start of the round";
 }
 
 TEST(LobbyModelText, SanitizeKeepsGoodUtf8AndReplacesEverythingElse)

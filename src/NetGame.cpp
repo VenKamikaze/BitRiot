@@ -289,7 +289,7 @@ std::string NetGame::joinText() const
   {
     return "";
   }
-  return netplay::joinSentence(s.joinStage(), s.catchUpFraction(), s.spectating(), m_params.spectate);
+  return netplay::joinSentence(s.joinStage(), s.catchUpFraction(), s.takeoverReason(), m_params.spectate);
 }
 
 std::string NetGame::statusLine() const

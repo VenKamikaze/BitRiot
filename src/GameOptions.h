@@ -16,6 +16,7 @@
  *       --name <name>    the name the others see
  *       --local-players N  players on this machine (keyboard sets 1..N; default 1)
  *       --players N      host: player slots in all (the rest are computer players)
+ *       --spectate       join: watch only, never take a player over (a round already running is joined and watched)
  */
 
 #ifndef _GAMEOPTIONS_H
@@ -34,6 +35,7 @@ struct GameOptions
   bool host = false;
   int hostPort = 7777;
   std::string join;        // "host:port", empty: not joining
+  bool spectate = false;   // join: watch only (brief 13)
   std::string name;
   int localPlayers = 1;
   int players = 0;         // 0: as many as there are humans (at least 2)

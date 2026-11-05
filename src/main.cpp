@@ -331,6 +331,7 @@ int main(int argc, char* argv[])
       net.name = netOptions.name;
       net.localPlayers = netOptions.localPlayers;
       net.totalSlots = netOptions.players;
+      net.spectate = netOptions.spectate;
       std::string netError;
       if(!engine->startNetplay(net, &netError))
       {

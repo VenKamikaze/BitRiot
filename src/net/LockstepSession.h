@@ -59,6 +59,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -123,6 +124,9 @@ namespace netplay
     // unreported before the host drops it (07's review, R3). Without a bound a peer that never reports it holds up
     // the next round for good.
     uint32_t finalHashWaitMs = 8000;
+    // Host: confirmed ticks of a round kept for late joiners; past it the round cannot be joined (REJECT_IN_PROGRESS). The
+    // default is MatchRecord's own bound (1,048,576 ticks, about 9.7 hours of play).
+    uint32_t historyLimit = 1u << 20;
   };
 
   // What the host's lobby will build the next round from.
@@ -366,6 +370,10 @@ namespace netplay
       uint8_t offeredSlots() const { return m_offerMask; }
       // The slots this machine plays now or from the tick TAKEOVER_AT named (bit = slot); 0 for a spectator.
       uint8_t grantedSlots() const { return m_grantedMask; }
+      // Host: which bots a late joiner may be given. The default is every slot nobody plays; the game narrows it to the ones
+      // still alive (a takeover of a dead player does nothing, so dealing one would leave the joiner with no one to play). Called
+      // from pump(): it must only read.
+      void setSlotFilter(std::function<bool(int slot)> takeable) { m_slotFilter = std::move(takeable); }
       // Slots newly granted since the last call, once each: the caller binds its keyboard / pad to them (the sim
       // gets the HUMAN_TAKES_OVER from the host, in the final inputs; the local layer is the caller's).
       uint8_t takeGrantedSlots();
@@ -373,6 +381,8 @@ namespace netplay
       bool spectating() const;
       // The tick TAKEOVER_AT named (0 before it arrived).
       uint32_t takeoverTick() const { return m_takeoverTick; }
+      // Why this machine only watches (TAKEOVER_NO_FREE_BOT, TAKEOVER_SPECTATOR, TAKEOVER_TOO_SLOW), or TAKEOVER_GRANTED.
+      uint8_t takeoverReason() const { return m_takeoverReason; }
       // The tick from which the host waits for this machine's inputs (0: always; ~0u: never).
       uint32_t participateFrom() const { return m_participateFrom; }
       // Host: the late joiners / reconnects it has admitted, for display and tests.
@@ -433,6 +443,7 @@ namespace netplay
         uint32_t readyAtTick = 0;
         uint32_t takeoverTick = 0;              // scheduled: the tick the host starts waiting for it, and its takeover events apply
         uint8_t takeoverMask = 0;               // the slots dealt to it (0 = a spectator)
+        uint8_t takeoverReason = 0;             // TAKEOVER_*
         bool takeoverApplied = false;
         bool takeoverDecided = false;           // TAKEOVER_AT has been chosen (mask may be 0)
         uint8_t offerMask = 0;                  // reconnect: its old slots that were still bots when it came back
@@ -490,6 +501,7 @@ namespace netplay
       uint8_t reservedSlots() const;
       uint8_t freeBotSlots() const;
       void scheduleTakeover(Member& m);
+      uint32_t delayNeededBy(const Member& m) const;
       void sendStartTo(Member& m);
       void broadcastLobby();
       void sendKeepalives();
@@ -591,6 +603,7 @@ namespace netplay
 
       // Hot-join (brief 13). Host: every confirmed tick of the round, kept so that a joiner can be sent the record
       // from tick 1 (m_ticks is trimmed as peers acknowledge).
+      std::function<bool(int)> m_slotFilter;
       std::vector<TickInputs> m_history;
       bool m_historyComplete = true;
       uint64_t m_roundEndedAt = 0;
@@ -605,6 +618,7 @@ namespace netplay
       uint8_t m_grantedMask = 0;
       uint8_t m_grantedPending = 0;
       uint32_t m_takeoverTick = 0;
+      uint8_t m_takeoverReason = 0;
       uint32_t m_participateFrom = 0;
       uint64_t m_lastReadyAtSent = 0;
 

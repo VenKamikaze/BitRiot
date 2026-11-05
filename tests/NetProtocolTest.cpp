@@ -458,6 +458,7 @@ TEST(NetProtocol, TheHotJoinMessagesRoundTripAndTheirDecodersAreStrict)
   ta.round = 9;
   ta.tick = 777;
   ta.slotMask = 0b100100;
+  ta.reason = TAKEOVER_GRANTED;
   auto tb = packet(MSG_TAKEOVER_AT, 0, 5, [&](Writer& o) { encode(o, ta); });
   TakeoverAtMsg taback;
   ASSERT_TRUE(decodeBody(tb, taback));
@@ -467,6 +468,23 @@ TEST(NetProtocol, TheHotJoinMessagesRoundTripAndTheirDecodersAreStrict)
   ta.slotMask = 0x40;
   tb = packet(MSG_TAKEOVER_AT, 0, 5, [&](Writer& o) { encode(o, ta); });
   EXPECT_FALSE(decodeBody(tb, taback)) << "a slot that does not exist";
+  // The reason says why a machine got no slot, and agrees with the mask: a slot with a reason, or no slot without one, is nonsense.
+  ta.slotMask = 0;
+  ta.reason = TAKEOVER_TOO_SLOW;
+  tb = packet(MSG_TAKEOVER_AT, 0, 5, [&](Writer& o) { encode(o, ta); });
+  ASSERT_TRUE(decodeBody(tb, taback));
+  EXPECT_EQ(taback.reason, TAKEOVER_TOO_SLOW);
+  ta.reason = TAKEOVER_GRANTED;
+  tb = packet(MSG_TAKEOVER_AT, 0, 5, [&](Writer& o) { encode(o, ta); });
+  EXPECT_FALSE(decodeBody(tb, taback)) << "no slot and no reason";
+  ta.slotMask = 4;
+  ta.reason = TAKEOVER_SPECTATOR;
+  tb = packet(MSG_TAKEOVER_AT, 0, 5, [&](Writer& o) { encode(o, ta); });
+  EXPECT_FALSE(decodeBody(tb, taback)) << "a slot and a reason";
+  ta.slotMask = 0;
+  ta.reason = 4;
+  tb = packet(MSG_TAKEOVER_AT, 0, 5, [&](Writer& o) { encode(o, ta); });
+  EXPECT_FALSE(decodeBody(tb, taback)) << "an unknown reason";
 }
 
 TEST(NetProtocol, ALobbyPeersReadyByteIsStrictAndTheRemovedReasonIsTheLastOne)

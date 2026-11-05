@@ -253,6 +253,7 @@ TEST(HotJoin, WithNoBotFreeALateJoinerWatchesAndSendsNoInputs)
   ASSERT_TRUE(c.runUntil([&] { return joined(j); }, 20000));
   EXPECT_EQ(j.s->grantedSlots(), 0);
   EXPECT_TRUE(j.s->spectating());
+  EXPECT_EQ(j.s->takeoverReason(), netplay::TAKEOVER_NO_FREE_BOT);
   ASSERT_TRUE(c.runUntil([&] { return c.allStepped(700); }, 60000));
   expectSameLogs(c, {0, 1, 2}, 700);
   EXPECT_EQ(j.s->stats().inputRecordsSent, 0u) << "a spectator sends no inputs";
@@ -275,6 +276,7 @@ TEST(HotJoin, ASpectatorByChoiceIsNeverDealtABotEvenWhenOneIsFree)
   Machine& j = c.addMachine(1, 0, 0, [](netplay::SessionOptions& so) { so.spectate = true; });
   ASSERT_TRUE(c.runUntil([&] { return joined(j); }, 20000));
   EXPECT_EQ(j.s->grantedSlots(), 0);
+  EXPECT_EQ(j.s->takeoverReason(), netplay::TAKEOVER_SPECTATOR);
   ASSERT_TRUE(c.runUntil([&] { return c.allStepped(600); }, 60000));
   expectSameLogs(c, {0, 1, 2}, 600);
   EXPECT_EQ(firstEvent(c.machine(0), 2, ControlEvent::HUMAN_TAKES_OVER), -1);
@@ -299,6 +301,29 @@ TEST(HotJoin, ASpectatorInTheLobbyIsNotDealtASlotNorWaitedForNorAskedToBeReady)
   const size_t before = c.machine(0).log.size();
   c.run(3000);
   EXPECT_GE(c.machine(0).log.size() - before, 3000u / 33 - 5);
+}
+
+TEST(HotJoin, AJoinerTooFarAwayForTheRoundsDelayWatchesInsteadOfStallingEveryone)
+{
+  // D was chosen for the players the round started with (a round trip of about 20 ms: D = 2). A machine 300 ms away would make
+  // the host wait for it on every tick; the host does not give it a slot, and says why.
+  ClusterOptions o = delayed(5);
+  o.lobby.totalSlots = 4;
+  Cluster c(2, o);
+  ASSERT_TRUE(c.startRound(1, 0));
+  const int d = c.machine(0).round.delay;
+  ASSERT_LE(d, 3) << c.machine(0).s->delayNote();
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(300); }, 60000));
+  Machine& j = c.addMachine(1);
+  c.impair(c.size() - 1, "lat=150");   // 150 ms each way for what it sends
+  ASSERT_TRUE(c.runUntil([&] { return joined(j); }, 30000));
+  EXPECT_EQ(j.s->grantedSlots(), 0) << "no slot for a connection the delay cannot carry";
+  EXPECT_EQ(j.s->takeoverReason(), netplay::TAKEOVER_TOO_SLOW);
+  const size_t before = c.machine(0).log.size();
+  c.run(3000);
+  EXPECT_GE(c.machine(0).log.size() - before, 3000u / 33 - 5) << "the live match kept its pace";
+  EXPECT_EQ(firstEvent(c.machine(0), 2, ControlEvent::HUMAN_TAKES_OVER), -1);
+  expectSameLogs(c, {0, 1, 2}, 400);
 }
 
 // -- a hash that disagrees -----------------------------------------------------------------------------------
@@ -379,6 +404,37 @@ TEST(HotJoin, AMachineThatArrivesOnTheScoreboardJoinsTheNextRoundLikeAnyoneElse)
   EXPECT_NE(j.round.localSlotMask, 0) << "dealt a slot by START";
   ASSERT_TRUE(c.runUntil([&] { return c.allStepped(120); }, 60000));
   expectSameLogs(c, {0, 1, 2}, 120);
+}
+
+TEST(HotJoin, ABotTheHostSaysIsNotWorthTakingIsNotDealt)
+{
+  // The game's host narrows the choice to bots that are alive (NetMatch's filter); the session just asks.
+  ClusterOptions o = delayed(10);
+  o.lobby.totalSlots = 4;
+  Cluster c(2, o);
+  c.machine(0).s->setSlotFilter([](int slot) { return slot != 2; });   // slot 2 is dead
+  ASSERT_TRUE(c.startRound(1, 0));
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(200); }, 60000));
+  Machine& j = c.addMachine(1);
+  ASSERT_TRUE(c.runUntil([&] { return joined(j); }, 20000));
+  EXPECT_EQ(j.s->grantedSlots(), 0b1000) << "slot 3, the only live bot";
+}
+
+TEST(HotJoin, ARoundPastTheHistoryTheHostKeepsCannotBeJoinedAnyMore)
+{
+  ClusterOptions o = delayed(5);
+  o.session.historyLimit = 250;
+  o.lobby.totalSlots = 4;
+  Cluster c(2, o);
+  ASSERT_TRUE(c.startRound(1, 0));
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(150); }, 60000));
+  Machine& early = c.addMachine(1);
+  ASSERT_TRUE(c.runUntil([&] { return joined(early); }, 20000)) << "within the limit it is fine";
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(400); }, 60000));
+  Machine& late = c.addMachine(1);
+  ASSERT_TRUE(c.runUntil([&] { return late.s->ended(); }, 5000));
+  EXPECT_EQ(late.s->rejectInfo().reason, netplay::REJECT_IN_PROGRESS);
+  EXPECT_NE(late.s->rejectInfo().text.find("too long"), std::string::npos) << late.s->rejectInfo().text;
 }
 
 TEST(HotJoin, ANewRoundBeginsForAJoinerStillCatchingUpOnTheOldOne)
