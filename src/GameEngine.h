@@ -82,7 +82,6 @@ class GameEngine
     // after setMenuSystem(). From then on pumpEvents() runs the session every frame, in
     // every state, and canStep()/extraTicks() come from it.
     bool startNetplay(const NetGame::Params& params, std::string* error);
-    // True while the menus are looking up a join address or showing a session (the main loop keeps polling at menu rate).
     // Leaves the session (the others are told), restores the player's settings. Safe to
     // call when there is none. main() calls it when the game closes.
     void stopNetplay();

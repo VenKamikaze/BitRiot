@@ -1613,3 +1613,139 @@ TEST(LockstepLobby, AMachineThatJoinedBetweenRoundsCannotSayReadyUntilTheHostIsB
   c.machine(1).s->setReady(true);
   ASSERT_TRUE(c.runUntil([&] { return host.canStartRound(); }, 3000));
 }
+
+// A host written by hand on a raw socket, and a real peer session that joins it. With it a test can put any datagram into the
+// peer that the host's own address would send: the peer only believes that address.
+namespace
+{
+struct FakeHost
+{
+  vnet_loopback_network* net;
+  vnet* hv;
+  vnet* pv;
+  int sock;
+  vnet_addr peerAddr;
+  std::unique_ptr<LockstepSession> peer;
+  uint32_t session = 0x5E55;
+
+  FakeHost()
+  {
+    net = vnet_loopback_network_create();
+    auto make = [&]() {
+      vnet_config cfg;
+      vnet_config_init(&cfg);
+      cfg.backend = VNET_BACKEND_LOOPBACK;
+      cfg.loopback_network = net;
+      cfg.ignore_env = 1;
+      int err = 0;
+      return vnet_create(&cfg, &err);
+    };
+    hv = make();
+    pv = make();
+    sock = vnet_open(hv, 0);
+    vnet_addr local;
+    vnet_local_addr(hv, sock, &local);
+    char text[64];
+    std::snprintf(text, sizeof(text), "127.1.0.1:%u", (unsigned) local.port);
+    vnet_addr hostAddr;
+    vnet_resolve(pv, text, &hostAddr);
+    SessionOptions so;
+    so.buildId = 0xB111D;
+    so.dataHash = 0xDA7A;
+    so.name = "peer";
+    so.randomSeed = 5;
+    std::string error;
+    peer = LockstepSession::join(pv, hostAddr, so, &error);
+  }
+  ~FakeHost()
+  {
+    peer.reset();
+    vnet_destroy(pv);
+    vnet_destroy(hv);
+    vnet_loopback_network_destroy(net);
+  }
+  void run(int ms)
+  {
+    for (int i = 0; i < ms; i++)
+    {
+      vnet_loopback_network_step(net, 1);
+      peer->pump();
+    }
+  }
+  template <typename Msg> void send(uint8_t type, const Msg& m)
+  {
+    netplay::Writer w;
+    netplay::Header h;
+    h.type = type;
+    h.sender = netplay::HOST_ID;
+    h.session = session;
+    netplay::writeHeader(w, h);
+    netplay::encode(w, m);
+    vnet_sendto(hv, sock, w.bytes().data(), w.bytes().size(), &peerAddr);
+  }
+  // Answers the peer's HELLO and starts round 1 for it.
+  bool welcomeAndStart()
+  {
+    uint8_t buf[VNET_MAX_DATAGRAM];
+    uint32_t nonce = 0;
+    for (int i = 0; i < 2000 && nonce == 0; i++)
+    {
+      run(1);
+      const int n = vnet_recvfrom(hv, sock, buf, sizeof(buf), &peerAddr);
+      netplay::Reader r(buf, n > 0 ? (size_t) n : 0);
+      netplay::Header h;
+      netplay::HelloMsg hello;
+      if (n > 0 && netplay::readHeader(r, h) && h.type == netplay::MSG_HELLO && netplay::decode(r, hello)) nonce = hello.nonce;
+    }
+    if (nonce == 0) return false;
+    netplay::WelcomeMsg w;
+    w.nonce = nonce;
+    w.peerId = 1;
+    w.slotMask = 2;
+    send(netplay::MSG_WELCOME, w);
+    run(50);
+    netplay::StartMsg s;
+    s.round = 1;
+    s.seed = 7;
+    s.mapWidth = 13;
+    s.mapHeight = 11;
+    s.slots = {{0, 0, false}, {1, 1, false}};
+    s.delay = 2;
+    send(netplay::MSG_START, s);
+    run(50);
+    return peer->state() == LockstepSession::RUNNING;
+  }
+  void lobby(uint8_t phase, uint16_t round)
+  {
+    netplay::LobbyMsg l;
+    l.phase = phase;
+    l.round = round;
+    l.slots = {{0, 0}, {1, 1}};
+    netplay::LobbyPeer a, b;
+    a.id = 0; a.slotMask = 1; a.name = "host"; a.ready = true;
+    b.id = 1; b.slotMask = 2; b.name = "peer";
+    l.peers = {a, b};
+    send(netplay::MSG_LOBBY, l);
+    run(50);
+  }
+};
+}
+
+TEST(LockstepLobby, APeerOnTheScoreboardFollowsOnlyALobbyAnnouncedForTheNextRound)
+{
+  FakeHost f;
+  RoundStart rs;
+  ASSERT_TRUE(f.welcomeAndStart());
+  ASSERT_TRUE(f.peer->takeRoundStart(rs));
+  f.peer->roundFinished();
+  ASSERT_EQ(f.peer->state(), LockstepSession::BETWEEN_ROUNDS);   // round 1 is over here
+  // A lobby packet of another round (an old one that arrived late, or a hostile one) must not pull it off the scoreboard.
+  f.lobby(netplay::PHASE_LOBBY, 1);
+  f.lobby(netplay::PHASE_LOBBY, 5);
+  f.lobby(netplay::PHASE_LOBBY, 0);
+  EXPECT_EQ(f.peer->state(), LockstepSession::BETWEEN_ROUNDS);
+  f.lobby(netplay::PHASE_BETWEEN_ROUNDS, 2);   // the right round, but the host is not in its lobby
+  EXPECT_EQ(f.peer->state(), LockstepSession::BETWEEN_ROUNDS);
+  f.lobby(netplay::PHASE_LOBBY, 2);            // the lobby after round 1
+  EXPECT_EQ(f.peer->state(), LockstepSession::LOBBY);
+}

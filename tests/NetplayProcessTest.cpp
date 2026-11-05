@@ -235,6 +235,25 @@ TEST(NetplayProcess, TwoProcessesPlayTwoRoundsUnderLossAndPrintTheSame)
   }
 }
 
+// A host opened from the game's menus waits for every peer's READY (protocol 2). A joining bitriot_headless has no one to
+// press a button: it says ready itself once it is in the lobby, or such a host could never start with it.
+TEST(NetplayProcess, AHostThatWaitsForReadyStartsWithAHeadlessPeer)
+{
+  Scratch dir;
+  const std::string script = makeScript(dir, 3, 2, 600, 11);
+  const std::string port = dir.file("port");
+  Proc host({"host", "--port-file", port, "--peers", "1", "--rounds", "1", "--seed", "10", "--config", kConfig3, "--script", script,
+             "--tick-ms", "2", "--delay", "12", "--require-ready", "1", "--out", dir.dir("h")}, impairSpec(0), dir.file("h.out"), dir.file("h.err"));
+  const int p = waitForPort(port);
+  ASSERT_GT(p, 0) << host.err();
+  Proc peer({"join", "127.0.0.1:" + std::to_string(p), "--rounds", "1", "--script", script, "--tick-ms", "2", "--out", dir.dir("p")},
+            impairSpec(1), dir.file("p.out"), dir.file("p.err"));
+  ASSERT_EQ(host.wait(kTimeout), 0) << host.err() << "\n" << host.out();
+  ASSERT_EQ(peer.wait(20), 0) << peer.err() << "\n" << peer.out();
+  EXPECT_EQ(host.out(), peer.out());
+  EXPECT_EQ(count(host.out(), ": over at tick"), 1);
+}
+
 TEST(NetplayProcess, ThreeProcessesWithTwoLocalPlayersATakeoverAndAPeerWhoLeaves)
 {
   Scratch dir;

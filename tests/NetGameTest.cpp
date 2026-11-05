@@ -242,6 +242,19 @@ TEST_F(NetGameTest, TheHostsSettingsAndTeamsReachThePeer)
   ASSERT_TRUE(pumpUntil({m_host.get(), m_peer.get()}, [&] { return m_host->session().canStartRound(); }));
 }
 
+TEST_F(NetGameTest, TheTeamButtonWrapsAtTheNumberOfSeatsNotAtSix)
+{
+  makeHost(2);
+  ASSERT_EQ(m_host->session().lobby().slots.size(), 2u);
+  EXPECT_EQ(m_host->session().lobby().slots[1].team, 1);
+  m_host->cycleTeam(1);
+  EXPECT_EQ(m_host->session().lobby().slots[1].team, 0) << "team 1 of 2 seats goes to team 0";
+  m_host->cycleTeam(1);
+  EXPECT_EQ(m_host->session().lobby().slots[1].team, 1) << "and round again: it never lands on a team this match does not have";
+  m_host->cycleTeam(0);
+  EXPECT_EQ(m_host->session().lobby().slots[0].team, 1);
+}
+
 TEST_F(NetGameTest, FiveOrSixSeatsRaiseTheMapForTheirPortraits)
 {
   makeHost(0);

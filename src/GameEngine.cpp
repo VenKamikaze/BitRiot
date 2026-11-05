@@ -501,11 +501,6 @@ void GameEngine::initPlayerCharacters(unsigned int numPlayers, std::vector<bool>
 // Network play (briefs 07 and 08)
 // ---------------------------------------------------------------------------------------
 
-namespace
-{
-const char* const BASE_TITLE = "Bit Riot Beta";
-}
-
 void GameEngine::installNetInterceptor()
 {
   // The scoreboard's buttons: only the host starts a round or goes back to the lobby, and leaving the scoreboard for
