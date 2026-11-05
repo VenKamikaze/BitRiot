@@ -659,7 +659,9 @@ Protocol version 3: late joiners, reconnecting with a token, spectators, `kick()
 | `NetplayProcessTest.cpp` (additions) | `bitriot_netplay_process_tests` | real processes over UDP under loss: a third `bitriot_headless` joins at about tick 1,500, takes a bot, and all three print byte-identical output and write byte-identical, replayable records; a peer killed (`SIGKILL`) at tick about 600 and restarted with its token (`--token`) reclaims its slot (`RETURN_TO_AI` then `HUMAN_TAKES_OVER` for slot 2, identical output, same records); a joiner perturbed during its fast-forward exits 1 with its evidence while the host and the other peer print the same and are never told of a desync; a `--spectate` process prints the whole round and the match never gives it a bot |
 | `InputControlTest.cpp`, `LobbyModelTest.cpp`, `LobbyLayoutTest.cpp`, `GameOptionsTest.cpp` | `bitriot_tests` | `InputHandler::grantSlot` (local at once, lowest free keyboard set, no control event, indicator); the token in the saved prefs (written only with a host, junk ignored) and the joiner\'s banner sentences; the overlay\'s join box fits the window; `--spectate` is for `--join` only |
 
-What is **not** covered by a test, because it needs a display: `GameEngine::netJoinFrame` and the overlay drawing. They were driven under Xvfb (see the brief\'s Outcome).
+*Review fix round:* the cases for B1, S2 to S6 and S7 listed in the brief's Outcome ("Review fix round"), `SoundMuteTest.cpp` (both executables: `SoundMute` silences a scope and restores the backend), and `InputControlTest.AReconnectedJoiner...`. 14 more mutations were applied one at a time; 13 killed, one survivor documented in the Outcome.
+
+What is **not** covered by a test, because it needs a display: `GameEngine::netJoinFrame` (and the lobby follow-up and the names refresh) and the overlay drawing. They were driven under Xvfb (see the brief\'s Outcome).
 
 ## Proving a test can fail
 
