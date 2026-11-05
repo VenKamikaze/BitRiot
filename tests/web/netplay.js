@@ -390,12 +390,12 @@ scenarios['wt-impaired'] = async (ctx) => {
 const LONG_CONFIG = 'players=6,map=17x19,blocks=55';   // an AI-heavy round (3000 to 4500 ticks)
 
 // A native host that opens a room and waits for `peers` machines; resolves {host, room, dir}.
-async function nativeHost(ctx, { peers, config, seed, tickMs, rounds, impair }) {
+async function nativeHost(ctx, { peers, config, seed, tickMs, rounds, impair, delay }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bitriot-np-'));
   const roomFile = path.join(dir, 'room');
   const host = startNative(['host', '--relay', ctx.relay.udp, '--room-file', roomFile, '--peers', String(peers), '--rounds', String(rounds || 1),
                             '--seed', String(seed || 3), '--config', config || LONG_CONFIG, '--name', 'native', '--tick-ms', String(tickMs || 33),
-                            '--wait-secs', '150', '--timeout-secs', '900', '--out', dir], impair ? { VNET_IMPAIR: impair } : {});
+                            '--wait-secs', '150', '--timeout-secs', '900', '--out', dir, ...(delay ? ['--delay', String(delay)] : [])], impair ? { VNET_IMPAIR: impair } : {});
   const room = await waitFile(roomFile, 20000);
   return { host, room, dir };
 }
@@ -435,7 +435,9 @@ scenarios.background = async (ctx) => {
   const results = {};
   for (const mode of ['wake', 'timer', 'off']) {
     const context = await ctx.browser.newContext({ viewport: { width: 900, height: 620 } });
-    const { host, room } = await nativeHost(ctx, { peers: 2, seed: 2 });
+    // D is forced to 8: lockstep moves D ticks per round trip, and a hidden tab's round trip (wake, message, poll, send) is longer than a
+    // lobby ping measured while it was visible, more so on a busy machine; the scenario measures how the tab is driven, not the choice of D.
+    const { host, room } = await nativeHost(ctx, { peers: 2, seed: 2, delay: 8 });
     const q = wsQuery(ctx, { hiddendriver: mode });
     const b = await openGame(context, 'bg-' + mode + '-hidden', ctx.server, q);
     const a = await openGame(context, 'bg-' + mode + '-visible', ctx.server, q);
