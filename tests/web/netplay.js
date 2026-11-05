@@ -20,9 +20,9 @@
 //   wt-impaired  the same over WebTransport
 //   hidden       two browser tabs that are hidden (document.hidden): they are stepped from network events and finish an AI-heavy
 //                round with the same hashes; the test says how many ticks a second that gave
-//   background   a REAL background tab (headed Chromium under Xvfb: the tab behind another one is throttled by the browser):
-//                measures what a throttled tab does with the three strategies; see doco/netplay/12-browser-netplay.md
-//   frozen       a tab frozen by the browser (CDP Page.setWebLifecycleState): its peers say the machine is away, and it is back
+//   background   a hidden tab with the browser's throttling imposed (no animation frames, timers held to 1 Hz): measures what each way
+//                of driving it gives; see doco/netplay/12-browser-netplay.md
+//   frozen       a tab that does not run for 6 s (a blocked main thread, as a freeze or a laptop lid looks to the game): its peers say the machine is away, and it is back
 //                in the match when it thaws
 //   host-away    a browser HOSTING a room whose tab is frozen: the peers see "the host is away", then play on
 //   ui           a browser joins by room code through the real menus with the keyboard (Online game, Join by room code, typing
@@ -160,7 +160,7 @@ async function openGame(context, name, server, query = {}) {
   page.on('console', (m) => {
     const text = m.text();
     lines.push('[' + m.type() + '] ' + text);
-    if (m.type() === 'error') problems.push('console.error: ' + text);
+    if (m.type() === 'error' && !/status of 404/.test(text)) problems.push('console.error: ' + text);   // (no favicon)
     else if (/^ERROR:|Aborted\(|RuntimeError|unreachable|Uncaught/.test(text)) problems.push('log: ' + text);
   });
   const params = new URLSearchParams({ test: '1', ...query });
@@ -191,6 +191,19 @@ const netState = (page) => call(page, 'bitriot_net_state');   // 0 none 1 connec
 async function waitNetState(page, states, ms, what) {
   await page.waitForFunction((s) => s.includes(window.Module._bitriot_net_state()), states, { timeout: ms })
     .catch(() => { throw new Error(page.__name + ': never reached net state ' + states + ' (' + what + '); in state ' + 'unknown'); });
+}
+
+// A page that was not made by openGame (a popup): watched the same way.
+function adopt(page, name) {
+  page.__problems = []; page.__lines = []; page.__name = name;
+  page.on('pageerror', (e) => page.__problems.push('pageerror: ' + e.message));
+  page.on('console', (m) => {
+    const text = m.text();
+    page.__lines.push('[' + m.type() + '] ' + text);
+    if (m.type() === 'error' && !/status of 404/.test(text)) page.__problems.push('console.error: ' + text);
+    else if (/^ERROR:|Aborted\(|RuntimeError|unreachable|Uncaught/.test(text)) page.__problems.push('log: ' + text);
+  });
+  openPages.push(page);
 }
 
 async function finish(page, { allowProblems = false } = {}) {
@@ -400,65 +413,66 @@ scenarios.hidden = async (ctx) => {
   check(ticks / r.seconds > 30, 'hidden tabs keep up with (and here beat) the nominal 30 ticks a second', (ticks / r.seconds).toFixed(0));
 };
 
-// A REAL background tab. Headed Chromium on a private Xvfb display: a second tab in the same window hides the first, and the
-// browser throttles it as it would for a player. The native host runs at the nominal pace; browser B is the hidden one and browser A
-// is visible. Three ways of driving B: the game's default (network wake-ups plus a one-second timer), the one-second timer alone,
-// and nothing (the browser's own behaviour: no animation frames).
+// A background tab as Chromium treats one: no animation frames, and timers held to one run a second. Playwright cannot make a tab really
+// hidden (it makes every page believe it is focused and visible, and a second tab hides nothing; tried in headed Chromium under Xvfb,
+// both through Playwright and through a bare CDP connection), so the tab is made to look hidden to the game (document.hidden and
+// visibilityState, as in "hidden") AND the two things the browser does to a hidden tab are imposed on it: requestAnimationFrame never calls
+// back, and setTimeout/setInterval/emscripten_async_call (which is a setTimeout) wait at least a second. WebSocket and
+// MessageChannel events are left alone, as in Chromium. The native host runs at the nominal pace; browser B is the hidden one and browser A
+// is visible. Three ways of driving B: the game's default (network wake-ups plus a one-second timer), the one-second timer alone, and
+// nothing (what the browser does by itself: no animation frames, so no stepping).
+async function throttleLikeABackgroundTab(page) {
+  await page.evaluate(() => {
+    window.requestAnimationFrame = () => 0;
+    const st = window.setTimeout.bind(window), si = window.setInterval.bind(window);
+    window.setTimeout = (f, ms, ...a) => st(f, Math.max(+ms || 0, 1000), ...a);
+    window.setInterval = (f, ms, ...a) => si(f, Math.max(+ms || 0, 1000), ...a);
+  });
+}
+
 scenarios.background = async (ctx) => {
-  console.log('background: a real background tab, headed Chromium under Xvfb (what each way of driving it gives)');
-  const display = ':' + (90 + Math.floor(Math.random() * 9));
-  const xvfb = spawn('Xvfb', [display, '-screen', '0', '1280x800x24', '-nolisten', 'tcp'], { stdio: 'ignore' });
-  await sleep(1500);
-  const headed = await chromium.launch({ headless: false, args: GL_ARGS, env: { ...process.env, DISPLAY: display } });
+  console.log('background: a hidden tab with the browser\'s throttling imposed (what each way of driving it gives)');
   const results = {};
-  try {
-    for (const mode of ['wake', 'timer', 'off']) {
-      const context = await headed.newContext({ viewport: { width: 900, height: 620 } });
-      const { host, room } = await nativeHost(ctx, { peers: 2, seed: 2 });
-      const q = wsQuery(ctx, { hiddendriver: mode });
-      const b = await openGame(context, 'bg-' + mode + '-hidden', ctx.server, q);
-      await startGame(b);
-      await netStart(b, false, 'hidden', room);
-      await waitNetState(b, [2, 3], 40000, 'joined');
-      const a = await openGame(context, 'bg-' + mode + '-visible', ctx.server, q);   // opening it hides b
-      await startGame(a);
-      await netStart(a, false, 'visible', room);
-      await waitNetState(a, [2, 3], 40000, 'joined');
-      for (const p of [a, b]) await waitNetState(p, [3], 40000, 'the round starts');
-      const vis = await b.evaluate(() => document.visibilityState);
-      check(vis === 'hidden', mode + ': the first tab is really hidden by the browser', vis);
-      await sleep(3000);   // let the throttling settle
-      const t0 = { a: await tickOf(a), b: await tickOf(b) }, polls0 = await call(b, 'bitriot_hidden_polls'), time0 = Date.now();
-      await sleep(20000);
-      const t1 = { a: await tickOf(a), b: await tickOf(b) }, polls1 = await call(b, 'bitriot_hidden_polls'), secs = (Date.now() - time0) / 1000;
-      const inf = await info(a);
-      results[mode] = { hiddenRate: (t1.b - t0.b) / secs, visibleRate: (t1.a - t0.a) / secs, polls: (polls1 - polls0) / secs };
-      console.log('  ' + mode + ': hidden tab ' + results[mode].hiddenRate.toFixed(1) + ' ticks/s, visible tab ' + results[mode].visibleRate.toFixed(1) +
-                  ' ticks/s, hidden-tab loop runs ' + results[mode].polls.toFixed(1) + '/s, visible tab sees: ' + (inf.stall || 'no stall'));
-      await finish(a); await finish(b);
-      stopNative(host);
-      await context.close();
-    }
-    check(results.wake.hiddenRate >= 25, 'the default (network wake-ups) keeps a really hidden tab at nearly the nominal 30 ticks a second', results.wake.hiddenRate.toFixed(1));
-    check(results.wake.visibleRate >= 25, 'and the visible tab and the host are not held back by it', results.wake.visibleRate.toFixed(1));
-    check(results.timer.hiddenRate < results.wake.hiddenRate / 2, 'a one-second timer alone does not keep up: that is why the wake-ups are used', results.timer.hiddenRate.toFixed(1) + ' vs ' + results.wake.hiddenRate.toFixed(1));
-    check(results.off.hiddenRate < 5, 'with nothing driving it a hidden tab stalls the match', results.off.hiddenRate.toFixed(1));
-  } finally {
-    await headed.close().catch(() => {});
-    xvfb.kill('SIGTERM');
+  for (const mode of ['wake', 'timer', 'off']) {
+    const context = await ctx.browser.newContext({ viewport: { width: 900, height: 620 } });
+    const { host, room } = await nativeHost(ctx, { peers: 2, seed: 2 });
+    const q = wsQuery(ctx, { hiddendriver: mode });
+    const b = await openGame(context, 'bg-' + mode + '-hidden', ctx.server, q);
+    const a = await openGame(context, 'bg-' + mode + '-visible', ctx.server, q);
+    for (const p of [a, b]) await startGame(p);
+    await netStart(b, false, 'hidden', room);
+    await netStart(a, false, 'visible', room);
+    for (const p of [a, b]) await waitNetState(p, [3], 60000, 'the round starts');
+    await hidePage(b);
+    await throttleLikeABackgroundTab(b);
+    await sleep(3000);   // let the last animation frame go by
+    const t0 = { a: await tickOf(a), b: await tickOf(b) }, polls0 = await call(b, 'bitriot_hidden_polls'), time0 = Date.now();
+    await sleep(20000);
+    const t1 = { a: await tickOf(a), b: await tickOf(b) }, polls1 = await call(b, 'bitriot_hidden_polls'), secs = (Date.now() - time0) / 1000;
+    const inf = await info(a);
+    results[mode] = { hiddenRate: (t1.b - t0.b) / secs, visibleRate: (t1.a - t0.a) / secs, polls: (polls1 - polls0) / secs };
+    console.log('  ' + mode + ': hidden tab ' + results[mode].hiddenRate.toFixed(1) + ' ticks/s, visible tab ' + results[mode].visibleRate.toFixed(1) +
+                ' ticks/s, hidden-tab loop runs ' + results[mode].polls.toFixed(1) + '/s, the visible tab sees: ' + (inf.stall || 'no stall'));
+    await finish(a); await finish(b);
+    stopNative(host);
+    await context.close();
   }
+  check(results.wake.hiddenRate >= 25, 'the default (network wake-ups) keeps a throttled hidden tab at nearly the nominal 30 ticks a second', results.wake.hiddenRate.toFixed(1));
+  check(results.wake.visibleRate >= 25, 'and the visible tab and the host are not held back by it', results.wake.visibleRate.toFixed(1));
+  check(results.timer.hiddenRate < results.wake.hiddenRate / 2, 'a one-second timer alone does not keep up: that is why the wake-ups are used', results.timer.hiddenRate.toFixed(1) + ' vs ' + results.wake.hiddenRate.toFixed(1));
+  check(results.off.hiddenRate < 5, 'with nothing driving it a hidden tab stalls the match', results.off.hiddenRate.toFixed(1));
 };
 
-// A tab the browser freezes (CDP Page.setWebLifecycleState): nothing runs in it, as for a sleeping laptop.
-async function freeze(page) {
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send('Page.enable');
-  await cdp.send('Page.setWebLifecycleState', { state: 'frozen' });
-  return async () => { await cdp.send('Page.setWebLifecycleState', { state: 'active' }); };
+// A tab that does not run for `ms` (a frozen tab, a laptop lid, a debugger): its main thread is blocked, so nothing is polled, stepped or
+// sent, and what arrives meanwhile waits in the browser. (CDP Page.setWebLifecycleState frozen did not freeze headless Chromium here:
+// the page kept running. A blocked thread is what the game sees either way.) Returns a function that waits for the block to end.
+function freeze(page, ms) {
+  const done = page.evaluate((n) => { const t = Date.now(); while (Date.now() - t < n) { /* blocked */ } }, ms);
+  return async () => { await done; };
 }
 
 scenarios.frozen = async (ctx) => {
-  console.log('frozen: a guest tab is frozen for six seconds; the others say who they wait for, and it rejoins the match');
+  console.log('frozen: a guest tab does not run for six seconds (its thread is blocked); the others say who they wait for, and it rejoins the match');
   const { host, room } = await nativeHost(ctx, { peers: 2, seed: 3, config: 'players=4,map=13x11,blocks=30' });
   const q = wsQuery(ctx);
   const pa = await openGame(ctx.context(), 'frozen-a', ctx.server, q), pb = await openGame(ctx.context(), 'frozen-b', ctx.server, q);
@@ -466,7 +480,7 @@ scenarios.frozen = async (ctx) => {
   await netStart(pa, false, 'webA', room); await netStart(pb, false, 'webB', room);
   for (const p of [pa, pb]) await waitNetState(p, [3], 60000, 'the round starts');
   await sleep(2000);
-  const thaw = await freeze(pa);
+  const thaw = freeze(pa, 6000);
   const t0 = await tickOf(pb);
   let sawWaiting = false;
   for (let i = 0; i < 12; i++) { await sleep(500); const st = (await info(pb)).stall; if (/webA/.test(st)) sawWaiting = true; }
@@ -481,14 +495,14 @@ scenarios.frozen = async (ctx) => {
   await sleep(3000);
   check((await tickOf(pb)) - before >= 60, 'and it plays on at speed', (await tickOf(pb)) - before);
   for (const p of [pa, pb]) await waitNetState(p, [4, 5], 300000, 'the round ends');
-  await withTimeout(host.host.exited, 60000, 'the host to finish');
-  const machines = [{ name: 'native', log: parseLog(host.host.out) }, { name: 'frozen-a', log: await parseBrowserLog(pa) }, { name: 'frozen-b', log: await parseBrowserLog(pb) }];
+  await withTimeout(host.exited, 60000, 'the host to finish');
+  const machines = [{ name: 'native', log: parseLog(host.out) }, { name: 'frozen-a', log: await parseBrowserLog(pa) }, { name: 'frozen-b', log: await parseBrowserLog(pb) }];
   compareMachines(machines, 'frozen', 10);
   await finish(pa); await finish(pb);
 };
 
 scenarios['host-away'] = async (ctx) => {
-  console.log('host-away: a browser hosts; its tab freezes; the guests say the host is away, then play on');
+  console.log('host-away: a browser hosts; its tab does not run for five seconds; the guests say the host is away, then play on');
   const q = wsQuery(ctx);
   const ph = await openGame(ctx.context(), 'away-host', ctx.server, q);
   await startGame(ph);
@@ -510,7 +524,7 @@ scenarios['host-away'] = async (ctx) => {
   await call(ph, 'bitriot_net_press_start');
   for (const p of [ph, pg]) await waitNetState(p, [3], 40000, 'the round starts');
   await sleep(2000);
-  const thaw = await freeze(ph);
+  const thaw = freeze(ph, 5000);
   let away = null;
   for (let i = 0; i < 16 && !away; i++) { await sleep(500); const st = (await info(pg)).stall; if (/host is away/.test(st)) away = st; }
   check(away !== null, 'the guests see a clear "host is away" state while the host tab is frozen', away || (await info(pg)).stall);
@@ -556,7 +570,7 @@ scenarios.ui = async (ctx) => {
   await page.screenshot({ path: path.join(shotDir, 'ui-lobby.png') });
   const saved = await page.evaluate(() => window.localStorage.getItem('bitriot.netplay'));
   check(/name=Webby/.test(saved || '') && new RegExp('room=' + room).test(saved || '') && /relay=ws:\/\/127\.0\.0\.1:/.test(saved || ''), 'the name, room and relay were saved in the browser', JSON.stringify(saved));
-  await withTimeout(host.host.exited, 120000, 'the host to start and finish').catch(() => stopNative(host.host));
+  await withTimeout(host.exited, 120000, 'the host to start and finish').catch(() => stopNative(host));
   await finish(page);
   // A fresh page load: the join form comes back filled in.
   page = await openGame(ctx.context(), 'ui-reload', ctx.server, q);
