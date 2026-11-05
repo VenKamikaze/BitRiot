@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <sstream>
 #include <unistd.h>
@@ -236,6 +237,18 @@ LobbyScreen buildLobbyScreen(const LobbyView& view, const LobbyContext& ctx)
   sc.rows = buildLobbyRows(view, ctx);
   sc.shownRows = (int) view.slots.size();
   sc.title = ctx.isHost ? "Hosting a network game" : "Network game";
+  if (ctx.viaRelay)
+  {
+    sc.roomCode = ctx.roomCode;
+    if (!ctx.roomCode.empty())
+    {
+      sc.title = "Room " + ctx.roomCode;
+    }
+    else
+    {
+      sc.title = ctx.isHost ? "Opening a room..." : "Joining a room...";
+    }
+  }
   sc.settings = describeSettings(view.settings, (int) view.slots.size());
   sc.myReady = ctx.myReady;
   if (ctx.isHost)
@@ -267,7 +280,10 @@ LobbyScreen buildLobbyScreen(const LobbyView& view, const LobbyContext& ctx)
     }
     else if (ctx.canStart)
     {
-      if (sc.humanPeers == 0)
+      if (sc.humanPeers == 0 && ctx.viaRelay)
+        sc.status = ctx.roomCode.empty() ? std::string("Opening the room on the relay...")
+                                         : std::string("Tell your friends the room code. Start with computer players, or wait for them.");
+      else if (sc.humanPeers == 0)
         sc.status = "No one else has joined yet. Start with computer players, or wait for your friends.";
       else if (notReady.empty())
         sc.status = "Everyone is ready.";
@@ -290,6 +306,13 @@ LobbyScreen buildLobbyScreen(const LobbyView& view, const LobbyContext& ctx)
       sc.startLabel = "Waiting for the host";
       sc.canToggleReady = false;
       sc.status = "A match is between rounds. You are dealt in when the host starts the next one.";
+    }
+    else if (ctx.hostSilenceMs >= 2000)
+    {
+      // The host's machine has gone quiet. Over a relay the usual reason is a browser tab in the background.
+      sc.canToggleReady = true;
+      sc.startLabel = ctx.myReady ? "Not ready" : "Ready";
+      sc.status = "The host is away (nothing heard for " + std::to_string(ctx.hostSilenceMs / 1000) + " s). Waiting...";
     }
     else
     {
@@ -418,7 +441,159 @@ EndMessage describeEnd(LockstepSession::EndReason reason, const RejectInfo& rj, 
   return m;
 }
 
+EndMessage describeRelayFailure(int vnetError, const std::string& relay, const std::string& room, bool hosting)
+{
+  EndMessage m;
+  const std::string where = relay.empty() ? std::string("the relay") : sanitizeUtf8(relay);
+  switch (vnetError)
+  {
+    case VNET_ENOROOM:
+      m.title = "No such room";
+      m.lines.push_back("The relay has no room with the code " + (room.empty() ? std::string("you typed") : sanitizeUtf8(room)) + ".");
+      m.lines.push_back("Check the code on the host's screen. A room closes when its host leaves, and the code is for the relay you typed, " + where + ".");
+      break;
+    case VNET_EROOMFULL:
+      m.title = "The room is full";
+      m.lines.push_back("The relay's room has no free place for you.");
+      break;
+    case VNET_ELIMIT:
+      m.title = "The relay said no";
+      m.lines.push_back("The relay refused because of a limit (too many rooms, too many players from your address, or too many tries in a row).");
+      m.lines.push_back("Wait a moment and try again.");
+      break;
+    case VNET_ETIMEDOUT:
+    case VNET_ECONNREFUSED:
+      m.title = "Cannot reach the relay";
+      m.lines.push_back("Nothing answered at " + where + ".");
+      m.lines.push_back("Check the address, that the relay is running, and your connection. From a web page the relay must be reachable over wss:// (or ws:// for a page served from http://localhost).");
+      break;
+    case VNET_ECLOSED:
+      m.title = hosting ? "The relay ended your room" : "The relay ended your session";
+      m.lines.push_back("The relay closed the connection (it restarted, the room closed, or it heard nothing from this game for too long).");
+      break;
+    case VNET_EMSGSIZE:
+    case VNET_EPROTO:
+      m.title = "The relay does not fit this game";
+      m.lines.push_back(std::string("The connection to ") + where + " failed: " + vnet_strerror(vnetError) + ".");
+      break;
+    default:
+      m.title = "Relay error";
+      m.lines.push_back(std::string("The connection to ") + where + " failed: " + vnet_strerror(vnetError) + ".");
+      break;
+  }
+  return m;
+}
+
 // -- addresses and the saved settings ----------------------------------------------------------------
+
+bool parseRelayAddress(const std::string& typedIn, bool secure, RelayTarget* out, std::string* error, std::string* normalised)
+{
+  auto fail = [&](const std::string& why) {
+    if (error) *error = why;
+    return false;
+  };
+  std::string t = typedIn;
+  while (!t.empty() && (t.front() == ' ' || t.front() == '\t')) t.erase(t.begin());
+  while (!t.empty() && (t.back() == ' ' || t.back() == '\t')) t.pop_back();
+  if (t.empty())
+  {
+    return fail("Type the relay's address, for example relay.example.org or wss://relay.example.org/vnet.");
+  }
+  if (t.size() > 200)
+  {
+    return fail("That relay address is too long.");
+  }
+  RelayTarget r;
+  const bool isWs = t.rfind("ws://", 0) == 0;
+  const bool isWss = t.rfind("wss://", 0) == 0;
+  if (isWs || isWss)
+  {
+    // scheme://authority[/path]: the authority is host[:port], the path defaults to /vnet.
+    const size_t start = isWss ? 6 : 5;
+    size_t slash = t.find('/', start);
+    const std::string authority = t.substr(start, slash == std::string::npos ? std::string::npos : slash - start);
+    std::string path = slash == std::string::npos ? std::string("/vnet") : t.substr(slash);
+    if (path == "/") path = "/vnet";
+    std::string host;
+    std::string why;
+    if (!parseHostPort(authority, isWss ? 443 : 80, &host, nullptr, &why))
+    {
+      return fail("The relay URL's host is not usable. " + why);
+    }
+    for (unsigned char c : path)
+    {
+      if (c <= ' ' || c == '"' || c == '<' || c == '>' || c == '\\' || c == '\x7f') return fail("The relay URL's path has a character that cannot be in a URL.");
+    }
+    r.host = host;
+    r.ws = std::string(isWss ? "wss://" : "ws://") + authority + path;
+    r.udp = (host.find(':') != std::string::npos ? "[" + host + "]" : host) + ":" + std::to_string(DEFAULT_RELAY_UDP_PORT);
+  }
+  else
+  {
+    if (t.find("://") != std::string::npos)
+    {
+      return fail("The relay address starts with ws:// or wss:// (or is just host:port).");
+    }
+    std::string host;
+    int port = 0;
+    std::string why;
+    if (!parseHostPort(t, DEFAULT_RELAY_UDP_PORT, &host, &port, &why))
+    {
+      return fail(why);
+    }
+    const std::string shownHost = host.find(':') != std::string::npos ? "[" + host + "]" : host;
+    r.host = host;
+    r.udp = shownHost + ":" + std::to_string(port);
+    r.ws = secure ? "wss://" + shownHost + "/vnet" : "ws://" + shownHost + ":8080/vnet";
+  }
+  if (out) *out = r;
+  if (normalised) *normalised = t;
+  return true;
+}
+
+bool parseRoomCode(const std::string& typed, std::string* code, std::string* error)
+{
+  static const char* const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  std::string c;
+  for (unsigned char ch : typed)
+  {
+    if (ch == ' ' || ch == '-' || ch == '\t' || ch == '\r' || ch == '\n') continue;
+    if (ch >= 'a' && ch <= 'z') ch = (unsigned char) (ch - 'a' + 'A');
+    c += (char) ch;
+  }
+  if (c.empty())
+  {
+    if (error) *error = "Type the room code the host sees on its screen (six letters and digits).";
+    return false;
+  }
+  if (c.size() != 6)
+  {
+    if (error) *error = "A room code has six letters and digits.";
+    return false;
+  }
+  for (char ch : c)
+  {
+    if (std::strchr(ALPHABET, ch) == nullptr || ch == '\0')
+    {
+      if (error) *error = "A room code uses the letters A to Z without I and O, and the digits 2 to 9 (not 0 or 1).";
+      return false;
+    }
+  }
+  if (code) *code = c;
+  return true;
+}
+
+std::string defaultRelayAddress()
+{
+#ifdef BITRIOT_DEFAULT_RELAY
+  const std::string built = BITRIOT_DEFAULT_RELAY;
+  if (!built.empty())
+  {
+    return built;
+  }
+#endif
+  return "127.0.0.1:" + std::to_string(DEFAULT_RELAY_UDP_PORT);
+}
 
 bool parsePort(const std::string& text, int* port, std::string* error)
 {
@@ -568,6 +743,29 @@ bool parseNetPrefs(const std::string& text, NetPrefs& out)
     {
       if (value.size() == 1 && value[0] >= '1' && value[0] <= '4') out.localPlayers = value[0] - '0';
     }
+    else if (key == "relay")
+    {
+      if (value.empty())
+      {
+        out.relay.clear();
+      }
+      else if (parseRelayAddress(value, false, nullptr, nullptr))
+      {
+        out.relay = value;
+      }
+    }
+    else if (key == "room")
+    {
+      std::string code;
+      if (value.empty())
+      {
+        out.room.clear();
+      }
+      else if (parseRoomCode(value, &code, nullptr))
+      {
+        out.room = code;
+      }
+    }
   }
   return true;
 }
@@ -592,7 +790,9 @@ std::string formatNetPrefs(const NetPrefs& p)
   t << "name=" << cleanPlayerName(p.name) << "\n"
     << "join=" << sanitizeUtf8(p.joinAddress) << "\n"
     << "port=" << p.hostPort << "\n"
-    << "players=" << p.localPlayers << "\n";
+    << "players=" << p.localPlayers << "\n"
+    << "relay=" << sanitizeUtf8(p.relay) << "\n"
+    << "room=" << sanitizeUtf8(p.room) << "\n";
   return t.str();
 }
 

@@ -101,6 +101,16 @@ namespace netplay
 
     // Seed for session ids, nonces and tokens; 0 = from the system (NetRandom.h).
     uint64_t randomSeed = 0;
+    // Host: the largest D it will choose (the smallest is MIN_DELAY). A relay path is two hops, so a
+    // game over a relay raises this (the game uses 12); 8 is enough for a LAN and a direct connection.
+    int maxDelay = 8;
+    // Brief 12 (browser tabs, laptops that sleep, debuggers): if THIS machine's pump() calls are further
+    // apart than sparsePumpGapMs, the gap says nothing about the others, so nobody is timed out for it:
+    // every machine's "last heard" is set to now. (What the others sent meanwhile is still queued and is
+    // read at once; a machine that really went away times out sparsePumpGapMs-plus-timeoutMs after we
+    // resume.) Off by default so that the older tests, which jump the clock, are unchanged.
+    bool tolerateSparsePump = false;
+    uint32_t sparsePumpGapMs = 1500;
 
     // Host only: canStartRound() in the lobby also wants every peer to have said it is ready
     // (setReady(), READY on the wire; protocol version 2). Off by default so that the headless
@@ -236,7 +246,7 @@ namespace netplay
       // Host: the delay the next round would get, from the RTTs measured so far.
       int proposedDelay() const;
       // Pure: ceil((worstRtt + jitter) / tickMs) + 1, clamped to MIN_DELAY..MAX_DELAY.
-      static int chooseDelay(uint32_t worstRttMs, uint32_t jitterMs, uint32_t tickMs);
+      static int chooseDelay(uint32_t worstRttMs, uint32_t jitterMs, uint32_t tickMs, int maxDelay = MAX_DELAY);
       static constexpr int MIN_DELAY = 2;
       static constexpr int MAX_DELAY = 8;
       static constexpr int DEFAULT_DELAY = 3;   // loopback and tests, and a peer with no measurement yet
@@ -297,6 +307,10 @@ namespace netplay
       static int catchUpTicks(uint32_t unsteppedConfirmed, int delay);
       // Ticks confirmed (host) / received in order (peer) beyond the last stepped one.
       uint32_t unsteppedTicks() const;
+      // Peer: how long since anything came from the host (0 on the host). The game words "the host is away" from it.
+      uint32_t hostSilenceMs() const;
+      // How many times pump() found a gap longer than SessionOptions::sparsePumpGapMs (and forgave it).
+      uint32_t sparsePumpGaps() const { return m_sparseGaps; }
       // Peers (bit = id) the host says it waits on for its next tick; 0 when none/unknown.
       uint8_t waitingMask() const;
       // "waiting for <name>[, <name>]" or "" when not stalled.
@@ -433,6 +447,7 @@ namespace netplay
       std::string m_endText;
       RejectInfo m_reject;
       uint64_t m_now = 0;
+      uint32_t m_sparseGaps = 0;
       uint16_t m_localPort = 0;
       NetRandom m_rng;
 

@@ -12,6 +12,7 @@
 #include <RmlUi/Core/Elements/ElementFormControlInput.h>
 #include <cstdio>
 #include <fstream>
+#include <sstream>
 #include <unistd.h>
 
 #include "NetGame.h"
@@ -368,7 +369,7 @@ TEST_F(LobbyLayoutTest, ConnectingShowsOnlyACancelButton)
 
 TEST_F(LobbyLayoutTest, TheHostAndJoinFormsKeepEveryFieldOnItsRowAndInsideTheWindow)
 {
-  for (const char* file : {"nethost.rml", "netjoin.rml"})
+  for (const char* file : {"nethost.rml", "netjoin.rml", "nethostrelay.rml", "netjoinrelay.rml"})
   {
     SCOPED_TRACE(file);
     Rml::ElementDocument* doc = loadDocument(file);
@@ -393,6 +394,33 @@ TEST_F(LobbyLayoutTest, TheHostAndJoinFormsKeepEveryFieldOnItsRowAndInsideTheWin
     EXPECT_LE(back.left + back.width, (float) CONTEXT_WIDTH);
     EXPECT_GT(boxOf(doc->GetElementById("f-name")).width, 100.0f);
   }
+}
+
+TEST_F(LobbyLayoutTest, TheOnlineMenuListsTheFourWaysInAndFitsTheWindowWithEveryButtonOnItsOwnLine)
+{
+  Rml::ElementDocument* doc = loadDocument("netmenu.rml");
+  ASSERT_NE(doc, nullptr);
+  float lastBottom = -1.0f;
+  for (const char* id : {"nethostrelay", "netjoinrelay", "nethost", "netjoin", "netback"})
+  {
+    Rml::Element* b = doc->GetElementById(id);
+    ASSERT_NE(b, nullptr) << id;
+    EXPECT_TRUE(shown(b)) << id;
+    const CellBox box = boxOf(b);
+    EXPECT_GE(box.top, lastBottom - TOLERANCE_PX) << id << " overlaps the button above it";
+    lastBottom = box.top + box.height;
+    EXPECT_LE(lastBottom, (float) CONTEXT_HEIGHT) << id << " is below the window";
+    EXPECT_LE(box.left + box.width, (float) CONTEXT_WIDTH) << id;
+  }
+  // The tab order is the order on the page (Up and Down walk it).
+  int previous = 0;
+  for (const char* id : {"nethostrelay", "netjoinrelay", "nethost", "netjoin", "netback"})
+  {
+    const int tab = MickRmlUIElementUtil::getTabIndex(doc->GetElementById(id));
+    EXPECT_GT(tab, previous) << id;
+    previous = tab;
+  }
+  EXPECT_EQ(doc->GetElementById("netback")->GetAttribute<Rml::String>("escapeAction", ""), "1") << "Escape goes back";
 }
 
 TEST_F(LobbyLayoutTest, TheOverlayLoadsAndItsPiecesStayInsideTheWindow)
@@ -624,9 +652,12 @@ TEST_F(NetFormTest, EveryButtonOfTheOnlinePagesNamesACommandTheirHandlerKnows)
 {
   // A typo in an onclick would make a button do nothing at all. Every command the pages use is checked against the handlers.
   const std::pair<const char*, std::vector<std::string>> pages[] = {
-      {"netlobby.rml", {"netstart", "netleave", "netteam 0", "netkick 0", "netset mapw", "netset maph", "netset blocks", "netset spawner", "netset slots"}},
-      {"nethost.rml", {"netforminit", "netport", "netlocal", "nethostgo", "open mainmenu.rml"}},
-      {"netjoin.rml", {"netforminit", "netlocal", "netjoingo", "open mainmenu.rml"}},
+      {"netlobby.rml", {"netstart", "netleave", "netcopy", "netteam 0", "netkick 0", "netset mapw", "netset maph", "netset blocks", "netset spawner", "netset slots"}},
+      {"nethost.rml", {"netforminit", "netport", "netlocal", "nethostgo", "open netmenu.rml"}},
+      {"netjoin.rml", {"netforminit", "netlocal", "netjoingo", "open netmenu.rml"}},
+      {"nethostrelay.rml", {"netforminit", "netlocal", "netrelayhostgo", "open netmenu.rml"}},
+      {"netjoinrelay.rml", {"netforminit", "netlocal", "netrelayjoingo", "open netmenu.rml"}},
+      {"netmenu.rml", {"open nethostrelay.rml", "open netjoinrelay.rml", "open nethost.rml", "open netjoin.rml", "open mainmenu.rml"}},
   };
   for (const auto& page : pages)
   {
@@ -653,5 +684,207 @@ TEST_F(NetFormTest, EveryButtonOfTheOnlinePagesNamesACommandTheirHandlerKnows)
       EXPECT_TRUE(known) << page.first << " uses '" << command << "' which the test (and so the handler) does not know";
     }
   }
+}
+
+// -- brief 12: the relay pages ------------------------------------------------------------------------------
+
+TEST_F(LobbyLayoutTest, ARelayLobbyShowsTheRoomCodeBigAndACopyButtonAndAnEndedOneHidesBoth)
+{
+  LobbyView v = viewWithSeats(6, false);   // the fullest page: six seats under the big title
+  Rml::ElementDocument* doc = loadDocument("netlobby.rml");
+  ASSERT_NE(doc, nullptr);
+  LobbyContext ctx;
+  ctx.isHost = true;
+  ctx.canStart = true;
+  ctx.viaRelay = true;
+  ctx.roomCode = "K7PQ3X";
+  NetLobbyBinder::applyLobby(doc, buildLobbyScreen(v, ctx));
+  updateLayout();
+  EXPECT_EQ(doc->GetElementById("nettitle")->GetInnerRML(), "Room K7PQ3X");
+  EXPECT_TRUE(doc->GetElementById("nettitle")->IsClassSet("roomcode"));
+  EXPECT_TRUE(shown(doc->GetElementById("netcopy")));
+  // Big: larger than the plain title, and the whole page still fits the window with its buttons.
+  Rml::ElementDocument* plain = loadDocument("netlobby.rml");
+  ASSERT_NE(plain, nullptr);
+  ctx.viaRelay = false;
+  ctx.roomCode.clear();
+  NetLobbyBinder::applyLobby(plain, buildLobbyScreen(v, ctx));
+  updateLayout();
+  EXPECT_FALSE(shown(plain->GetElementById("netcopy"))) << "no room, nothing to copy";
+  EXPECT_FALSE(plain->GetElementById("nettitle")->IsClassSet("roomcode"));
+  EXPECT_GT(doc->GetElementById("nettitle")->GetProperty("font-size")->Get<float>(), plain->GetElementById("nettitle")->GetProperty("font-size")->Get<float>());
+  const CellBox leave = boxOf(doc->GetElementById("netleave"));
+  const CellBox copy = boxOf(doc->GetElementById("netcopy"));
+  EXPECT_LE(leave.top + leave.height, (float) CONTEXT_HEIGHT);
+  EXPECT_LE(copy.left + copy.width, (float) CONTEXT_WIDTH);
+  EXPECT_LE(leave.left + leave.width, (float) CONTEXT_WIDTH);
+
+  // The "Connecting" and error pages of a relay game have no room code and no Copy button.
+  NetLobbyBinder::applyLobby(doc, buildLobbyScreen(v, [&] { LobbyContext c = ctx; c.viaRelay = true; c.roomCode = "K7PQ3X"; return c; }()));
+  NetLobbyBinder::applyEnd(doc, describeRelayFailure(VNET_ENOROOM, "relay.example.org", "K7PQ3X", false), "Back");
+  updateLayout();
+  EXPECT_FALSE(shown(doc->GetElementById("netcopy")));
+  EXPECT_FALSE(doc->GetElementById("nettitle")->IsClassSet("roomcode"));
+  NetLobbyBinder::applyLobby(doc, buildLobbyScreen(v, [&] { LobbyContext c = ctx; c.viaRelay = true; c.roomCode = "K7PQ3X"; return c; }()));
+  NetLobbyBinder::applyConnecting(doc, "Joining room K7PQ3X...", "Connecting to the relay...");
+  updateLayout();
+  EXPECT_FALSE(shown(doc->GetElementById("netcopy")));
+}
+
+TEST_F(LobbyLayoutTest, EveryRelayFailurePageFitsTheWindowWithItsButton)
+{
+  const int errors[] = {VNET_ENOROOM, VNET_EROOMFULL, VNET_ELIMIT, VNET_ETIMEDOUT, VNET_ECONNREFUSED, VNET_ECLOSED, VNET_EPROTO, VNET_EMSGSIZE, VNET_EIO};
+  for (const int e : errors)
+  {
+    for (const bool hosting : {false, true})
+    {
+      const EndMessage m = describeRelayFailure(e, "wss://a-rather-long-relay-name.example.org/vnet", "K7PQ3X", hosting);
+      SCOPED_TRACE(std::string("error ") + vnet_strerror(e) + ": " + m.title);
+      EXPECT_FALSE(m.title.empty());
+      EXPECT_GE(m.lines.size(), 1u);
+      Rml::ElementDocument* doc = loadDocument("netlobby.rml");
+      ASSERT_NE(doc, nullptr);
+      NetLobbyBinder::applyEnd(doc, m, "Back");
+      updateLayout();
+      const CellBox panel = boxOf(doc->GetElementById("endview"));
+      const CellBox button = boxOf(doc->GetElementById("netleave"));
+      EXPECT_LE(button.top + button.height, (float) CONTEXT_HEIGHT) << "the Back button is below the window";
+      EXPECT_LE(panel.top + panel.height, button.top + TOLERANCE_PX);
+    }
+  }
+}
+
+TEST_F(NetFormTest, TheRelayFormsCheckTheRelayAndTheRoomCodeAndAskForTheGameWithCleanedValues)
+{
+  EventHandlerNetForm handler;
+  NetUiRequests& rq = EventHandlerNetLobby::requests();
+  EventHandlerNetForm::setRelayDefaults("", "", false);
+
+  Rml::ElementDocument* host = loadDocument("nethostrelay.rml");
+  ASSERT_NE(host, nullptr);
+  press(handler, host, "f-name", "netforminit");
+  EXPECT_EQ(valueOf(host, "f-relay"), netplay::defaultRelayAddress()) << "the relay field starts at the build's default";
+  type(host, "f-name", "  Venom\x01 ");
+  type(host, "f-relay", "not a relay");
+  press(handler, host, "formgo", "netrelayhostgo");
+  EXPECT_FALSE(rq.relayHostGo);
+  EXPECT_NE(host->GetElementById("formerror")->GetInnerRML(), "");
+  type(host, "f-relay", "relay.example.org");
+  press(handler, host, "formgo", "netrelayhostgo");
+  ASSERT_TRUE(rq.relayHostGo);
+  EXPECT_FALSE(rq.relayJoinGo);
+  EXPECT_EQ(rq.form.name, "Venom");
+  EXPECT_EQ(rq.form.relayUdp, "relay.example.org:7777");
+  EXPECT_EQ(rq.form.relayWs, "ws://relay.example.org:8080/vnet") << "a page that is not https";
+  EXPECT_EQ(rq.form.localPlayers, 1);
+
+  rq = NetUiRequests();
+  Rml::ElementDocument* join = loadDocument("netjoinrelay.rml");
+  ASSERT_NE(join, nullptr);
+  press(handler, join, "f-name", "netforminit");
+  type(join, "f-relay", "wss://relay.example.org/vnet");
+  type(join, "f-room", "k7p-q3x");
+  press(handler, join, "formgo", "netrelayjoingo");
+  ASSERT_TRUE(rq.relayJoinGo);
+  EXPECT_FALSE(rq.relayHostGo);
+  EXPECT_EQ(rq.form.room, "K7PQ3X");
+  EXPECT_EQ(rq.form.relayWs, "wss://relay.example.org/vnet");
+  EXPECT_EQ(rq.form.relayUdp, "relay.example.org:7777");
+
+  rq = NetUiRequests();
+  type(join, "f-room", "K7PQ30");   // 0 is not in the alphabet
+  press(handler, join, "formgo", "netrelayjoingo");
+  EXPECT_FALSE(rq.relayJoinGo);
+  EXPECT_NE(join->GetElementById("formerror")->GetInnerRML().find("2 to 9"), std::string::npos);
+  type(join, "f-room", "");
+  press(handler, join, "formgo", "netrelayjoingo");
+  EXPECT_FALSE(rq.relayJoinGo);
+
+  // A page served over https means a typed host is a wss:// relay.
+  EventHandlerNetForm::setRelayDefaults("", "", true);
+  type(join, "f-room", "K7PQ3X");
+  type(join, "f-relay", "relay.example.org");
+  press(handler, join, "formgo", "netrelayjoingo");
+  ASSERT_TRUE(rq.relayJoinGo);
+  EXPECT_EQ(rq.form.relayWs, "wss://relay.example.org/vnet");
+  EventHandlerNetForm::setRelayDefaults("", "", false);
+}
+
+TEST_F(NetFormTest, TheRelayFormsFillFromTheSavedFileThePagesDefaultsAndRememberWhatWasUsed)
+{
+  const std::string path = scratchFile("relayprefs.txt");
+  netplay::NetPrefs saved;
+  saved.name = "Zed";
+  saved.relay = "wss://r.example.org/vnet";
+  saved.room = "AB23CD";
+  ASSERT_TRUE(netplay::saveNetPrefs(path, saved));
+  EventHandlerNetForm::setPrefsPath(path);
+  EventHandlerNetForm handler;
+
+  Rml::ElementDocument* join = loadDocument("netjoinrelay.rml");
+  ASSERT_NE(join, nullptr);
+  press(handler, join, "f-name", "netforminit");
+  EXPECT_EQ(valueOf(join, "f-relay"), "wss://r.example.org/vnet");
+  EXPECT_EQ(valueOf(join, "f-room"), "AB23CD");
+  EXPECT_EQ(valueOf(join, "f-name"), "Zed");
+
+  // A room in the page's address (?room=) wins over the last one, and the saved relay wins over the page's default.
+  EventHandlerNetForm::setRelayDefaults("ws://localhost:8080/vnet", "ZZ99XX", false);
+  Rml::ElementDocument* again = loadDocument("netjoinrelay.rml");
+  ASSERT_NE(again, nullptr);
+  press(handler, again, "f-name", "netforminit");
+  EXPECT_EQ(valueOf(again, "f-room"), "ZZ99XX");
+  EXPECT_EQ(valueOf(again, "f-relay"), "wss://r.example.org/vnet");
+
+  EventHandlerNetForm::rememberRelay("Zed", "relay.other.org", "QQ22RR", 2);
+  netplay::NetPrefs back;
+  ASSERT_TRUE(netplay::loadNetPrefs(path, back));
+  EXPECT_EQ(back.relay, "relay.other.org");
+  EXPECT_EQ(back.room, "QQ22RR");
+  EXPECT_EQ(back.localPlayers, 2);
+  // Hosting remembers the relay but has no room to remember: the last room joined stays.
+  EventHandlerNetForm::rememberRelay("Zed", "relay.third.org", "", 1);
+  ASSERT_TRUE(netplay::loadNetPrefs(path, back));
+  EXPECT_EQ(back.relay, "relay.third.org");
+  EXPECT_EQ(back.room, "QQ22RR");
+  std::remove(path.c_str());
+  EventHandlerNetForm::setRelayDefaults("", "", false);
+}
+
+TEST_F(NetFormTest, TheSettingsFileCanLiveSomewhereElseThroughTheSyncHooks)
+{
+  // The web build keeps the file's text in localStorage: it is copied into the file before the file is read and out of it
+  // after a write.
+  const std::string path = scratchFile("synced.txt");
+  std::remove(path.c_str());
+  std::string storage = "name=Fromstorage\nrelay=r.example.org\n";
+  std::string loadedPath, savedPath;
+  EventHandlerNetForm::setPrefsPath(path);
+  EventHandlerNetForm::setPrefsSyncHooks(
+      [&](const std::string& p) {
+        loadedPath = p;
+        std::ofstream f(p, std::ios::binary | std::ios::trunc);
+        f << storage;
+      },
+      [&](const std::string& p) {
+        savedPath = p;
+        std::ifstream f(p, std::ios::binary);
+        std::stringstream b;
+        b << f.rdbuf();
+        storage = b.str();
+      });
+  Rml::ElementDocument* host = loadDocument("nethostrelay.rml");
+  ASSERT_NE(host, nullptr);
+  EventHandlerNetForm handler;
+  press(handler, host, "f-name", "netforminit");
+  EXPECT_EQ(loadedPath, path);
+  EXPECT_EQ(valueOf(host, "f-name"), "Fromstorage");
+  EXPECT_EQ(valueOf(host, "f-relay"), "r.example.org");
+  EventHandlerNetForm::rememberRelay("Newname", "r2.example.org", "", 3);
+  EXPECT_EQ(savedPath, path);
+  EXPECT_NE(storage.find("name=Newname"), std::string::npos);
+  EXPECT_NE(storage.find("relay=r2.example.org"), std::string::npos);
+  EventHandlerNetForm::setPrefsSyncHooks(nullptr, nullptr);
+  std::remove(path.c_str());
 }
 } // namespace bitriot_test

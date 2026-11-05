@@ -68,7 +68,21 @@ class NetGame
       int totalSlots = 0;          // host: player slots in all (0: as many as humans, at least 2)
       std::string recordDir;       // --record: a round record per round (the final inputs)
       bool requireReady = false;   // host: the lobby's Start waits until every peer is ready (the menus: yes; --host: no, as in 07)
+      // Brief 12: play through a vnet relay instead of direct UDP (host: creates a room; peer: joins `room`). `host`,
+      // `join`, `port` then mean nothing: the session's socket is on netplay::RELAY_SESSION_PORT of the room.
+      bool relay = false;
+      std::string relayWs;         // the browser's relay URL ("wss://host/vnet"); native builds ignore it
+      std::string relayUdp;        // the native relay "host:port" (numeric, or a name vnet resolves while creating); browsers ignore it
+      std::string room;            // peer: the room code
+      std::string relayDisplay;    // what the player typed, for the words of an error page
+      std::string relayWt;         // development: an explicit WebTransport URL ("https://127.0.0.1:4433/vnet")
+      std::string relayCertSha256; // development: the hash of the relay's -dev-cert certificate
+      std::string impair;          // a vnet impairment spec ("lat=40,loss=5,seed=3"); VNET_IMPAIR in the environment wins (native)
     };
+
+    // A function the browser transports call (from a browser event) when something has arrived for vnet_poll()
+    // (vnet_config.wake). It may only arrange for a poll; see vnet.h. Native builds never call it. Set before create().
+    static void setWakeHandler(void (*handler)());
 
     // Opens the network and the session. A peer's `join` host name is resolved here (the
     // lookup blocks, so this is for the command line, before the first frame; the menus use
@@ -92,6 +106,17 @@ class NetGame
     // up to a frame later: that is up to 33 ms less round trip, which is input delay saved).
     // False if this backend cannot wait (the caller sleeps as usual).
     bool wait(uint32_t ms);
+
+    // -- the relay (brief 12) ---------------------------------------------------------------------
+    bool viaRelay() const { return m_params.relay; }
+    // The room's code once the relay has said it ("" before, and with direct UDP).
+    std::string roomCode() const;
+    // "relay-wt", "relay-ws", "relay-udp", "udp": what carries the datagrams now.
+    std::string transport() const;
+    // The transport's own state: VNET_STATUS_CONNECTING / READY / FAILED.
+    int transportState() const;
+    // The latest round trip to the relay, -1 if none yet (see vnet_status_info::relay_rtt_ms).
+    int relayRttMs() const;
 
     // The player's own choices, saved when netplay started and put back when it stops
     // (a match overwrites the roster, the player count and the map).

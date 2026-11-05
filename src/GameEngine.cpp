@@ -8,6 +8,9 @@
 #include "EntityRendererFactory.h"
 #include "MapRenderer.h"
 #include "WorldRenderer.h"
+#ifdef __EMSCRIPTEN__
+#include "web/WebHooks.h"
+#endif
 #ifdef BITRIOT_NETPLAY
 #include "RmlUI/binders/NetLobbyBinder.h"
 #include "RmlUI/events/EventHandlerNetLobby.h"
@@ -240,7 +243,12 @@ FrameLoop::Hooks GameEngine::frameHooks(std::function<uint32_t()> clockMs)
   // at m_net then (it can appear and go away while the loop runs).
 #ifdef BITRIOT_NETPLAY
   hooks.canStep = [this] { return !m_net || m_net->match().canStep(); };
-  hooks.extraTicks = [this] { return m_net ? m_net->session().extraTicksWanted() : 0; };
+  hooks.extraTicks = [this] {
+    if (!m_net) return 0;
+    // A hidden browser tab has no animation frames and so no clock to speak of: it steps whatever it holds (the visible
+    // machines set the pace). The frame loop gates every one of these on canStep() and clamps the number.
+    return m_hidden ? FrameLoop::DEFAULT_MAX_EXTRA_TICKS_PER_FRAME : m_net->session().extraTicksWanted();
+  };
 #endif
   return hooks;
 }
@@ -423,6 +431,15 @@ bool GameEngine::renderFrame()
       // pushed to the texture every frame: the renderer's back buffers alternate, so
       // each must be given the picture again or the screen would flicker between
       // an old frame and the new one.
+#ifdef BITRIOT_NETPLAY
+      if (m_hidden)
+      {
+        // Nobody is looking (a background browser tab): no drawing at all. The next visible frame redraws everything.
+        m_drawNeeded = true;
+        m_endingThisFrame = false;
+        break;
+      }
+#endif
       const bool redraw = m_drawNeeded || m_endingThisFrame || m_ticksThisFrame > 0 || !m_pumpedQuietly;
       m_drawNeeded = false;
       m_endingThisFrame = false;
@@ -558,6 +575,7 @@ bool GameEngine::startNetplay(const NetGame::Params& params, std::string* error)
   m_hostWantsRound = false;
   m_hostWantsLobby = false;
   m_netDesyncHandled = false;
+  m_netRoomAnnounced = false;
   m_netMessage.clear();
   m_netToasts.clear();
   m_netOverlaySignature.clear();
@@ -649,7 +667,17 @@ void GameEngine::refreshNetPage()
   }
   else if (s.state() == LockstepSession::CONNECTING)
   {
-    NetLobbyBinder::applyConnecting(doc, "Connecting...", "Asking " + m_net->params().join + " to let us in...");
+    if (m_net->viaRelay())
+    {
+      const bool relayUp = m_net->transportState() == VNET_STATUS_READY;
+      NetLobbyBinder::applyConnecting(doc, "Joining room " + m_net->params().room + "...",
+                                      relayUp ? std::string("In the room (") + m_net->transport() + "). Asking the host to let us in..."
+                                              : "Connecting to the relay " + m_net->params().relayDisplay + "...");
+    }
+    else
+    {
+      NetLobbyBinder::applyConnecting(doc, "Connecting...", "Asking " + m_net->params().join + " to let us in...");
+    }
   }
   else
   {
@@ -657,11 +685,93 @@ void GameEngine::refreshNetPage()
   }
 }
 
+void GameEngine::adoptNetGame(std::unique_ptr<NetGame> net)
+{
+  m_net = std::move(net);
+  m_netRoundPending = false;
+  m_netEndedShown = false;
+  m_hostWantsRound = false;
+  m_hostWantsLobby = false;
+  m_netDesyncHandled = false;
+  m_netRoomAnnounced = false;
+  m_netMessage.clear();
+  m_netToasts.clear();
+  m_netOverlaySignature.clear();
+  m_netStallTimer = netplay::StallTimer();
+  installNetInterceptor();
+  menuSystem->showNetLobby();
+  refreshNetPage();
+}
+
+bool GameEngine::startRelayFromText(bool host, const std::string& name, const std::string& relay, const std::string& room,
+                                    int localPlayers, bool pageIsSecure, std::string* error)
+{
+  if (m_net || m_netResolve || !menuSystem || GameSettings::getInstance()->getGameState() != GameSettings::MENU_RUNNING)
+  {
+    if (error) *error = "a network game is already on, or the menus are not up";
+    return false;
+  }
+  netplay::RelayTarget target;
+  std::string code;
+  if (!netplay::parseRelayAddress(relay, pageIsSecure, &target, error) || (!host && !netplay::parseRoomCode(room, &code, error)))
+  {
+    return false;
+  }
+  NetGame::Params p = m_netDev;
+  p.relay = true;
+  p.host = host;
+  p.name = netplay::cleanPlayerName(name);
+  p.localPlayers = localPlayers;
+  p.requireReady = true;
+  p.recordDir = m_recordDir;
+  p.relayWs = target.ws;
+  p.relayUdp = target.udp;
+  p.relayDisplay = relay;
+  p.room = code;
+  p.join = relay;
+  startRelayGame(p);
+  return true;
+}
+
+// Starts a game through the relay in `params` (a room of our own, or the one params.room names). A failure that comes
+// before there is a session is an error page; one that comes later is the session's own ending.
+void GameEngine::startRelayGame(const NetGame::Params& params)
+{
+  const std::string backPage = params.host ? "nethostrelay.rml" : "netjoinrelay.rml";
+  std::string error;
+  if (params.host)
+  {
+    if (startNetplay(params, &error))
+    {
+      m_netBackPage = backPage;
+    }
+    else
+    {
+      netplay::EndMessage m;
+      m.title = "Cannot open a room";
+      m.lines.push_back(error);
+      showNetLocalError(m, backPage);
+    }
+    return;
+  }
+  std::unique_ptr<NetGame> net = NetGame::create(params, m_sim, &error);
+  if (!net)
+  {
+    netplay::EndMessage m;
+    m.title = "Cannot start the network";
+    m.lines.push_back(error);
+    showNetLocalError(m, backPage);
+    return;
+  }
+  m_netBackPage = backPage;
+  adoptNetGame(std::move(net));
+}
+
 // The menus' network flow when there is no session yet: the host and join forms, a host name being looked up, a failure.
 void GameEngine::netIdleFrame()
 {
   NetUiRequests& rq = EventHandlerNetLobby::requests();
-  if (!rq.hostGo && !rq.joinGo && !rq.leave && !m_netResolve && !m_netLocalErrorShown)
+  if (!rq.hostGo && !rq.joinGo && !rq.relayHostGo && !rq.relayJoinGo && !rq.leave && !m_netResolve && !m_netLocalErrorShown)
   {
     return;
   }
@@ -677,8 +787,52 @@ void GameEngine::netIdleFrame()
     rq.leave = false;
     const bool wasErrorPage = m_netLocalErrorShown;
     m_netResolve.reset();
+    m_netResolveForRelay = false;
     m_netLocalErrorShown = false;
     menuSystem->showPage(wasErrorPage || m_netBackPage != "mainmenu.rml" ? m_netBackPage : std::string("mainmenu.rml"));
+    return;
+  }
+  if (rq.relayHostGo || rq.relayJoinGo)
+  {
+    // Host via relay / Join by room code (brief 12): the same flow as the direct forms, with the relay's address instead of the
+    // host's. A native build looks the relay's name up on a worker thread first; a browser has no use for a number.
+    const bool hosting = rq.relayHostGo;
+    rq.relayHostGo = rq.relayJoinGo = false;
+    NetGame::Params p = m_netDev;
+    p.relay = true;
+    p.host = hosting;
+    p.name = rq.form.name;
+    p.localPlayers = rq.form.localPlayers;
+    p.requireReady = true;
+    p.recordDir = m_recordDir;
+    p.relayWs = rq.form.relayWs;
+    p.relayUdp = rq.form.relayUdp;
+    p.relayDisplay = rq.form.relay;
+    p.room = rq.form.room;
+    p.join = rq.form.relay;   // what the words of an error name
+    EventHandlerNetForm::rememberRelay(rq.form.name, rq.form.relay, rq.form.room, rq.form.localPlayers);
+    m_netBackPage = hosting ? "nethostrelay.rml" : "netjoinrelay.rml";
+    m_netLocalErrorShown = false;
+#ifdef __EMSCRIPTEN__
+    startRelayGame(p);
+#else
+    vnet_addr numeric;
+    if (vnet_resolve(nullptr, p.relayUdp.c_str(), &numeric) == 0)
+    {
+      startRelayGame(p);   // already a number
+    }
+    else
+    {
+      m_netJoinParams = p;
+      m_netResolveForRelay = true;
+      m_netResolve.reset(new NetResolve(p.relayUdp));
+      menuSystem->showNetLobby();
+      if (Rml::ElementDocument* doc = menuSystem->netLobbyDocument())
+      {
+        NetLobbyBinder::applyConnecting(doc, "Connecting...", "Looking up the relay " + p.relayDisplay + "...");
+      }
+    }
+#endif
     return;
   }
   if (rq.hostGo)
@@ -731,22 +885,23 @@ void GameEngine::netIdleFrame()
     std::string error;
     if (rc == 0)
     {
+      if (m_netResolveForRelay)
+      {
+        // The relay's name is now a number: start the game the form asked for.
+        m_netResolveForRelay = false;
+        char numeric[128];
+        NetGame::Params p = m_netJoinParams;
+        if (vnet_addr_to_string(&addr, numeric, sizeof(numeric)) > 0)
+        {
+          p.relayUdp = numeric;
+        }
+        startRelayGame(p);
+        return;
+      }
       std::unique_ptr<NetGame> net = NetGame::createResolved(m_netJoinParams, m_sim, addr, &error);
       if (net)
       {
-        m_net = std::move(net);
-        m_netRoundPending = false;
-        m_netEndedShown = false;
-        m_hostWantsRound = false;
-        m_hostWantsLobby = false;
-        m_netDesyncHandled = false;
-        m_netMessage.clear();
-        m_netToasts.clear();
-        m_netOverlaySignature.clear();
-        m_netStallTimer = netplay::StallTimer();
-        installNetInterceptor();
-        menuSystem->showNetLobby();
-        refreshNetPage();
+        adoptNetGame(std::move(net));
         return;
       }
       netplay::EndMessage m;
@@ -756,6 +911,15 @@ void GameEngine::netIdleFrame()
       return;
     }
     netplay::EndMessage m;
+    if (m_netResolveForRelay)
+    {
+      m_netResolveForRelay = false;
+      m.title = "Cannot find the relay";
+      m.lines.push_back("'" + shown + "' could not be looked up: " + vnet_strerror(rc) + ".");
+      m.lines.push_back("Check the relay's address and your connection.");
+      showNetLocalError(m, m_netJoinParams.host ? "nethostrelay.rml" : "netjoinrelay.rml");
+      return;
+    }
     m.title = "Cannot find the host";
     m.lines.push_back("'" + shown + "' could not be looked up: " + vnet_strerror(rc) + ".");
     m.lines.push_back("Check the spelling and your connection, or use the host's IP address.");
@@ -769,6 +933,16 @@ void GameEngine::netFrame()
   GameSettings* gs = GameSettings::getInstance();
   m_net->pump();
   LockstepSession& s = m_net->session();
+  if (m_net->viaRelay() && !m_netRoomAnnounced)
+  {
+    const std::string code = m_net->roomCode();
+    if (!code.empty())
+    {
+      // Where a player running the game from a terminal (and the tests) can read it.
+      m_netRoomAnnounced = true;
+      std::cout << "room " << code << " (" << m_net->transport() << ")" << std::endl;
+    }
+  }
   NetUiRequests& rq = EventHandlerNetLobby::requests();
   rq.hostGo = false;
   rq.joinGo = false;
@@ -783,7 +957,11 @@ void GameEngine::netFrame()
     const bool failedJoin = !m_net->isHost()
                             && ((s.state() == LockstepSession::ENDED && s.endReason() != LockstepSession::END_LEFT && m_netEndedShown)
                                 || s.state() == LockstepSession::CONNECTING);
-    leaveNetplayToMenu(failedJoin ? "netjoin.rml" : "mainmenu.rml");
+    // A relay host whose room could not be made goes back to its form; other hosts to the main menu.
+    const bool failedRelayHost = m_net->isHost() && m_net->viaRelay() && s.state() == LockstepSession::ENDED
+                                 && s.endReason() == LockstepSession::END_NETWORK && m_netEndedShown;
+    const bool relay = m_net->viaRelay();
+    leaveNetplayToMenu(failedJoin ? (relay ? "netjoinrelay.rml" : "netjoin.rml") : (failedRelayHost ? "nethostrelay.rml" : "mainmenu.rml"));
     return;
   }
   if (gs->getGameState() == GameSettings::GAME_RUNNING && !m_roundEnding && m_pInputHandler->quitRequested())
@@ -856,6 +1034,19 @@ void GameEngine::netFrame()
     m_roundEnding = false;
     menuSystem->closeAllMenus();
     gs->setGameState(GameSettings::GAME_INIT);
+  }
+
+  if (rq.copyRoom)
+  {
+    rq.copyRoom = false;
+    const std::string code = m_net->roomCode();
+    if (!code.empty())
+    {
+      SDL_SetClipboardText(code.c_str());
+#ifdef __EMSCRIPTEN__
+      webCopyToClipboard(code);   // the page's clipboard, which SDL's clipboard does not reach from a click
+#endif
+    }
   }
 
   // The lobby's buttons.
@@ -995,6 +1186,13 @@ void GameEngine::stepNetTick()
   const TickInputs sample = m_pInputHandler->sampleTick();
   match.step(sample, mask);
   m_ticksThisFrame++;
+  if (match.lastCheckpointTick() != m_netLoggedCheckpoint)
+  {
+    m_netLoggedCheckpoint = match.lastCheckpointTick();
+    char hash[32];
+    std::snprintf(hash, sizeof(hash), "0x%016llx", (unsigned long long) match.lastCheckpointHash());
+    logNet("checkpoint " + std::to_string(match.round().round) + " " + std::to_string(m_netLoggedCheckpoint) + " " + hash);
+  }
   // A takeover the host did not grant (someone else took that bot at the same moment).
   for (const int slot : m_net->session().takeRejectedClaims())
   {
@@ -1005,6 +1203,13 @@ void GameEngine::stepNetTick()
   {
     m_roundEnding = true;
     m_scoreboardWinner = m_sim.winner();
+    {
+      char hash[32];
+      std::snprintf(hash, sizeof(hash), "0x%016llx", (unsigned long long) m_sim.stateHash());
+      logNet("round " + std::to_string(match.round().round) + ": over at tick " + std::to_string(m_sim.tick()) + ", winner "
+             + (m_scoreboardWinner ? "player " + std::to_string(m_scoreboardWinner->getPlayerNumber()) : std::string("none"))
+             + ", final hash " + hash);
+    }
     if (!m_recordDir.empty())
     {
       std::string path, error;
@@ -1020,8 +1225,20 @@ void GameEngine::stepNetTick()
   }
 }
 
+void GameEngine::logNet(const std::string& line)
+{
+  m_netLog += line;
+  m_netLog += '\n';
+  if (m_netLog.size() > 65536)
+  {
+    const size_t cut = m_netLog.find('\n', m_netLog.size() - 32768);
+    m_netLog.erase(0, cut == std::string::npos ? m_netLog.size() : cut + 1);
+  }
+}
+
 void GameEngine::resetNetGame()
 {
+  m_netLoggedCheckpoint = 0;
   GameSettings* settings = GameSettings::getInstance();
   const netplay::RoundStart rs = m_netRound;
   m_netRoundPending = false;

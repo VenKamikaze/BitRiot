@@ -232,13 +232,36 @@ void LockstepSession::pump()
     return;
   }
   vnet_poll(m_v);
+  const uint64_t previous = m_now;
   m_now = vnet_time(m_v);
 
+  if (m_opt.tolerateSparsePump && m_now > previous && m_now - previous > m_opt.sparsePumpGapMs)
+  {
+    // We were not pumped (a hidden browser tab, a sleeping laptop): the others may well have been talking
+    // all along, and what they sent is still queued. Do not count our silence against anybody.
+    m_sparseGaps++;
+    for (Member& m : m_members)
+    {
+      if (m.present)
+      {
+        m.lastHeard = m_now;
+      }
+    }
+    m_connectStart = m_now;
+  }
+
   vnet_status_info st;
-  if (vnet_status(m_v, &st) == VNET_STATUS_FAILED)
+  const int transport = vnet_status(m_v, &st);
+  if (transport == VNET_STATUS_FAILED)
   {
     end(END_NETWORK, std::string("the network failed: ") + vnet_strerror(st.error));
     return;
+  }
+  if (transport == VNET_STATUS_CONNECTING)
+  {
+    // A relay context that has not entered its room yet: nothing can be sent (HELLO is repeated and goes when it can),
+    // so the host's time to answer starts when the transport is ready, not when we asked it to connect.
+    m_connectStart = m_now;
   }
 
   drain();
@@ -900,12 +923,21 @@ void LockstepSession::broadcastLobby()
 
 // -- choosing D ---------------------------------------------------------------------------------------
 
-int LockstepSession::chooseDelay(uint32_t worstRttMs, uint32_t jitterMs, uint32_t tickMs)
+int LockstepSession::chooseDelay(uint32_t worstRttMs, uint32_t jitterMs, uint32_t tickMs, int maxDelay)
 {
   if (tickMs == 0) tickMs = 33;
   const uint32_t total = worstRttMs + jitterMs;
   const int d = (int) ((total + tickMs - 1) / tickMs) + 1;
-  return std::max(MIN_DELAY, std::min(MAX_DELAY, d));
+  return std::max(MIN_DELAY, std::min(std::max(MIN_DELAY, maxDelay), d));
+}
+
+uint32_t LockstepSession::hostSilenceMs() const
+{
+  if (m_role == HOST || m_state == ENDED || m_state == CONNECTING)
+  {
+    return 0;
+  }
+  return m_now > m_members[0].lastHeard ? (uint32_t) std::min<uint64_t>(m_now - m_members[0].lastHeard, 0xFFFFFFFFu) : 0;
 }
 
 int LockstepSession::proposedDelay() const
@@ -956,7 +988,7 @@ int LockstepSession::computeDelay(std::string* note) const
     if (note) *note = "D=" + std::to_string(DEFAULT_DELAY) + " (nothing measured yet)";
     return DEFAULT_DELAY;
   }
-  const int d = chooseDelay(worstTotal, 0, m_opt.tickMs);
+  const int d = chooseDelay(worstTotal, 0, m_opt.tickMs, m_opt.maxDelay);
   if (note)
   {
     *note = "D=" + std::to_string(d) + " from a worst round trip of " + std::to_string(worstRtt) + " ms plus jitter "

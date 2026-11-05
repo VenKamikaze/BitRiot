@@ -78,6 +78,13 @@ namespace netplay
     bool inLobby = true;
     // Characters of a name that fit the table; longer names are cut with "...".
     size_t nameChars = 22;
+    // Brief 12, a game through a relay: whether it is one, the room's code once the relay has said it ("" before),
+    // and what carries the datagrams ("relay-wt", "relay-ws", "relay-udp"; "" before it is up).
+    bool viaRelay = false;
+    std::string roomCode;
+    std::string transport;
+    // Peer: the host's connection has gone quiet (the host's tab may be in the background) for this long.
+    uint32_t hostSilenceMs = 0;
   };
 
   struct LobbyScreen
@@ -87,6 +94,7 @@ namespace netplay
     std::string title;
     std::string settings;             // "Map 17 x 13, blocks 55%, enemies on, 4 slots"
     std::string status;               // the sentence under the table
+    std::string roomCode;             // a relay game once the room exists: the code, to show big ("" otherwise)
     bool isHost = false;
     bool canStart = false;            // the Start button is enabled (host)
     std::string startLabel;           // "Start match" / "Ready" / "Not ready" / "Waiting for the host"
@@ -126,6 +134,9 @@ namespace netplay
   // `address` is what the player typed (host:port) for the lines that name it; `joining` is true for a peer.
   EndMessage describeEnd(LockstepSession::EndReason reason, const RejectInfo& reject, const std::string& sessionText,
                          const Identity& mine, const std::string& address);
+  // The page for a session over a relay whose transport failed (vnet_status_info::error: VNET_ENOROOM, VNET_ECONNREFUSED ...);
+  // `relay` is what the player typed, `room` the code (joiner) or "" (host).
+  EndMessage describeRelayFailure(int vnetError, const std::string& relay, const std::string& room, bool hosting);
   // 0x6767612d056ba8af as "0x6767612d056ba8af".
   std::string hex64(uint64_t v);
 
@@ -141,15 +152,48 @@ namespace netplay
   // A name for the others to see: control characters removed, spaces trimmed, at most 24 bytes ending between characters.
   std::string cleanPlayerName(const std::string& text);
 
+  // -- the relay (brief 12) -----------------------------------------------------------------------
+
+  // The relay's UDP port when the player does not type one (vnet-relay's default).
+  constexpr int DEFAULT_RELAY_UDP_PORT = 7777;
+  // The port every relay session's socket uses. Relay addresses are 10.0.0.N:port, the room's creator is 10.0.0.1, so a joiner
+  // reaches the host at "room-host:" + this, and the host listens on it.
+  constexpr int RELAY_SESSION_PORT = 7777;
+
+  // What a typed relay address means for each world: the browser uses the WebSocket URL (RELAY_AUTO derives the WebTransport
+  // one from a wss:// URL), the native game the relay's UDP "host:port". Either is "" if it cannot be derived.
+  struct RelayTarget
+  {
+    std::string ws;    // "wss://host/vnet" or "ws://host:8080/vnet"
+    std::string udp;   // "host:7777"
+    std::string host;  // the host part alone
+  };
+  // Accepts "relay.example.org", "relay.example.org:7777", "[::1]:7777" (a UDP address: the WebSocket URL is derived,
+  // wss://host/vnet when the page is served over https and `secure` is true, else ws://host:8080/vnet, the relay's own
+  // defaults) and "ws://host:8080/vnet" / "wss://host/vnet" (a URL: the UDP address is host:7777; a missing path is /vnet).
+  // False, and a sentence in `error`, for anything else. `normalised` gets the text trimmed.
+  bool parseRelayAddress(const std::string& typed, bool secure, RelayTarget* out, std::string* error,
+                         std::string* normalised = nullptr);
+  // A room code as typed: 6 symbols of ABCDEFGHJKLMNPQRSTUVWXYZ23456789, any case, with spaces or '-' tolerated.
+  // `code` gets the canonical upper-case six. False with a sentence otherwise.
+  bool parseRoomCode(const std::string& typed, std::string* code, std::string* error);
+  // The relay a build offers before the player types one: the build's BITRIOT_DEFAULT_RELAY (a CMake cache entry) or, when
+  // it is empty, "127.0.0.1:7777" (a relay run on this machine).
+  std::string defaultRelayAddress();
+
   struct NetPrefs
   {
     std::string name;
     std::string joinAddress;
     int hostPort = 7777;
     int localPlayers = 1;
+    // Brief 12: the relay ("" = the build's default) and the last room joined.
+    std::string relay;
+    std::string room;
     bool operator==(const NetPrefs& o) const
     {
-      return name == o.name && joinAddress == o.joinAddress && hostPort == o.hostPort && localPlayers == o.localPlayers;
+      return name == o.name && joinAddress == o.joinAddress && hostPort == o.hostPort && localPlayers == o.localPlayers
+             && relay == o.relay && room == o.room;
     }
   };
   // key=value lines. A missing file is not an error (`out` keeps its defaults, false is returned); a corrupt

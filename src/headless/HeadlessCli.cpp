@@ -14,7 +14,7 @@
 #include "MatchRecord.h"
 #include "MatchReplay.h"
 #include "Simulation.h"
-#ifdef BITRIOT_NETPLAY
+#ifdef BITRIOT_HEADLESS_NET
 #include "HeadlessNet.h"
 #endif
 
@@ -70,7 +70,7 @@ void printHelp(std::ostream& out)
          "  bitriot_headless version [--items]\n"
          "      Print this build's build id, data hash and format versions; --items lists\n"
          "      what the data hash is made of.\n"
-#ifdef BITRIOT_NETPLAY
+#ifdef BITRIOT_HEADLESS_NET
          "  bitriot_headless host [--port N] [--port-file F] [--peers N] [--rounds R] [--seed S]\n"
          "                        [--config SPEC] [--script FILE] [OPTIONS]\n"
          "  bitriot_headless join HOST:PORT [--rounds R] [--script FILE] [OPTIONS]\n"
@@ -90,6 +90,10 @@ void printHelp(std::ostream& out)
          "      host only: --port-file F gets the UDP port once the host listens (--port 0, the\n"
          "      default, picks a free one). VNET_IMPAIR sets simulated latency and loss; give\n"
          "      every process its own seed=.\n"
+         "    THROUGH A RELAY (brief 12; vnet's relay, doco/relay-protocol.md): --relay HOST:PORT (the\n"
+         "      relay's UDP address). A host creates a room and prints 'room CODE' on stderr\n"
+         "      (--room-file F gets CODE); a peer is 'join --relay HOST:PORT --room CODE'. Browser\n"
+         "      and native machines meet in the same room.\n"
 #endif
          "\n"
          "SPEC is comma-separated key=value pairs, or @file with the same:\n"
@@ -744,7 +748,7 @@ int run(const std::vector<std::string>& args, std::ostream& out, std::ostream& e
     {
       return cmdVersion(args, out, err);
     }
-#ifdef BITRIOT_NETPLAY
+#ifdef BITRIOT_HEADLESS_NET
     if (command == "host" || command == "join" || command == "--host" || command == "--join")
     {
       return runNetCommand(args, out, err);

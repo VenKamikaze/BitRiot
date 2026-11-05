@@ -1,0 +1,27 @@
+<rml>
+  <head>
+    <title>Join by room code</title>
+    <link rel="stylesheet" type="text/css" href="rkt.rcss"/>
+    <link rel="stylesheet" type="text/css" href="common.rcss"/>
+    <link type="text/rcss" href="netform.rcss"/>
+  </head>
+  <body class="background" onload="netforminit">
+    <div class="menu-container">
+      <div class="menu">
+        <h2>Join by room code</h2>
+        <div class="form">
+          <div class="frow"><span class="flabel">Your name</span><input type="text" id="f-name" class="tabbed text" tabindex="1" maxlength="24" /></div>
+          <div class="frow"><span class="flabel">Room code</span><input type="text" id="f-room" class="tabbed text" tabindex="2" maxlength="12" autofocus /></div>
+          <div class="frow"><span class="flabel">Relay</span><input type="text" id="f-relay" class="tabbed text wide" tabindex="3" maxlength="200" /></div>
+          <div class="frow"><span class="flabel">Players here</span><button class="tabbed formbtn" id="f-local" tabindex="4" onclick="netlocal">1</button></div>
+          <p class="note">The six letters and digits the host sees on its screen (any case). The relay is the one the host used.</p>
+          <p class="error" id="formerror"></p>
+        </div>
+        <div class="formbuttons">
+          <button class="tabbed" id="formgo" tabindex="5" onclick="netrelayjoingo">Connect</button>
+          <button class="tabbed" id="formback" tabindex="6" escapeAction="1" onclick="open netmenu.rml">Back</button>
+        </div>
+      </div>
+    </div>
+  </body>
+</rml>

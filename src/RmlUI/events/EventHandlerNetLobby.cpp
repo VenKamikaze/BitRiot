@@ -10,6 +10,8 @@
 const char* const EventHandlerNetLobby::RML_FILENAME = "netlobby.rml";
 const char* const EventHandlerNetForm::HOST_FILENAME = "nethost.rml";
 const char* const EventHandlerNetForm::JOIN_FILENAME = "netjoin.rml";
+const char* const EventHandlerNetForm::RELAY_HOST_FILENAME = "nethostrelay.rml";
+const char* const EventHandlerNetForm::RELAY_JOIN_FILENAME = "netjoinrelay.rml";
 
 NetUiRequests& EventHandlerNetLobby::requests()
 {
@@ -27,6 +29,10 @@ void EventHandlerNetLobby::ProcessEvent(Rml::Event&, const Rml::String& value)
   else if (value == "netleave")
   {
     rq.leave = true;
+  }
+  else if (value == "netcopy")
+  {
+    rq.copyRoom = true;
   }
   else if (value.rfind("netteam ", 0) == 0)
   {
@@ -57,6 +63,11 @@ std::function<std::string()> g_prefsPathProvider;
 netplay::NetPrefs g_prefs;
 bool g_prefsLoaded = false;
 int g_localPlayers = 1;   // the "Players here" button of the open form
+std::string g_defaultRelay;
+std::string g_defaultRoom;
+bool g_pageSecure = false;
+std::function<void(const std::string&)> g_beforeLoad;
+std::function<void(const std::string&)> g_afterSave;
 
 // The file's path: set directly, or asked of the provider the first time it is needed.
 const std::string& prefsPath()
@@ -76,6 +87,7 @@ netplay::NetPrefs& prefs()
     g_prefsLoaded = true;
     if (!prefsPath().empty())
     {
+      if (g_beforeLoad) g_beforeLoad(prefsPath());
       netplay::loadNetPrefs(prefsPath(), g_prefs);   // a missing or corrupt file leaves the defaults
     }
   }
@@ -87,6 +99,10 @@ void savePrefs()
   if (!prefsPath().empty() && !netplay::saveNetPrefs(prefsPath(), g_prefs))
   {
     std::MickLogger::getInstance()->warn(nullptr, std::string("Could not save ").append(prefsPath()));
+  }
+  else if (g_afterSave)
+  {
+    g_afterSave(prefsPath());
   }
 }
 
@@ -161,6 +177,29 @@ void EventHandlerNetForm::rememberHost(const std::string& name, int port, int lo
   savePrefs();
 }
 
+void EventHandlerNetForm::setRelayDefaults(const std::string& relay, const std::string& room, bool pageIsSecure)
+{
+  g_defaultRelay = relay;
+  g_defaultRoom = room;
+  g_pageSecure = pageIsSecure;
+}
+
+void EventHandlerNetForm::setPrefsSyncHooks(std::function<void(const std::string&)> beforeLoad, std::function<void(const std::string&)> afterSave)
+{
+  g_beforeLoad = std::move(beforeLoad);
+  g_afterSave = std::move(afterSave);
+}
+
+void EventHandlerNetForm::rememberRelay(const std::string& name, const std::string& relay, const std::string& room, int localPlayers)
+{
+  netplay::NetPrefs& p = prefs();
+  p.name = name;
+  p.relay = relay;
+  if (!room.empty()) p.room = room;
+  p.localPlayers = localPlayers;
+  savePrefs();
+}
+
 void EventHandlerNetForm::rememberJoin(const std::string& name, const std::string& address, int localPlayers)
 {
   netplay::NetPrefs& p = prefs();
@@ -181,6 +220,8 @@ void EventHandlerNetForm::ProcessEvent(Rml::Event& event, const Rml::String& val
     setValue(doc, "f-name", p.name);
     setValue(doc, "f-port", std::to_string(p.hostPort));
     setValue(doc, "f-addr", p.joinAddress);
+    setValue(doc, "f-relay", !p.relay.empty() ? p.relay : (!g_defaultRelay.empty() ? g_defaultRelay : netplay::defaultRelayAddress()));
+    setValue(doc, "f-room", !g_defaultRoom.empty() ? g_defaultRoom : p.room);
     if (Rml::Element* b = doc->GetElementById("f-local"))
     {
       b->SetInnerRML(std::to_string(g_localPlayers));
@@ -212,6 +253,30 @@ void EventHandlerNetForm::ProcessEvent(Rml::Event& event, const Rml::String& val
     rq.form.port = port;
     rq.form.localPlayers = g_localPlayers;
     rq.hostGo = true;
+  }
+  else if (value == "netrelayhostgo" || value == "netrelayjoingo")
+  {
+    const bool joining = value == "netrelayjoingo";
+    std::string error, normalised;
+    netplay::RelayTarget target;
+    if (!netplay::parseRelayAddress(valueOf(doc, "f-relay"), g_pageSecure, &target, &error, &normalised))
+    {
+      showError(doc, error);
+      return;
+    }
+    std::string room;
+    if (joining && !netplay::parseRoomCode(valueOf(doc, "f-room"), &room, &error))
+    {
+      showError(doc, error);
+      return;
+    }
+    rq.form.name = netplay::cleanPlayerName(valueOf(doc, "f-name"));
+    rq.form.relay = normalised;
+    rq.form.relayWs = target.ws;
+    rq.form.relayUdp = target.udp;
+    rq.form.room = room;
+    rq.form.localPlayers = g_localPlayers;
+    (joining ? rq.relayJoinGo : rq.relayHostGo) = true;
   }
   else if (value == "netjoingo")
   {

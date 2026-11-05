@@ -1763,3 +1763,98 @@ TEST(LockstepLobby, APeerOnTheScoreboardFollowsOnlyALobbyAnnouncedForTheNextRoun
   f.lobby(netplay::PHASE_LOBBY, 2);            // the lobby after round 1
   EXPECT_EQ(f.peer->state(), LockstepSession::LOBBY);
 }
+
+// -- brief 12: relays, browser tabs --------------------------------------------------------------
+
+TEST(LockstepRelay, TheLargestDIsAnOptionAndEightRemainsTheDefault)
+{
+  EXPECT_EQ(LockstepSession::chooseDelay(2000, 500, 33), 8) << "the default clamp is unchanged";
+  EXPECT_EQ(LockstepSession::chooseDelay(2000, 500, 33, 12), 12);
+  EXPECT_EQ(LockstepSession::chooseDelay(300, 0, 33, 12), 11) << "ceil(9.09) + 1 now fits";
+  EXPECT_EQ(LockstepSession::chooseDelay(300, 0, 33, 8), 8);
+  EXPECT_EQ(LockstepSession::chooseDelay(0, 0, 33, 12), 2) << "the smallest D is unchanged";
+  EXPECT_EQ(LockstepSession::chooseDelay(2000, 0, 33, 1), 2) << "a silly maximum cannot go below the minimum";
+
+  // End to end: a slow link (about 640 ms round trip, all on the peer's side) makes the host choose 12 when it may, 8 when it may not.
+  for (const int allowed : {8, 12})
+  {
+    ClusterOptions o;
+    o.session.maxDelay = allowed;
+    Cluster c(2, o);
+    c.impair(1, "lat=640");
+    c.run(5000);
+    EXPECT_EQ(c.machine(0).s->proposedDelay(), allowed) << "RTT " << c.machine(0).s->peerRtt(1) << " ms";
+    ASSERT_TRUE(c.startRound(1, 0));
+    EXPECT_EQ(c.machine(0).round.delay, allowed);
+    EXPECT_EQ(c.machine(1).round.delay, allowed) << "the peer plays the host's D";
+  }
+}
+
+TEST(LockstepRelay, APumpGapOfOurOwnIsNotHeldAgainstAnybody)
+{
+  // The whole process sleeps for 12 s (a laptop lid, a browser freezing every tab): nothing is sent or heard on either side. When
+  // it wakes, neither machine may conclude the other one died.
+  for (const bool tolerant : {true, false})
+  {
+    SCOPED_TRACE(tolerant ? "tolerateSparsePump on" : "tolerateSparsePump off");
+    ClusterOptions o;
+    o.session.tolerateSparsePump = tolerant;
+    Cluster c(2, o);
+    c.run(500);
+    ASSERT_EQ(c.machine(0).s->peerCount(), 1);
+    c.machine(0).frozen = true;
+    c.machine(1).frozen = true;
+    vnet_loopback_network_step(c.network(), 12000);   // twelve seconds pass; nobody pumps
+    c.machine(0).frozen = false;
+    c.machine(1).frozen = false;
+    c.run(300);
+    if (tolerant)
+    {
+      EXPECT_EQ(c.machine(1).s->state(), LockstepSession::LOBBY) << "the peer still has its host";
+      EXPECT_EQ(c.machine(0).s->peerCount(), 1) << "the host still has its peer";
+      EXPECT_GE(c.machine(0).s->sparsePumpGaps(), 1u);
+      EXPECT_GE(c.machine(1).s->sparsePumpGaps(), 1u);
+      c.run(3000);
+      EXPECT_EQ(c.machine(1).s->state(), LockstepSession::LOBBY);
+      EXPECT_EQ(c.machine(0).s->peerCount(), 1);
+    }
+    else
+    {
+      EXPECT_TRUE(c.machine(1).s->ended() || c.machine(0).s->peerCount() == 0) << "what the option is for: without it the gap is held against them";
+      EXPECT_EQ(c.machine(0).s->sparsePumpGaps(), 0u);
+    }
+  }
+}
+
+TEST(LockstepRelay, ARealSilenceStillTimesOutAfterTheGap)
+{
+  // The rule forgives OUR gap only: a host that is really gone is still given up on, 10 s after we are pumping again.
+  ClusterOptions o;
+  o.session.tolerateSparsePump = true;
+  Cluster c(2, o);
+  c.run(500);
+  c.machine(1).frozen = true;
+  vnet_loopback_network_step(c.network(), 5000);
+  c.machine(1).frozen = false;
+  c.machine(0).frozen = true;   // ... and the host never comes back
+  c.run(2000);
+  EXPECT_EQ(c.machine(1).s->state(), LockstepSession::LOBBY) << "the clock for the host's silence restarted when we woke";
+  c.run(9000);
+  EXPECT_EQ(c.machine(1).s->state(), LockstepSession::ENDED);
+  EXPECT_EQ(c.machine(1).s->endReason(), LockstepSession::END_HOST_LOST);
+}
+
+TEST(LockstepRelay, APeerCanTellHowLongTheHostHasBeenQuiet)
+{
+  Cluster c(2);
+  c.run(1000);
+  EXPECT_EQ(c.machine(0).s->hostSilenceMs(), 0u) << "the host is never silent to itself";
+  EXPECT_LT(c.machine(1).s->hostSilenceMs(), 600u);
+  c.machine(0).frozen = true;
+  c.run(4000);
+  EXPECT_GE(c.machine(1).s->hostSilenceMs(), 3500u);
+  EXPECT_LE(c.machine(1).s->hostSilenceMs(), 4500u);
+  c.machine(0).frozen = false;
+  c.run(700);
+  EXPECT_LT(c.machine(1).s->hostSilenceMs(), 600u);
+}

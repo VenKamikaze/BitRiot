@@ -177,6 +177,7 @@ static void applyOptions(const GameOptions& options)
 static bool loopIteration()
 {
   MickSDLRenderer *renderer = MickSDLRenderer::getInstance();
+  const bool hiddenTab = engine && engine->hidden();   // a background browser tab: step, but draw and present nothing
 
   if(SDL_MUSTLOCK(renderer->getSurfaceBackBufferHandle()))
   {
@@ -190,7 +191,10 @@ static bool loopIteration()
 
   if(renderer->getSurfaceBackBufferHandle() != nullptr)
   {
-    SDL_RenderPresent(renderer->getRendererHandle());
+    if(!hiddenTab)
+    {
+      SDL_RenderPresent(renderer->getRendererHandle());
+    }
   }
   else
   {
@@ -239,6 +243,8 @@ static void shutdownGame()
 }
 
 #ifdef __EMSCRIPTEN__
+static bool webLoopRunning = false;   // the main loop is on (between its start and the shutdown)
+
 // The browser's main-loop callback (emscripten_set_main_loop). An exception must
 // not escape into the browser's event loop: it is reported, and the game stops the
 // same way as a quit.
@@ -263,10 +269,24 @@ static void webLoopIteration()
 
   if(!keepRunning)
   {
+    webLoopRunning = false;
     emscripten_cancel_main_loop();
     shutdownGame();
     webReportQuit();
   }
+}
+
+// One pass of the main loop for a tab the browser has hidden (brief 12). A hidden tab gets no animation frames, so the page
+// calls this from network events and a one-second timer instead (src/web/WebHooks.cpp); it does what webLoopIteration does,
+// with the engine in its hidden mode (it steps every tick it holds, draws nothing).
+void webHiddenPoll()
+{
+  if(!webLoopRunning || !engine || !engine->hidden())
+  {
+    return;
+  }
+  webCountHiddenPoll();
+  webLoopIteration();
 }
 #endif
 
@@ -331,6 +351,26 @@ int main(int argc, char* argv[])
       net.name = netOptions.name;
       net.localPlayers = netOptions.localPlayers;
       net.totalSlots = netOptions.players;
+      if(netOptions.viaRelay())
+      {
+        // --host --relay ADDR (a new room) or --relay ADDR --room CODE (join one).
+        netplay::RelayTarget target;
+        std::string relayError;
+        std::string roomCode;
+        if(!netplay::parseRelayAddress(netOptions.relay, false, &target, &relayError)
+           || (!netOptions.room.empty() && !netplay::parseRoomCode(netOptions.room, &roomCode, &relayError)))
+        {
+          cerr << relayError << endl;
+          shutdownGame();
+          return 2;
+        }
+        net.relay = true;
+        net.relayWs = target.ws;
+        net.relayUdp = target.udp;
+        net.relayDisplay = netOptions.relay;
+        net.room = roomCode;
+        net.join = netOptions.relay;
+      }
       std::string netError;
       if(!engine->startNetplay(net, &netError))
       {
@@ -360,6 +400,7 @@ int main(int argc, char* argv[])
     return 1;
   }
   webHooksInit(engine.get());
+  webLoopRunning = true;
   // The browser paces the loop (requestAnimationFrame, fps 0) and calls frame() once
   // per animation frame; frame() runs however many whole ticks are owed, so a 60 Hz
   // display and the 30 Hz tick rate need no sleep. Nothing here may block. The last

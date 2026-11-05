@@ -18,7 +18,7 @@
         </div>
         <div class="formbuttons">
           <button class="tabbed" id="formgo" tabindex="4" onclick="nethostgo">Open lobby</button>
-          <button class="tabbed" id="formback" tabindex="5" escapeAction="1" onclick="open mainmenu.rml">Back</button>
+          <button class="tabbed" id="formback" tabindex="5" escapeAction="1" onclick="open netmenu.rml">Back</button>
         </div>
       </div>
     </div>

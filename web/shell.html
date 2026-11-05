@@ -92,6 +92,17 @@
   }
   button#start[hidden] { display: none; }
   button#start:focus-visible { outline: 3px solid var(--text); outline-offset: 3px; }
+  /* Brief 12: the room of an online game, as real page text (selectable, copyable) under the canvas. */
+  #room {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 14px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 14px;
+  }
+  #room[hidden] { display: none; }
+  #room .label { color: var(--muted); }
+  #room code { font: 700 1.6rem/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .25em; color: var(--accent); user-select: all; }
+  #room button { font: inherit; padding: 6px 14px; border-radius: 5px; border: 1px solid var(--line); background: var(--bg); color: var(--text); cursor: pointer; }
+  #room button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #roomnote { color: var(--muted); font-size: .85rem; min-height: 1.2em; }
   #help { max-width: 1000px; width: 100%; color: var(--muted); font-size: .9rem; display: grid; gap: 4px 24px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
   #help b { color: var(--text); font-weight: 600; }
   @media (max-width: 520px) { body { padding: 10px; } }
@@ -107,6 +118,14 @@
     <div id="status">Loading...</div>
     <button id="start" type="button" hidden>Click to start</button>
   </div>
+</div>
+
+<div id="room" hidden>
+  <span class="label">Room code</span>
+  <code id="roomcode" aria-live="polite"></code>
+  <button id="copycode" type="button">Copy code</button>
+  <button id="copylink" type="button">Copy invite link</button>
+  <span id="roomnote" role="status"></span>
 </div>
 
 <div id="help">
@@ -125,6 +144,29 @@
   var progressEl = document.getElementById('progress');
   var startBtn = document.getElementById('start');
   var canvas = document.getElementById('canvas');
+
+  var roomEl = document.getElementById('room');
+  var roomCodeEl = document.getElementById('roomcode');
+  var roomNoteEl = document.getElementById('roomnote');
+
+  // The invite link opens this page on the Join by room code form with the code (and the relay, if it was chosen by the address)
+  // filled in. A real click on a real button: browsers allow the clipboard write.
+  function copyText(text, what) {
+    var done = function () { roomNoteEl.textContent = what + ' copied.'; };
+    var fail = function () { roomNoteEl.textContent = 'Could not copy: select the text and copy it yourself.'; };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, fail);
+    } else { fail(); }
+  }
+  document.getElementById('copycode').addEventListener('click', function () { copyText(roomCodeEl.textContent, 'Room code'); });
+  document.getElementById('copylink').addEventListener('click', function () {
+    var url = new URL(window.location.href);
+    url.search = '';
+    var relay = new URLSearchParams(window.location.search).get('relay');
+    if (relay) { url.searchParams.set('relay', relay); }
+    url.searchParams.set('room', roomCodeEl.textContent);
+    copyText(url.toString(), 'Invite link');
+  });
 
   function showStatus(text, isError) {
     statusEl.textContent = text;
@@ -161,6 +203,13 @@
       startBtn.hidden = true;
       showStatus(message, true);
       window.bitriotFatalMessage = message;
+    },
+    // Called by the game (src/web/WebHooks.cpp) with the code of the relay room it is in, or "" when it is in none.
+    bitriotRoom: function (code) {
+      roomEl.hidden = !code;
+      roomCodeEl.textContent = code;
+      roomNoteEl.textContent = '';
+      window.bitriotRoomCode = code;
     },
     bitriotQuit: function () {
       stopFitting();
