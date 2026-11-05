@@ -68,6 +68,10 @@ struct Machine
   std::function<uint64_t(uint32_t)> hashFor = [](uint32_t t) { return 0x1000u + t; };
   uint32_t checkpointEvery = 30;
   std::vector<std::pair<uint32_t, uint64_t>> reported;
+  // A late joiner fast-forwards (LockstepSession::catchingUp()): this many ticks per virtual millisecond. 1 makes the
+  // catch-up slow, so a test can have the round end or a new one begin before it is done.
+  int fastForwardPerMs = 200;
+  bool reportHashes = true;             // false: never reports a checksum (a peer that acknowledges but stays silent about its state)
 };
 
 struct ClusterOptions
@@ -106,7 +110,8 @@ class Cluster
     void impairAll(const std::string& spec);
 
     // Adds a machine that joins the host's session now (late joiners, mismatched builds). 0 = the default identity.
-    Machine& addMachine(int localPlayers = 1, uint64_t buildId = 0, uint64_t dataHash = 0);
+    Machine& addMachine(int localPlayers = 1, uint64_t buildId = 0, uint64_t dataHash = 0,
+                        const std::function<void(SessionOptions&)>& tweak = nullptr);
 
     // A raw vnet socket on the network, for crafting packets by hand.
     struct Raw
@@ -122,6 +127,7 @@ class Cluster
 
   private:
     void tickMachine(Machine& m);
+    void stepMachine(Machine& m, uint64_t t);
     vnet* makeContext(int index, const std::string& impairSpec);
     vnet_loopback_network* m_net = nullptr;
     std::vector<std::unique_ptr<Machine>> m_machines;
@@ -209,7 +215,8 @@ inline Cluster::Cluster(int machines, const ClusterOptions& opts) : m_opts(opts)
   run(1500);
 }
 
-inline Machine& Cluster::addMachine(int localPlayers, uint64_t buildId, uint64_t dataHash)
+inline Machine& Cluster::addMachine(int localPlayers, uint64_t buildId, uint64_t dataHash,
+                                    const std::function<void(SessionOptions&)>& tweak)
 {
   const int i = (int) m_machines.size();
   std::unique_ptr<Machine> m(new Machine());
@@ -226,6 +233,7 @@ inline Machine& Cluster::addMachine(int localPlayers, uint64_t buildId, uint64_t
   so.name = m->name;
   so.localPlayers = localPlayers;
   so.randomSeed = 7000 + (uint64_t) i;
+  if (tweak) tweak(so);
   std::string error;
   m->s = LockstepSession::join(m->v, m_hostAddr, so, &error);
   m_machines.push_back(std::move(m));
@@ -274,46 +282,66 @@ inline void Cluster::tickMachine(Machine& m)
   {
     return;
   }
+  const uint8_t granted = s.takeGrantedSlots();
+  if (granted != 0)
+  {
+    m.localMask |= granted;   // the host gave a late joiner these slots: its fake game now "reads the keys" for them
+  }
+  if (s.catchingUp())
+  {
+    // A late joiner replays the host's record as fast as it can, with no clock and no sampling.
+    for (int i = 0; i < m.fastForwardPerMs && s.canStep() && !m.roundIsOver && s.catchingUp(); i++)
+    {
+      stepMachine(m, t);
+    }
+    return;
+  }
   int extra = s.extraTicksWanted();
   while ((m.owed > 0 || extra > 0) && s.canStep() && !m.roundIsOver)
   {
     if (m.owed > 0) m.owed--; else extra--;
-    const uint32_t tick = s.nextStepTick();
-    TickInputs sample;
-    auto ev = m.wantEvents.find(tick);
-    if (ev != m.wantEvents.end())
+    stepMachine(m, t);
+  }
+}
+
+inline void Cluster::stepMachine(Machine& m, uint64_t t)
+{
+  LockstepSession& s = *m.s;
+  const uint32_t tick = s.nextStepTick();
+  TickInputs sample;
+  auto ev = m.wantEvents.find(tick);
+  if (ev != m.wantEvents.end())
+  {
+    sample.control = ev->second;
+    // Like the real input layer: the local view changes when the event is produced.
+    for (const ControlEvent& e : ev->second)
     {
-      sample.control = ev->second;
-      // Like the real input layer: the local view changes when the event is produced.
-      for (const ControlEvent& e : ev->second)
-      {
-        if (e.slot < 0 || e.slot >= netplay::MAX_SLOTS) continue;
-        if (e.kind == ControlEvent::HUMAN_TAKES_OVER) m.localMask |= (uint8_t) (1u << e.slot);
-        else m.localMask &= (uint8_t) ~(1u << e.slot);
-      }
+      if (e.slot < 0 || e.slot >= netplay::MAX_SLOTS) continue;
+      if (e.kind == ControlEvent::HUMAN_TAKES_OVER) m.localMask |= (uint8_t) (1u << e.slot);
+      else m.localMask &= (uint8_t) ~(1u << e.slot);
     }
-    for (int slot = 0; slot < netplay::MAX_SLOTS; slot++)
+  }
+  for (int slot = 0; slot < netplay::MAX_SLOTS; slot++)
+  {
+    if (m.localMask & (1u << slot))
     {
-      if (m.localMask & (1u << slot))
-      {
-        sample.slot[slot] = PlayerInput(sampleByte(slot, tick + (uint32_t) m.round.delay, s.myId()));
-      }
+      sample.slot[slot] = PlayerInput(sampleByte(slot, tick + (uint32_t) m.round.delay, s.myId()));
     }
-    m.log.push_back(s.stepInputs());
-    m.stepTimes.push_back(t);
-    s.submitLocal(sample, m.localMask);
-    if ((m.checkpointEvery != 0 && tick % m.checkpointEvery == 0) || (m.roundTicks != 0 && tick >= m.roundTicks))   // and the last tick, as NetMatch does
-    {
-      const uint64_t h = m.hashFor(tick);
-      m.reported.push_back(std::make_pair(tick, h));
-      s.reportChecksum(tick, h);
-    }
-    s.tickStepped();
-    if (m.roundTicks != 0 && tick >= m.roundTicks)
-    {
-      m.roundIsOver = true;
-      s.roundFinished();
-    }
+  }
+  m.log.push_back(s.stepInputs());
+  m.stepTimes.push_back(t);
+  s.submitLocal(sample, m.localMask);
+  if ((m.checkpointEvery != 0 && tick % m.checkpointEvery == 0) || (m.roundTicks != 0 && tick >= m.roundTicks))   // and the last tick, as NetMatch does
+  {
+    const uint64_t h = m.hashFor(tick);
+    m.reported.push_back(std::make_pair(tick, h));
+    if (m.reportHashes) s.reportChecksum(tick, h);
+  }
+  s.tickStepped();
+  if (m.roundTicks != 0 && tick >= m.roundTicks)
+  {
+    m.roundIsOver = true;
+    s.roundFinished();
   }
 }
 

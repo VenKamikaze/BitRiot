@@ -35,7 +35,7 @@ namespace netplay
 {
   // Bumped when anything after the header changes. A host refuses a HELLO of another
   // version (REJECT_VERSION) before reading the rest of it.
-  const uint16_t PROTOCOL_VERSION = 2;
+  const uint16_t PROTOCOL_VERSION = 3;
 
   // vnet's VNET_MAX_DATAGRAM, repeated here so this header needs no vnet.h.
   const size_t MAX_PACKET = 1100;
@@ -69,7 +69,10 @@ namespace netplay
     MSG_PONG = 11,
     MSG_KEEPALIVE = 12,
     MSG_LEAVE = 13,
-    MSG_READY = 14
+    MSG_READY = 14,
+    MSG_WELCOME_MIDMATCH = 15,   // version 3 (brief 13): the answer to a HELLO while a round runs
+    MSG_READY_AT = 16,           // version 3: a late joiner has caught up
+    MSG_TAKEOVER_AT = 17         // version 3: the host's answer to READY_AT
   };
 
   enum RejectReason : uint8_t
@@ -78,7 +81,8 @@ namespace netplay
     REJECT_BUILD = 2,        // another build id: different simulation code
     REJECT_DATA = 3,         // another data hash: different data/ files
     REJECT_FULL = 4,         // no free player slot for the players asked for
-    REJECT_IN_PROGRESS = 5,  // a round is running; joining is the lobby's (hot-join is brief 13)
+    REJECT_IN_PROGRESS = 5,  // a round is running and this host does not take late joiners (SessionOptions::allowHotJoin), or the match
+                             // is stopped by a desync. Since version 3 a host normally lets a joiner in mid-round (WELCOME_MIDMATCH).
     REJECT_BAD_REQUEST = 6   // a HELLO that makes no sense (no players, a bad name)
   };
 
@@ -111,8 +115,11 @@ namespace netplay
     uint8_t localPlayers = 1;  // how many player slots this machine wants (1..MAX_SLOTS)
     uint32_t nonce = 0;        // picked by the peer: matches the answer, and makes a repeat idempotent
     uint32_t token = 0;        // a reconnect token from an earlier WELCOME (brief 13), 0 = new
+    uint8_t flags = 0;         // version 3: HELLO_SPECTATE
     std::string name;
   };
+  // HelloMsg::flags. Any other bit makes the HELLO undecodable.
+  const uint8_t HELLO_SPECTATE = 1;   // "do not give me a player slot": watch only (never dealt a slot, never waited for)
 
   // host -> peer
   struct WelcomeMsg
@@ -122,6 +129,36 @@ namespace netplay
     uint32_t token = 0;        // identifies this peer to the host across reconnects (brief 13)
     uint8_t slotMask = 0;      // the slots assigned for now; START and LOBBY are authoritative
     uint8_t maxSlots = MAX_SLOTS;
+  };
+
+  // host -> peer (version 3), in answer to a HELLO while a round runs, instead of WELCOME: the same identity, plus where the
+  // round is. Repeated (with a fresh `head`) while the joiner catches up. `offerMask` is the slots this peer is being offered
+  // back because they were its own before it dropped (a reconnect with its token) and are still bots; 0 for a new joiner.
+  struct WelcomeMidMatchMsg
+  {
+    uint32_t nonce = 0;
+    uint8_t peerId = 0;
+    uint32_t token = 0;
+    uint16_t round = 0;        // the running round
+    uint32_t head = 0;         // the newest tick the host has confirmed
+    uint8_t offerMask = 0;
+  };
+
+  // joiner -> host (version 3), repeated until TAKEOVER_AT: "I have stepped through `tick` and hold what is confirmed;
+  // schedule me". The host also wants the joiner's checksums to agree with its own before it gives it a slot.
+  struct ReadyAtMsg
+  {
+    uint16_t round = 0;
+    uint32_t tick = 0;
+  };
+
+  // host -> joiner (version 3): from `tick` on the machine plays `slotMask` (0 = it watches), and the host waits for its inputs
+  // from `tick`. The HUMAN_TAKES_OVER events are in tick `tick` of the final inputs, for everybody.
+  struct TakeoverAtMsg
+  {
+    uint16_t round = 0;
+    uint32_t tick = 0;
+    uint8_t slotMask = 0;
   };
 
   // host -> peer, in answer to any HELLO it will not accept. Carries the host's own
@@ -330,6 +367,9 @@ namespace netplay
   void encode(Writer& w, const KeepaliveMsg& m);
   void encode(Writer& w, const LeaveMsg& m);
   void encode(Writer& w, const ReadyMsg& m);
+  void encode(Writer& w, const WelcomeMidMatchMsg& m);
+  void encode(Writer& w, const ReadyAtMsg& m);
+  void encode(Writer& w, const TakeoverAtMsg& m);
 
   // Each reads the body that follows a header and returns whether the datagram was
   // exactly a well-formed message of that type. `r` is positioned after the header.
@@ -347,6 +387,9 @@ namespace netplay
   bool decode(Reader& r, KeepaliveMsg& m);
   bool decode(Reader& r, LeaveMsg& m);
   bool decode(Reader& r, ReadyMsg& m);
+  bool decode(Reader& r, WelcomeMidMatchMsg& m);
+  bool decode(Reader& r, ReadyAtMsg& m);
+  bool decode(Reader& r, TakeoverAtMsg& m);
 
   // The protocol version at the start of a HELLO body, readable whatever follows it
   // (a HELLO of another version may be laid out differently). False if the body has

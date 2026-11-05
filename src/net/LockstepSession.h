@@ -56,6 +56,7 @@
 #define _LOCKSTEPSESSION_H
 
 #include <array>
+#include <algorithm>
 #include <cstdint>
 #include <deque>
 #include <map>
@@ -108,6 +109,20 @@ namespace netplay
     // unchanged; the game turns it on. Between rounds nobody has to be ready again: the roster is
     // what played the last round, and the host may start the next one or go back to the lobby.
     bool requireReady = false;
+
+    // -- hot-join, reconnect and spectators (brief 13, protocol version 3) --------------------------------
+    // Host: let a HELLO in while a round is running (it catches up from the host's record and takes over a bot).
+    // false: such a HELLO is answered with REJECT_IN_PROGRESS, as in versions 1 and 2.
+    bool allowHotJoin = true;
+    // Peer: watch only. The host never deals this machine a slot or waits for its inputs (HELLO_SPECTATE).
+    bool spectate = false;
+    // Peer: the reconnect token a WELCOME gave this machine in an earlier session with the same host (0 = none).
+    // With it the host knows this is the same player (even from another address) and offers its old slots back.
+    uint32_t reconnectToken = 0;
+    // Host: how long after a round's end a peer that acknowledged every tick may leave the final tick's checksum
+    // unreported before the host drops it (07's review, R3). Without a bound a peer that never reports it holds up
+    // the next round for good.
+    uint32_t finalHashWaitMs = 8000;
   };
 
   // What the host's lobby will build the next round from.
@@ -198,6 +213,15 @@ namespace netplay
         END_NETWORK,         // vnet failed
         END_BAD_HOST,        // the host sent something we cannot play
         END_REMOVED          // the host removed us from the lobby (version 2)
+      };
+
+      // Where a machine that joined a round already running is (peer side; JOIN_NONE for everyone else).
+      enum JoinStage
+      {
+        JOIN_NONE,         // not a late joiner (or the round it joined is over and a new one began)
+        JOIN_CATCHING_UP,  // the host's record is arriving and being fast-forwarded (catchingUp())
+        JOIN_WAITING,      // caught up with the live match; READY_AT is being sent
+        JOIN_DONE          // TAKEOVER_AT arrived: from its tick this machine plays grantedSlots() (maybe none: a spectator)
       };
 
       // Hosts a session on `port` of `v` (0 = ephemeral; localPort() tells which). `v`
@@ -326,6 +350,34 @@ namespace netplay
       // fall back to their 10 s timeout.
       void flushOutgoing(uint32_t maxMs = 250);
 
+      // -- joining a round in progress, reconnecting, watching (peer side; brief 13) -----------------------------
+      // The reconnect token the host issued to this machine (WELCOME); 0 before. A game that wants to let a crashed
+      // or dropped player back in keeps it, and passes it as SessionOptions::reconnectToken next time.
+      uint32_t token() const { return m_token; }
+      JoinStage joinStage() const { return m_joinStage; }
+      // The round was already running when we joined and we are still stepping the host's record to catch up. While
+      // true the caller fast-forwards (NetMatch::fastForward) instead of stepping at the clock's pace.
+      bool catchingUp() const { return m_joinStage == JOIN_CATCHING_UP; }
+      // How far the catch-up is, 0..1, from what is stepped and the newest tick the host has said it has confirmed.
+      double catchUpFraction() const;
+      // The newest tick the host has told us it confirmed (grows while catching up).
+      uint32_t catchUpHead() const { return std::max(m_headKnown, m_confirmed); }
+      // Slots the host offered back (reconnect), as said in WELCOME_MIDMATCH.
+      uint8_t offeredSlots() const { return m_offerMask; }
+      // The slots this machine plays now or from the tick TAKEOVER_AT named (bit = slot); 0 for a spectator.
+      uint8_t grantedSlots() const { return m_grantedMask; }
+      // Slots newly granted since the last call, once each: the caller binds its keyboard / pad to them (the sim
+      // gets the HUMAN_TAKES_OVER from the host, in the final inputs; the local layer is the caller's).
+      uint8_t takeGrantedSlots();
+      // True if this machine only watches (SessionOptions::spectate, or no bot was free when it joined).
+      bool spectating() const;
+      // The tick TAKEOVER_AT named (0 before it arrived).
+      uint32_t takeoverTick() const { return m_takeoverTick; }
+      // The tick from which the host waits for this machine's inputs (0: always; ~0u: never).
+      uint32_t participateFrom() const { return m_participateFrom; }
+      // Host: the late joiners / reconnects it has admitted, for display and tests.
+      int hotJoinsAdmitted() const { return m_hotJoins; }
+
       // -- diagnostics -----------------------------------------------------------------------
       struct Stats
       {
@@ -333,6 +385,7 @@ namespace netplay
         uint64_t packetsReceived = 0;
         uint64_t packetsDropped = 0;      // vnet refused a send (EAGAIN/EIO) - a lost packet
         uint64_t badPackets = 0;          // undecodable, wrong session, wrong sender
+        uint64_t inputRecordsSent = 0;    // peer: per-tick input records put on the wire (a spectator sends none)
       };
       const Stats& stats() const { return m_stats; }
       // The RTT to a peer (host side), -1 if none yet.
@@ -371,6 +424,29 @@ namespace netplay
         std::map<uint32_t, uint64_t> hashes;    // checkpoint hashes it reported
         bool ready = false;                     // lobby: it said it is ready
         uint32_t readySeq = 0;                  // the highest READY seq applied
+        // Hot-join, reconnect and spectators (brief 13).
+        bool spectator = false;                 // HELLO_SPECTATE: never dealt a slot, never waited for
+        bool midJoin = false;                   // joined (or reconnected) while a round was running
+        bool verified = false;                  // one of its checksums matched the host's (a late joiner is trusted from then on)
+        bool readyAt = false;                   // READY_AT received
+        uint64_t readyAtSince = 0;
+        uint32_t readyAtTick = 0;
+        uint32_t takeoverTick = 0;              // scheduled: the tick the host starts waiting for it, and its takeover events apply
+        uint8_t takeoverMask = 0;               // the slots dealt to it (0 = a spectator)
+        bool takeoverApplied = false;
+        bool takeoverDecided = false;           // TAKEOVER_AT has been chosen (mask may be 0)
+        uint8_t offerMask = 0;                  // reconnect: its old slots that were still bots when it came back
+        uint8_t lostMask = 0;                   // the slots it owned when it dropped (what a reconnect is offered)
+        uint8_t kickReason = LEAVE_KICKED;      // what a late packet from it is answered with once it is gone
+        uint64_t lastInfoSent = 0;              // WELCOME_MIDMATCH repeats while it catches up
+        uint32_t lastCatchAck = 0;
+        // Whether the host waits for this machine's record for tick t.
+        bool waited(uint32_t t) const
+        {
+          if (spectator) return false;
+          if (!midJoin) return true;
+          return takeoverMask != 0 && takeoverTick != 0 && t >= takeoverTick;
+        }
       };
 
       static bool openSocket(vnet* v, uint16_t port, int* sock, uint16_t* localPort, std::string* error);
@@ -388,6 +464,10 @@ namespace netplay
       void onLobby(const LobbyMsg& msg);
       void onChecksumHost(Member& m, const ChecksumMsg& msg);
       void onReady(Member& m, const ReadyMsg& msg);
+      void onReadyAt(Member& m, const ReadyAtMsg& msg);
+      void onTakeoverAt(const TakeoverAtMsg& msg);
+      void onWelcomeMidMatch(const WelcomeMidMatchMsg& msg);
+      bool supersedes() const;
       void sendReady();
       void onDesync(const DesyncMsg& msg);
 
@@ -398,6 +478,18 @@ namespace netplay
       void hostSend();
       void peerSend();
       void sendTicksTo(Member& m, bool force);
+      void sendCatchUp(Member& m);
+      uint32_t sendTickRange(Member& m, uint32_t from);
+      const TickInputs* confirmedTick(uint32_t t) const;
+      void sendWelcome(Member& m, const vnet_addr& to);
+      void sendReadyAt();
+      HelloMsg makeHello() const;
+      bool admitHotJoiner(int id, const vnet_addr& from, const HelloMsg& h, uint8_t offer, uint32_t token);
+      void dropForRestart(int id);
+      void evictDesynced(int id, const DesyncInfo& d);
+      uint8_t reservedSlots() const;
+      uint8_t freeBotSlots() const;
+      void scheduleTakeover(Member& m);
       void sendStartTo(Member& m);
       void broadcastLobby();
       void sendKeepalives();
@@ -417,7 +509,7 @@ namespace netplay
       void trimHistory();
       void compareChecksum(uint8_t peerId, uint32_t tick);
       void declareDesync(const DesyncInfo& d);
-      void setupRound(const StartMsg& s, uint8_t unused);
+      void setupRound(const StartMsg& s, bool joining);
       bool buildStart(uint64_t seed, StartMsg& out, std::string* error);
       uint32_t newToken();
       static uint32_t lowMs(uint64_t t) { return (uint32_t) (t & 0xFFFFFFFFu); }
@@ -479,7 +571,7 @@ namespace netplay
       uint32_t m_lastHostHashTick = 0;
       std::map<uint32_t, std::vector<int>> m_claims;   // tick -> slots asked for in that tick's record
       std::vector<int> m_rejectedClaims;
-      struct Removed { vnet_addr addr; uint64_t until; uint64_t lastSent; };
+      struct Removed { vnet_addr addr; uint32_t nonce; uint64_t until; uint64_t lastSent; };
       std::vector<Removed> m_removed;             // host: peers it removed from the lobby; answered with LEAVE_REMOVED for a while
       std::vector<ControlEvent> m_hostEvents;     // host: RETURN_TO_AI for peers that left, for the next confirmed tick
 
@@ -496,6 +588,25 @@ namespace netplay
       bool m_wantReady = false;
       uint32_t m_readySeq = 0;
       uint64_t m_lastReadySent = 0;
+
+      // Hot-join (brief 13). Host: every confirmed tick of the round, kept so that a joiner can be sent the record
+      // from tick 1 (m_ticks is trimmed as peers acknowledge).
+      std::vector<TickInputs> m_history;
+      bool m_historyComplete = true;
+      uint64_t m_roundEndedAt = 0;
+      int m_hotJoins = 0;
+      // Peer side.
+      uint32_t m_token = 0;
+      bool m_midJoin = false;
+      JoinStage m_joinStage = JOIN_NONE;
+      uint32_t m_joinRound = 0;
+      uint32_t m_headKnown = 0;
+      uint8_t m_offerMask = 0;
+      uint8_t m_grantedMask = 0;
+      uint8_t m_grantedPending = 0;
+      uint32_t m_takeoverTick = 0;
+      uint32_t m_participateFrom = 0;
+      uint64_t m_lastReadyAtSent = 0;
 
       std::string m_delayNote;
       Stats m_stats;

@@ -57,6 +57,9 @@ struct Options
   std::vector<std::pair<int, uint32_t>> takeovers;   // slot, tick
   uint32_t leaveAt = 0;
   uint32_t perturbAt = 0;
+  bool spectate = false;               // join: watch only
+  uint32_t token = 0;                  // join: the reconnect token of an earlier session with this host
+  std::string tokenFile;               // join: written (once) when the host has issued the token
   int timeoutSecs = 120;
   int waitSecs = 20;
 };
@@ -128,6 +131,9 @@ Options parseOptions(const std::vector<std::string>& args)
     else if (name == "out") o.outDir = value;
     else if (name == "leave-at") o.leaveAt = (uint32_t) number(value, "--leave-at", 1000000);
     else if (name == "perturb-at") o.perturbAt = (uint32_t) number(value, "--perturb-at", 1000000);
+    else if (name == "spectate") o.spectate = value != "0";
+    else if (name == "token") o.token = (uint32_t) number(value, "--token", 0xFFFFFFFFull);
+    else if (name == "token-file") o.tokenFile = value;
     else if (name == "timeout-secs") o.timeoutSecs = (int) number(value, "--timeout-secs", 100000);
     else if (name == "wait-secs") o.waitSecs = (int) number(value, "--wait-secs", 100000);
     else if (name == "takeover")
@@ -181,6 +187,9 @@ class Runner
     bool handleDesync(int* exitCode);
     void beginRound(const netplay::RoundStart& rs);
     void stepOnce();
+    void afterStep();
+    void fastForwardChunk();
+    void saveToken();
     int onEnded();
     void printRoundHeader(const netplay::RoundStart& rs);
     void printRoundEnd();
@@ -205,6 +214,8 @@ class Runner
     uint64_t m_peersReadyAt = 0;
     uint64_t m_doneAt = 0;
     bool m_lingering = false;
+    bool m_tokenSaved = false;
+    bool m_wasCatchingUp = false;
     std::string m_desyncNote;
 };
 
@@ -236,6 +247,8 @@ bool Runner::setup()
   so.tickMs = m_o.tickMs;
   so.fixedDelay = m_o.delay;
   so.requireReady = m_o.requireReady && m_o.host;
+  so.spectate = m_o.spectate && !m_o.host;
+  so.reconnectToken = m_o.token;
   std::string error;
   if (m_o.host)
   {
@@ -341,6 +354,47 @@ void Runner::beginRound(const netplay::RoundStart& rs)
         << ", delay " << rs.delay << " (" << m_session->delayNote() << ")\n";
 }
 
+// A late joiner steps the host's record without a clock (NetMatch::fastForward), in slices short enough for the network to
+// keep being served between them, printing exactly what a machine that stepped those ticks live printed.
+void Runner::fastForwardChunk()
+{
+  const uint64_t until = now() + 20;
+  for (int i = 0; i < 400 && now() < until; i++)
+  {
+    if (m_o.perturbAt != 0 && m_sim.tick() + 1 == m_o.perturbAt)
+    {
+      perturbSimulation(m_sim);   // (test only) a joiner whose state is wrong from here on
+      m_err << "perturbed the state before tick " << m_o.perturbAt << "\n";
+    }
+    if (m_net->fastForward(1) == 0)
+    {
+      break;
+    }
+    afterStep();
+    if (!m_net->active())
+    {
+      break;
+    }
+  }
+}
+
+void Runner::saveToken()
+{
+  if (m_tokenSaved || m_o.tokenFile.empty() || m_session->token() == 0)
+  {
+    return;
+  }
+  const std::string tmp = m_o.tokenFile + ".tmp";
+  {
+    std::ofstream f(tmp.c_str());
+    f << m_session->token() << "\n";
+  }
+  if (std::rename(tmp.c_str(), m_o.tokenFile.c_str()) == 0)
+  {
+    m_tokenSaved = true;
+  }
+}
+
 void Runner::printRoundEnd()
 {
   const std::shared_ptr<PlayerCharacterEntity> w = m_sim.winner();
@@ -384,7 +438,15 @@ void Runner::stepOnce()
     perturbSimulation(m_sim);
     m_err << "perturbed the state before tick " << m_o.perturbAt << "\n";
   }
-  const TickInputs& stepped = m_net->step(sample, mask);
+  m_net->step(sample, mask);
+  afterStep();
+}
+
+// What every machine prints after a tick, the late joiner's fast-forwarded ones included: the events of the tick, a
+// checkpoint line, and the end of the round.
+void Runner::afterStep()
+{
+  const TickInputs& stepped = m_net->lastInputs();
   for (const ControlEvent& e : stepped.control)
   {
     m_out << "event " << m_net->round().round << " " << m_sim.tick() << " slot " << e.slot << " " << kindName(e.kind) << "\n";
@@ -512,6 +574,22 @@ int Runner::run()
       // A host opened from the game's menus waits for every peer to say ready (protocol 2); this runner has
       // nobody to press a button, so it is ready as soon as it is in a lobby (a no-op once it is).
       m_session->setReady(true);
+    }
+    saveToken();
+    if (m_session->state() == LockstepSession::RUNNING && m_session->catchingUp() && m_net->active() && !m_session->desynced())
+    {
+      if (!m_wasCatchingUp)
+      {
+        m_wasCatchingUp = true;
+        m_err << "joined a round in progress; catching up to tick " << m_session->catchUpHead() << "\n";
+      }
+      fastForwardChunk();
+      continue;   // no sleep: the next slice, after the network has had its turn
+    }
+    if (m_wasCatchingUp && !m_session->catchingUp())
+    {
+      m_wasCatchingUp = false;
+      m_err << "caught up at tick " << m_session->nextStepTick() - 1 << "\n";
     }
     if (m_session->state() == LockstepSession::RUNNING && m_net->active() && !m_session->desynced())
     {

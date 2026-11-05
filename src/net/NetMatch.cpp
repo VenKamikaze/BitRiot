@@ -1,5 +1,6 @@
 #include "NetMatch.h"
 
+#include <chrono>
 #include <fstream>
 #include <sstream>
 
@@ -65,15 +66,18 @@ const TickInputs& NetMatch::step(const TickInputs& localSample, uint8_t sampledM
     const uint64_t hash = m_sim.stateHash();
     m_lastCheckpointTick = tick;
     m_lastCheckpointHash = hash;
-    Dump d;
-    d.tick = tick;
-    std::ostringstream text;
-    m_sim.dumpState(text);
-    d.text = text.str();
-    m_dumps.push_back(std::move(d));
-    while (m_dumps.size() > m_opt.dumpRingSize)
+    if (!m_fastForwarding || last)
     {
-      m_dumps.pop_front();
+      Dump d;
+      d.tick = tick;
+      std::ostringstream text;
+      m_sim.dumpState(text);
+      d.text = text.str();
+      m_dumps.push_back(std::move(d));
+      while (m_dumps.size() > m_opt.dumpRingSize)
+      {
+        m_dumps.pop_front();
+      }
     }
     m_session.reportChecksum(tick, hash);
   }
@@ -88,6 +92,27 @@ const TickInputs& NetMatch::step(const TickInputs& localSample, uint8_t sampledM
     m_session.roundFinished();
   }
   return m_lastInputs;
+}
+
+uint32_t NetMatch::fastForward(uint32_t maxTicks, uint32_t budgetMicros)
+{
+  typedef std::chrono::steady_clock Clock;
+  const Clock::time_point start = Clock::now();
+  uint32_t n = 0;
+  m_fastForwarding = true;
+  struct Reset { bool& flag; ~Reset() { flag = false; } } reset{m_fastForwarding};
+  while (n < maxTicks && m_active && m_session.canStep() && !m_session.ended())
+  {
+    step(TickInputs(), 0);
+    n++;
+    // The clock is read every 8 ticks: a tick costs microseconds, a clock read is not free.
+    if (budgetMicros != 0 && (n & 7u) == 0
+        && std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - start).count() >= (long long) budgetMicros)
+    {
+      break;
+    }
+  }
+  return n;
 }
 
 const MatchRecord& NetMatch::record()

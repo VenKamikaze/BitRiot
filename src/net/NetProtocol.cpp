@@ -240,6 +240,9 @@ std::string messageName(uint8_t type)
     case MSG_KEEPALIVE: return "KEEPALIVE";
     case MSG_LEAVE: return "LEAVE";
     case MSG_READY: return "READY";
+    case MSG_WELCOME_MIDMATCH: return "WELCOME_MIDMATCH";
+    case MSG_READY_AT: return "READY_AT";
+    case MSG_TAKEOVER_AT: return "TAKEOVER_AT";
     default: return "type " + std::to_string((int) type);
   }
 }
@@ -254,6 +257,7 @@ void encode(Writer& w, const HelloMsg& m)
   w.u8(m.localPlayers);
   w.u32(m.nonce);
   w.u32(m.token);
+  w.u8(m.flags);
   w.str(m.name);
 }
 
@@ -265,8 +269,9 @@ bool decode(Reader& r, HelloMsg& m)
   m.localPlayers = r.u8();
   m.nonce = r.u32();
   m.token = r.u32();
+  m.flags = r.u8();
   m.name = r.str();
-  return r.done();
+  return r.done() && (m.flags & ~HELLO_SPECTATE) == 0;
 }
 
 bool decodeHelloVersion(const uint8_t* body, size_t size, uint16_t& version)
@@ -651,5 +656,54 @@ bool decode(Reader& r, ReadyMsg& m)
   const uint8_t ready = r.u8();
   m.ready = ready != 0;
   return r.done() && ready <= 1;
+}
+
+void encode(Writer& w, const WelcomeMidMatchMsg& m)
+{
+  w.u32(m.nonce);
+  w.u8(m.peerId);
+  w.u32(m.token);
+  w.u16(m.round);
+  w.u32(m.head);
+  w.u8(m.offerMask);
+}
+
+bool decode(Reader& r, WelcomeMidMatchMsg& m)
+{
+  m.nonce = r.u32();
+  m.peerId = r.u8();
+  m.token = r.u32();
+  m.round = r.u16();
+  m.head = r.u32();
+  m.offerMask = r.u8();
+  return r.done() && m.peerId != HOST_ID && m.peerId < MAX_PEERS && m.round != 0 && (m.offerMask & ~0x3Fu) == 0;
+}
+
+void encode(Writer& w, const ReadyAtMsg& m)
+{
+  w.u16(m.round);
+  w.u32(m.tick);
+}
+
+bool decode(Reader& r, ReadyAtMsg& m)
+{
+  m.round = r.u16();
+  m.tick = r.u32();
+  return r.done();
+}
+
+void encode(Writer& w, const TakeoverAtMsg& m)
+{
+  w.u16(m.round);
+  w.u32(m.tick);
+  w.u8(m.slotMask);
+}
+
+bool decode(Reader& r, TakeoverAtMsg& m)
+{
+  m.round = r.u16();
+  m.tick = r.u32();
+  m.slotMask = r.u8();
+  return r.done() && (m.slotMask & ~0x3Fu) == 0;
 }
 } // namespace netplay
