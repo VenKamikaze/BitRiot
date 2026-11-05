@@ -22,7 +22,7 @@ The goal is deterministic lockstep online multiplayer for Bit Riot, a browser (W
   - **Saved settings:** `netplay.txt` (`key=value`) under `SDL_GetPrefPath`, native only. `NetGame::pump()` now restores the player's own settings as soon as a session ends (a 07 gap).
   - **Review:** one Opus review (merge after fixes, nothing blocking), one fix round of 11 items, one re-review (merge). Its four nits are follow-ups in 08's Outcome; the one behavioural one (removing a machine still CONNECTING whose WELCOME was lost does not stick) fits 13.
   - **Not changed:** no `bitriot_sim` source; build id `0x6767612d056ba8af`.
-  - **Trailers:** 9 of 08's commits lack the session trailer lines (the implementer's history rewrite could not be force-pushed and was not); the merge commit carries them. A local-only branch `netplay/08-lobby-ui-retrailered` holds the rewritten copy; delete it if the user doesn't want it.
+  - **Trailers:** 9 of 08's commits lack the session trailer lines; the merge commit carries them. The user is fine with that (no rewrite).
 - **07, native lockstep netplay** (merge 0ccdb66):
   - **vnet `v0.4.0` is a git submodule at `ext/vnet`.** In an existing checkout run `git submodule update --init ext/vnet`. `BITRIOT_NETPLAY` is AUTO/ON/OFF: AUTO turns netplay on when the submodule is present and is re-evaluated at every configure. It is OFF for Emscripten and MinGW and in the 05b gate.
   - **`bitriot_net`** (`src/net/`, outside `bitriot_sim`): the wire protocol, `LockstepSession` (host and peer, no SDL, no `Simulation`) and `NetMatch` (drives the `Simulation`, records final inputs, keeps a ring of 16 state dumps).
@@ -46,7 +46,10 @@ The goal is deterministic lockstep online multiplayer for Bit Riot, a browser (W
 
 **Next ready: 12** (browser netplay, needs 07, 08, 09, 10 and 14) **and 13** (disconnects and hot-join, needs 05, 07 and 08). They can run in parallel in separate worktrees; whichever merges second merges `claude` in before its review. Read 07's and 08's Outcomes first (both have follow-up lists for 12 and 13). 12 may need vnet changes; brief them in vnet's `doco/` if so.
 
-**In flight:** nothing. Every feature branch in both repos is merged.
+**In flight (started 5 Nov 2026, in parallel):**
+- **12** in worktree `/home/user/wt/12`, branch `netplay/12-browser`; any vnet changes go in `/home/user/wt/vnet-12`, branch `vnet/12-browser-netplay`.
+- **13** in worktree `/home/user/wt/13`, branch `netplay/13-hot-join`. 13 owns the bump to `PROTOCOL_VERSION` 3; 12 avoids wire changes if it can.
+- Both implementers push their branches after every commit. If the session restarts, check the branches' logs and Outcomes, then resume with a review. Whichever merges second merges `claude` in before its review.
 
 **Decisions taken while the user was away** (they may revisit them; the details are in each brief's Outcome):
 
@@ -96,7 +99,7 @@ The goal is deterministic lockstep online multiplayer for Bit Riot, a browser (W
 
    The steps are at the end of 07's Outcome.
 3b. **Lobby play-test (08):** the same two windows, driven from the menus (`XDG_DATA_HOME=/tmp/alice-data ./BitRiot` and `XDG_DATA_HOME=/tmp/bob-data ./BitRiot`): host and join forms, ready, settings and teams, a match with the overlay, leaving, the scoreboard's Next round and Back to lobby, removing a peer, the error pages, saved settings, and your own settings surviving. The 12 steps are at the end of 08's Outcome; it can be done in the same sitting as 07's.
-4. **vnet `claude` → `main`** merge: the user's call.
+4. ~~**vnet `claude` → `main`**~~ **Done** at the user's request: vnet `main` 12c8cec (`--no-ff`, same tree as `claude` 579a410).
 5. **Tags:** the cloud session can't push tags (HTTP 403), so the user tags any future vnet release from a PC. The releasing brief's Outcome gives the commands. No tag was needed in this session.
 
 **Known open issues:**
