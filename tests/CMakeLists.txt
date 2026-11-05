@@ -51,9 +51,17 @@ set(CORE_TEST_SOURCES
   GameOptionsTest.cpp
 )
 
+# Netplay (brief 07): the wire format and the lockstep session, on vnet's loopback network.
+if(BITRIOT_NETPLAY)
+  list(APPEND SIM_TEST_SOURCES NetProtocolTest.cpp LockstepSessionTest.cpp)
+endif()
+
 add_library(bitriot_sim_test_objs OBJECT ${SIM_TEST_SOURCES})
 target_include_directories(bitriot_sim_test_objs PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(bitriot_sim_test_objs PRIVATE bitriot_sim bitriot_headless_cli GTest::gtest)
+if(BITRIOT_NETPLAY)
+  target_link_libraries(bitriot_sim_test_objs PRIVATE bitriot_net)
+endif()
 
 # The whole project builds as C++17 (CMAKE_CXX_STANDARD in the top-level
 # CMakeLists.txt), which GoogleTest >= 1.17 requires.
@@ -125,3 +133,24 @@ add_test(
   COMMAND bitriot_sim_tests
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
 )
+
+# Netplay across real processes (brief 07): several bitriot_headless processes over UDP on
+# 127.0.0.1 with simulated loss. Its own executable and ctest entry, because it takes a
+# few tens of seconds of real time; tests/README.md says how to run it on its own.
+if(BITRIOT_NETPLAY)
+  add_executable(bitriot_netplay_process_tests NetplayProcessTest.cpp)
+  target_include_directories(bitriot_netplay_process_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  target_compile_definitions(bitriot_netplay_process_tests PRIVATE ${BITRIOT_TEST_DEFINITIONS})
+  target_compile_options(bitriot_netplay_process_tests PRIVATE ${BITRIOT_TEST_WARNINGS})
+  target_link_libraries(bitriot_netplay_process_tests PRIVATE bitriot_sim GTest::gtest GTest::gtest_main)
+  add_dependencies(bitriot_netplay_process_tests bitriot_headless)
+  if(TARGET bitriot_runtime_links)
+    add_dependencies(bitriot_netplay_process_tests bitriot_runtime_links)
+  endif()
+  add_test(
+    NAME bitriot_netplay_process_tests
+    COMMAND bitriot_netplay_process_tests
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+  )
+  set_tests_properties(bitriot_netplay_process_tests PROPERTIES TIMEOUT 600)
+endif()

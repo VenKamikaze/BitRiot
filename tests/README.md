@@ -18,7 +18,8 @@ tests:
 | Executable | Links | Contains |
 | --- | --- | --- |
 | `bitriot_sim_tests` | `bitriot_sim` (plus the small `bitriot_headless_cli` library) and GoogleTest only: no SDL, no RmlUi, no OpenGL | every simulation test (round lifecycle, AI, win conditions, fixed-point maths, `Simulation`, the state hash, `step(inputs)` and its apply rules, the guards, `Map`, the sound seam, `step(inputs)` with control events, `hitThisTick`, and since brief 05 the match record, replay, golden round, data hash, build id and `bitriot_headless` tests) |
-| `bitriot_tests` | the whole game (`bitriot_core`) | the same simulation tests, plus the ones that need the game: `ScoreboardLayoutTest`, `ScoreboardRandomTest`, `FrameLoopTest`/`TickPacerTest`, `RenderSideTest`, `InputSamplerTest` (the sampler and the key/pad routing), `InputControlTest` (join, takeover, unplug and rumble through the input layer, with a fake rumble device), `GameOptionsTest` (the game's `getopt_long` command line, `--record`) |
+| `bitriot_tests` | the whole game (`bitriot_core`) | the same simulation tests, plus the ones that need the game: `ScoreboardLayoutTest`, `ScoreboardRandomTest`, `FrameLoopTest`/`TickPacerTest`, `RenderSideTest`, `InputSamplerTest` (the sampler and the key/pad routing), `InputControlTest` (join, takeover, unplug and rumble through the input layer, with a fake rumble device), `GameOptionsTest` (the game's `getopt_long` command line, `--record`, `--host`/`--join`) |
+| `bitriot_netplay_process_tests` | `bitriot_sim` and GoogleTest; starts `bitriot_headless` processes | the multi-process netplay test (about a minute; see "Netplay" below). Only with netplay built |
 
 The simulation tests are compiled once (an object library) and linked into both.
 `bitriot_sim_tests` linking at all is a proof that the simulation needs no SDL; it
@@ -603,6 +604,30 @@ with no clamp, so on a short map players' HUD blits off the bottom of the
 surface, and even dimensions violate the odd-map invariant `Map::init`'s pillar
 grid assumes. The harness has no `InfoPanel` and no start-gate, so neither
 applies here.
+
+## Netplay (brief 07)
+
+Three layers, from the wire to the whole stack. All of it needs vnet (the `ext/vnet` submodule); with `-DBITRIOT_NETPLAY=OFF` none of it is built.
+
+| File | In | What it proves |
+| --- | --- | --- |
+| `NetProtocolTest.cpp` | both executables | every message round-trips; the layout of the header, the scalars and each message is pinned (so `doco/netplay/protocol.md` cannot drift); every message cut at every length, or with a byte added, is refused; counts that do not fit are refused before anything is allocated; 3,000 fuzzed datagrams crash no decoder |
+| `LockstepSessionTest.cpp` | both executables | `LockstepSession` with N fake machines in **one process** on vnet's loopback network, in **virtual time** (nothing sleeps; `tests/support/SessionHarness.h`). Each machine has a fake game: it samples a deterministic byte per (slot, tick, machine), steps when `canStep()` allows, and logs the `TickInputs` it stepped. The assertions compare the logs: identical on every machine, in order, each slot's bytes from its owner exactly D ticks late |
+| `NetplayProcessTest.cpp` | its own executable, `bitriot_netplay_process_tests` | 2 and 3 real `bitriot_headless` processes over UDP on 127.0.0.1, ephemeral ports, `VNET_IMPAIR` (own seed per process), real time |
+
+`LockstepSessionTest` covers: identical, in-order inputs at 0, 5 and 20% loss with duplication, reordering and jitter at 80 ms latency (D chosen by the host: at least 6), burst loss, 12 seeds of 25% loss with 4 machines and a different number of players each, the last ticks of a round under 35% loss, late repeats of one round arriving in the next; a blackout stalling everyone and the match resuming identical; a paused peer stalling the others (and the host naming it); the backlog never exceeding D; the choice of D from simulated round trips (0 to 300 ms each way, and the slowest peer setting it); a peer leaving and one timing out becoming `RETURN_TO_AI` on the same tick everywhere and nobody waiting for it again; host loss detected after 10 s, a host that leaves telling the peers at once; version, build id and data-hash mismatches rejected (with the host's numbers in the answer), a full session, a join mid-round, a `HELLO` repeated by a lossy link being one peer; takeovers with only the first claim winning; a **hostile peer written on a raw socket** unable to put an event the simulation would refuse into a tick; keepalives keeping an idle lobby and a scoreboard alive for 60 and 45 virtual seconds; forged and stray packets changing nothing; a checksum difference stopping every machine at the first checkpoint after it, under 0 and 20% loss, and one in the round's last ticks (reported as the round ends) still detected; a peer that floods one bot slot with events, or only garbage, unable to freeze or outlive the others.
+
+**The multi-process test is slow (about a minute), so it is not in `bitriot_tests` or `bitriot_sim_tests`.** It is its own ctest entry, which `ctest` runs (with a 10-minute timeout), and which the coordinator runs before a merge:
+
+```
+cd build && cmake --build . -j4 && ctest --output-on-failure         # all three entries
+./tests/bitriot_netplay_process_tests                                # the multi-process test alone
+./tests/bitriot_netplay_process_tests --gtest_filter='*Desync*'      # one case
+```
+
+It needs `bitriot_headless` built (the target depends on it) and runs from the repository root, like the others. Its cases: two processes playing **two rounds** under 5% loss (the host starts the second), printing byte-identical output (every checkpoint hash and the winner), with the two machines' round records byte-identical and replayable by `bitriot_headless replay`; three processes with two local players on one, a bot taken over at tick 200 and a peer that quits at tick 600 (its slots become bots on the same tick for the others); a **desync**: one peer's state is changed before tick 355, and at tick 360 all three print the same `desync` line and write the state dumps and the record; the same setup unperturbed does not desync; the host choosing D from a 120 ms round trip; and the host process killed mid-round, with the peer exiting 1 with "lost the connection to the host".
+
+**Proving the session tests fail without the code.** The new API cannot be compiled against the old code, so, as for brief 05, mutations were applied one at a time to `LockstepSession.cpp` and the session tests re-run. All 20 were killed (the harness is a scratch script, not committed): packets that never repeat (18 tests: every loss case and the desync-under-loss case); the merge ignoring slot ownership; a takeover of a taken slot, and a give-back by a non-owner; no timeout for a silent peer, no host-loss detection, the host still waiting for a gone peer, no `RETURN_TO_AI` for a leaver; a mismatch of build id, data hash or protocol version not refused; no desync comparison, no DESYNC sent; D without its `+ 1`; the catch-up rule asking for one extra tick; the host ignoring a peer's acks (18 tests); a new round starting before peers hold the last tick; another round's ticks accepted; a hostile peer's out-of-roster event let through; no repeats between rounds. Four survived the first version of the tests and each got a test (the harness's sample bytes now differ per machine, so ownership shows; the late-repeat, last-ticks and hostile-peer tests): see the Outcome of the brief. The negative control of D7 itself is `WithoutRedundancyLossStallsTheMatchForGood`, with `WithoutRedundancyAndWithoutLossItStillWorks` showing that it is the loss, not the switch.
 
 ## Proving a test can fail
 

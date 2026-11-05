@@ -40,7 +40,7 @@ InputHandler::~InputHandler()
 }
 
 void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerCharacters,
-                               JoinIndicatorView * panel)
+                               JoinIndicatorView * panel, uint32_t humanSlotsHere)
 {
   //m_numPlayers = playerCharacters.size();
   p_players = playerCharacters;
@@ -91,14 +91,20 @@ void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerC
     // on it is this class's own mapping (brief 04b), changed by takeovers and unplugs.
     Player * setup = settings->getPlayer(canonicalIndex);
     m_slotController[slot] = setup->attachedControllerId;
-    if (!player->isControlledByAI())
+    // A human on another machine (netplay) is not read here: no local slot, no pad, no keys.
+    const bool humanHere = !player->isControlledByAI() && (humanSlotsHere & (1u << slot)) != 0;
+    if (!player->isControlledByAI() && !humanHere)
     {
-      m_localSlots |= (1u << slot); // every human is local today
+      m_slotController[slot] = -1;
+    }
+    if (humanHere)
+    {
+      m_localSlots |= (1u << slot);
     }
 
     // Keyboard sets go only to human players without a controller: AI players
     // are never driven by the keyboard, and controller players use the pad.
-    if(player->isControlledByAI() || m_slotController[slot] != -1)
+    if(!humanHere || m_slotController[slot] != -1)
     {
       continue;
     }
@@ -502,7 +508,7 @@ bool InputHandler::processJoinControllerEvent(int controllerId, Uint8 button)
     {
       confirmJoin(pendingIndex);
     }
-    else
+    else if (!(m_padsBindOwn && bindPadToOwnSlot(controllerId)))
     {
       openJoin(true, controllerId);
     }
@@ -530,6 +536,39 @@ bool InputHandler::processJoinControllerEvent(int controllerId, Uint8 button)
 
   // Any other button from an unbound controller is eaten (it has no player yet).
   return true;
+}
+
+bool InputHandler::bindPadToOwnSlot(int controllerId)
+{
+  for (int slot = 0; slot < (int) p_players.size() && slot < std::GameSettings::MAX_PLAYERS; slot++)
+  {
+    const shared_ptr<PlayerCharacterEntity>& player = p_players.at(slot);
+    if (player && player->isAlive() && isLocalSlot(slot) && m_slotController[slot] == -1)
+    {
+      m_slotController[slot] = controllerId;
+      m_keyMap.erase(slot);        // the pad drives it now; the keyboard set is free again
+      m_sampler.clearSlot(slot);
+      setJoinIndicator(slot + 1, InfoPanel::JOIN_READY, InfoPanel::JOIN_DEVICE_CONTROLLER);
+      MickLogger::getInstance()->debug(this, string("Controller ").append(to_string(controllerId))
+        .append(" bound to this machine's own slot ").append(to_string(slot)));
+      return true;
+    }
+  }
+  return false;
+}
+
+void InputHandler::revokeSlot(int slot)
+{
+  if (slot < 0 || slot >= std::GameSettings::MAX_PLAYERS)
+  {
+    return;
+  }
+  m_slotController[slot] = -1;
+  m_keyMap.erase(slot);
+  m_localSlots &= ~(1u << slot);
+  m_sampler.clearSlot(slot);
+  setJoinIndicator(slot + 1, InfoPanel::JOIN_NONE);
+  MickLogger::getInstance()->debug(this, string("Takeover of slot ").append(to_string(slot)).append(" was not granted: it is not ours"));
 }
 
 void InputHandler::detachController(int controllerId)

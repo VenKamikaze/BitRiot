@@ -82,6 +82,8 @@ class InputControlTest : public HeadlessGameTest
     }
 
     // START opens a selector for a pad that drives nobody, START again confirms it.
+    void joinWith1Start(int pad) { m_handler->processJoinControllerEvent(pad, SDL_CONTROLLER_BUTTON_START); }
+
     void joinWithPad(int pad)
     {
       m_handler->processJoinControllerEvent(pad, SDL_CONTROLLER_BUTTON_START);
@@ -104,6 +106,90 @@ class InputControlTest : public HeadlessGameTest
     FakeRumble m_rumble;
     RecordingView m_view;
 };
+
+// ---------------------------------------------------------------------------
+// Network play (brief 07): a human on another machine is not read here
+// ---------------------------------------------------------------------------
+
+TEST_F(InputControlTest, AHumanOnAnotherMachineGetsNoKeysNoPadAndNoLocalSlot)
+{
+  configurePlayers(4);
+  std::GameSettings* settings = std::GameSettings::getInstance();
+  settings->setPlayerAI(0, false);
+  settings->setPlayerAI(1, false);
+  settings->setPlayerAI(2, false);
+  settings->setPlayerController(1, PAD);
+  settings->setNpcSpawnerEnabled(false);
+  startRound();
+  m_handler = std::make_unique<InputHandler>();
+  m_handler->setRumble(&m_rumble);
+  // Slots 0 and 2 are played here; slot 1 (with a pad in the menu) is a player on another machine.
+  m_handler->setPointers(allPlayers(), &m_view, (1u << 0) | (1u << 2));
+
+  EXPECT_TRUE(m_handler->isLocalSlot(0));
+  EXPECT_FALSE(m_handler->isLocalSlot(1));
+  EXPECT_TRUE(m_handler->isLocalSlot(2));
+  EXPECT_EQ(m_handler->localSlotMask(), 0b101u);
+  EXPECT_EQ(m_handler->controllerForSlot(1), -1) << "the menu's pad for slot 1 means nothing in a network game";
+  EXPECT_EQ(m_handler->m_keyMap.count(1), 0u);
+  EXPECT_EQ(m_handler->m_keyMap.count(0), 1u);
+  EXPECT_EQ(m_handler->m_keyMap.count(2), 1u);
+  // The two local players got two different keyboard sets.
+  EXPECT_NE(m_handler->m_keyMap.at(0)[InputHandler::UP_KEY], m_handler->m_keyMap.at(2)[InputHandler::UP_KEY]);
+
+  // A key of the remote player's would-be set does nothing; the local ones sample.
+  m_handler->keyboardEvent(m_handler->m_keyMap.at(0)[InputHandler::UP_KEY], true);
+  const TickInputs t = m_handler->sampleTick();
+  EXPECT_TRUE(t.slot[0].held(PlayerInput::UP));
+  EXPECT_EQ(t.slot[1].bits, 0);
+  // The pad of the remote slot's menu entry cannot be bound to a slot that is not ours.
+  EXPECT_EQ(m_handler->getPlayerAttachedToController(PAD), nullptr);
+}
+
+TEST_F(InputControlTest, InANetworkGameAPadsStartBindsItToThisMachinesOwnSlotsBeforeAnyBot)
+{
+  configurePlayers(4);
+  std::GameSettings* settings = std::GameSettings::getInstance();
+  settings->setPlayerAI(0, false);
+  settings->setPlayerAI(1, false);
+  settings->setPlayerAI(2, false);
+  settings->setNpcSpawnerEnabled(false);
+  startRound();
+  m_handler = std::make_unique<InputHandler>();
+  m_handler->setPointers(allPlayers(), &m_view, (1u << 0) | (1u << 2));   // slots 0 and 2 are ours, 1 is remote, 3 a bot
+  m_handler->setPadsMayBindOwnSlots(true);
+  EXPECT_EQ(m_handler->m_keyMap.count(0), 1u);
+
+  joinWith1Start(NEW_PAD);   // first START: our lowest slot, locally only
+  EXPECT_EQ(m_handler->controllerForSlot(0), NEW_PAD);
+  EXPECT_EQ(m_handler->m_keyMap.count(0), 0u) << "the pad drives it; its keyboard set is free";
+  EXPECT_TRUE(m_handler->sampleTick().control.empty()) << "a local binding is no control event";
+  joinWith1Start(OTHER_PAD); // second pad: our next slot
+  EXPECT_EQ(m_handler->controllerForSlot(2), OTHER_PAD);
+  joinWith1Start(11);        // no slot of ours is left: the selector opens for the bot
+  joinWith1Start(11);        // and START again takes slot 3 over (a real takeover event)
+  const TickInputs t = m_handler->sampleTick();
+  ASSERT_EQ(t.control.size(), 1u);
+  EXPECT_EQ(t.control[0], ControlEvent(3, ControlEvent::HUMAN_TAKES_OVER));
+  // The pad now drives slot 0: its button reaches the sampler.
+  m_handler->setControllerButtonState(0, InputHandler::UP_KEY, true);
+  EXPECT_TRUE(m_handler->sampleTick().slot[0].held(PlayerInput::UP));
+}
+
+TEST_F(InputControlTest, WithoutThatFlagStartStillOnlyOpensTheSelector)
+{
+  startRound4();
+  m_handler->processJoinControllerEvent(NEW_PAD, SDL_CONTROLLER_BUTTON_START);
+  EXPECT_EQ(m_handler->controllerForSlot(0), -1) << "local play: START never grabs a human's slot";
+}
+
+TEST_F(InputControlTest, TheDefaultStillMeansEveryHumanIsLocal)
+{
+  startRound4();   // setPointers(players, view) with no mask: the single-machine game
+  EXPECT_TRUE(m_handler->isLocalSlot(0));
+  EXPECT_TRUE(m_handler->isLocalSlot(1));
+  EXPECT_EQ(m_handler->localSlotMask(), 0b0011u);
+}
 
 // ---------------------------------------------------------------------------
 // Joining

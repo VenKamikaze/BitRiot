@@ -224,7 +224,7 @@ build_variant() { # variant ; sets BINPATH; returns 0 on success
     [ "$kind" = same-binary ] && return 0
     pick_generator "$dir"
     local -a cfg=(-S "$root" -B "$dir" "${GEN[@]}" -DCMAKE_BUILD_TYPE=Gate -DBITRIOT_BUILD_GAME=OFF -DBITRIOT_BUILD_TESTS=OFF
-                  "-DCMAKE_CXX_FLAGS=${FLAGS[$v]}" "-DCMAKE_EXE_LINKER_FLAGS=${LDFLAGS[$v]:-}")
+                  -DBITRIOT_NETPLAY=OFF "-DCMAKE_CXX_FLAGS=${FLAGS[$v]}" "-DCMAKE_EXE_LINKER_FLAGS=${LDFLAGS[$v]:-}")
     local launcher=()
     case "$kind" in
         native-gcc)   cfg+=(-DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++); BINPATH[$v]="$dir/bitriot_headless" ;;
@@ -234,7 +234,7 @@ build_variant() { # variant ; sets BINPATH; returns 0 on success
                       BINPATH[$v]="$dir/bitriot_headless" ;;
         wasm)         launcher=(emcmake)
                       cfg=(-S "$root" -B "$dir" "${GEN[@]}" -DCMAKE_BUILD_TYPE=Gate -DBITRIOT_BUILD_GAME=OFF -DBITRIOT_BUILD_TESTS=OFF
-                           "-DCMAKE_CXX_FLAGS=${FLAGS[$v]}" "-DCMAKE_EXE_LINKER_FLAGS=${FLAGS[$v]} $WASM_LINK")
+                           -DBITRIOT_NETPLAY=OFF "-DCMAKE_CXX_FLAGS=${FLAGS[$v]}" "-DCMAKE_EXE_LINKER_FLAGS=${FLAGS[$v]} $WASM_LINK")
                       BINPATH[$v]="$dir/bitriot_headless.js" ;;
     esac
     {

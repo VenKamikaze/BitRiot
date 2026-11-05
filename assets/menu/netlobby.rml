@@ -1,0 +1,18 @@
+<rml>
+  <head>
+    <title>Network game</title>
+    <link rel="stylesheet" type="text/css" href="rkt.rcss"/>
+    <link rel="stylesheet" type="text/css" href="common.rcss"/>
+    <link type="text/rcss" href="netlobby.rcss"/>
+  </head>
+  <body class="background">
+    <div class="menu-container">
+      <div class="menu">
+        <h2 id="nettitle">Network game</h2>
+        <div id="netlobbytext"></div>
+        <button class="tabbed" id="netstart" autofocus tabindex="1" onclick="netstart">Start match</button><br />
+        <button class="tabbed" id="netleave" tabindex="2" escapeAction="1" onclick="netleave">Leave</button><br />
+      </div>
+    </div>
+  </body>
+</rml>

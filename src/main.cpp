@@ -67,6 +67,8 @@ static void shutdownGame();
 unique_ptr<GameEngine> engine = nullptr;
 // --record <dir> (GameOptions): handed to the engine when it is made.
 static std::string recordDirectory;
+// --host / --join (brief 07): handed to the engine once the menus exist.
+static GameOptions netOptions;
 unique_ptr<FrameLoop> frameLoop = nullptr;
 
 // FUNCTIONS //////////////////////////////////////////////
@@ -165,6 +167,7 @@ static void applyOptions(const GameOptions& options)
     GameSettings::getInstance()->setMapHeight(19);
   }
   recordDirectory = options.recordDir;
+  netOptions = options;
 }
 
 // One pass of the main loop: lock the back buffer, run frame(), present, unlock.
@@ -211,6 +214,9 @@ static void shutdownGame()
   {
     if(engine)
     {
+#ifdef BITRIOT_NETPLAY
+      engine->stopNetplay(); // tell the others we are gone, and put the player's settings back
+#endif
       engine->finishRecording(); // the window was closed mid-round: keep what was played
     }
 
@@ -293,6 +299,14 @@ int main(int argc, char* argv[])
         return 2;
       }
     }
+#ifndef BITRIOT_NETPLAY
+    if(options.networked())
+    {
+      // Before any window opens: this build cannot do what was asked.
+      std::cerr << "This build has no network play (it was configured with BITRIOT_NETPLAY=OFF)." << std::endl;
+      return 2;
+    }
+#endif
     applyOptions(options);
   }
 
@@ -306,6 +320,31 @@ int main(int argc, char* argv[])
 
     frameLoop = make_unique<FrameLoop>(engine->frameHooks(clockMs),
                                        (uint32_t) GameSettings::NORMAL_TICKS_SPEED);
+
+    if(netOptions.networked())
+    {
+#ifdef BITRIOT_NETPLAY
+      NetGame::Params net;
+      net.host = netOptions.host;
+      net.port = (uint16_t) netOptions.hostPort;
+      net.join = netOptions.join;
+      net.name = netOptions.name;
+      net.localPlayers = netOptions.localPlayers;
+      net.totalSlots = netOptions.players;
+      std::string netError;
+      if(!engine->startNetplay(net, &netError))
+      {
+        cerr << "Cannot start network play: " << netError << endl;
+        shutdownGame();
+        return 2;
+      }
+      frameLoop->setHeldPollMs(4);
+#else
+      cerr << "This build has no network play (it was configured with BITRIOT_NETPLAY=OFF)." << endl;
+      shutdownGame();
+      return 2;
+#endif
+    }
   }
   catch(const exception &e)
   {
@@ -349,7 +388,14 @@ int main(int argc, char* argv[])
         const uint32_t sleepMs = frameLoop->sleepHintMs();
         if(sleepMs > 0)
         {
-          SDL_Delay(sleepMs);
+#ifdef BITRIOT_NETPLAY
+          // In a network game the sleep ends when a datagram arrives, so a tick the host has
+          // just confirmed is not left waiting for the next frame.
+          if(!engine->netplayWait(sleepMs))
+#endif
+          {
+            SDL_Delay(sleepMs);
+          }
         }
       }
     }

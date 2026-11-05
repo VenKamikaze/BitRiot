@@ -9,6 +9,13 @@
  *   -h, --help           show the usage and exit
  *       --record <dir>   write a match record of every round into <dir> (brief 05:
  *                        one file per round, doco/netplay/match-record-format.md)
+ *
+ * Network play (brief 07; only in a build with BITRIOT_NETPLAY):
+ *       --host [port]    host a lockstep game on a UDP port (default 7777); also --host=PORT
+ *       --join host:port join one
+ *       --name <name>    the name the others see
+ *       --local-players N  players on this machine (keyboard sets 1..N; default 1)
+ *       --players N      host: player slots in all (the rest are computer players)
  */
 
 #ifndef _GAMEOPTIONS_H
@@ -23,6 +30,14 @@ struct GameOptions
   bool bigMap = false;
   bool help = false;
   std::string recordDir;   // empty: do not record
+  // Network play (brief 07).
+  bool host = false;
+  int hostPort = 7777;
+  std::string join;        // "host:port", empty: not joining
+  std::string name;
+  int localPlayers = 1;
+  int players = 0;         // 0: as many as there are humans (at least 2)
+  bool networked() const { return host || !join.empty(); }
   bool error = false;      // a bad option or a missing argument (already reported on `err`)
 };
 

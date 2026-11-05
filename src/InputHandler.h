@@ -34,7 +34,16 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
     ~InputHandler();
 
     // `panel` shows the join indicators (the InfoPanel in the game; nullptr or a recorder in tests).
-    void setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerCharacters, JoinIndicatorView * panel);
+    // `humanSlotsHere` is the set of human slots whose input this machine reads (bit n is
+    // slot n). Locally that is every human slot (the default); a networked match passes
+    // only its own players, so that a human on another machine gets no keyboard set and
+    // no sampler entry here (brief 07).
+    static const uint32_t ALL_SLOTS = 0xFFFFFFFFu;
+    void setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerCharacters, JoinIndicatorView * panel,
+                     uint32_t humanSlotsHere = ALL_SLOTS);
+    // The slots a device on this machine drives right now (bit n is slot n): what a
+    // networked match tells the session it sampled.
+    uint32_t localSlotMask() const { return m_localSlots & InputSampler::ALL_SLOTS; }
 
     // Reads pending device and window events into the sampler (every key and pad
     // button change of a driven slot, the quit key, a controller plug and the join
@@ -76,6 +85,15 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
     int getKeyboardSetForActionKey(KEY k); // get the fixed keyboard-set index whose action1/action2 key is k, or -1. Used by the player-select menu (keyboard-join); searches the fixed m_availableKeySets table, not the per-game m_keyMap.
 
     shared_ptr<PlayerCharacterEntity> getPlayerAttachedToController(int controllerId);
+    // A network game (brief 07): the host did not grant a takeover this machine asked for (another
+    // machine claimed the same bot in the same moment). The slot stops being ours: no pad, no keys,
+    // no sampler entry, no indicator, and no event is queued (the simulation never made it ours).
+    void revokeSlot(int slot);
+    // A network game (brief 07): a pad whose START is pressed while it drives nobody first takes one of THIS
+    // machine's own human slots that has no pad (lowest first; its keyboard set is released), and only
+    // then opens the join selector for a bot. Purely local: no control event, nothing sent. Off by default,
+    // so local play is unchanged (there START always opens the selector).
+    void setPadsMayBindOwnSlots(bool on) { m_padsBindOwn = on; }
     // The pad was unplugged. If it drove a live player that has no keyboard set, that
     // slot goes back to the AI (a RETURN_TO_AI event in the next sample); a player that
     // also has a keymap stays human on the keys.
@@ -130,10 +148,12 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
     // Produced, not yet sampled.
     vector<ControlEvent> m_pendingControl;
     ControllerRumble* m_rumble = nullptr;
+    bool m_padsBindOwn = false;
 
   private:
     void setJoinIndicator(int team, JoinIndicatorView::JoinState state,
                           JoinIndicatorView::JoinDevice device = JoinIndicatorView::JOIN_DEVICE_CONTROLLER); // no-op without a panel
+    bool bindPadToOwnSlot(int controllerId);
     void setAvailableKeys();
     vector<array<KEY, NUM_ACTION_BUTTONS>> m_availableKeySets; // fixed table of key sets, indexed by attachedKeyboardId (rebuilt each game).
 
