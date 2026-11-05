@@ -30,6 +30,7 @@
 #define RMLUI_INVADERS_EVENTMANAGER_H
 
 #include <RmlUi/Core.h>
+#include <functional>
 #include <RmlUi/Core/Event.h>
 #include <RmlUi/Core/ElementDocument.h>
 #include "../../GameSettings.h"
@@ -58,6 +59,11 @@ public:
 	/// @param[in] event The RmlUi event that spawned the application event.
 	/// @param[in] value The application-specific event value.
 	void ProcessEvent(Rml::Event& event, const Rml::String& value);
+	/// Netplay (brief 07): a hook that sees every menu command ("start", "open mainmenu.rml",
+	/// "exit", ...) before the manager acts on it. Returning true means the command was
+	/// handled and the manager does nothing more with it. Empty (the default): no hook.
+	static void SetCommandInterceptor(std::function<bool(const Rml::String&)> interceptor);
+
 	/// Loads a window and binds the event handler for it.
 	/// @param[in] window_name The name of the window to load.
 	Rml::ElementDocument* LoadWindow(const Rml::String& window_name, bool loadAndShow = true);

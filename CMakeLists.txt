@@ -148,6 +148,7 @@ set(SOURCES ./src/EntityRenderer.cpp
 ./src/RmlUI/events/EventHandler.cpp
 ./src/RmlUI/events/EventHandlerOptions.cpp
 ./src/RmlUI/events/EventHandlerPlayerSelect.cpp
+./src/RmlUI/events/EventHandlerNetLobby.cpp
 ./src/RmlUI/events/EventInstancer.cpp
 ./src/RmlUI/events/EventManager.cpp
 ./src/RmlUI/binders/ScoreBoardBinder.cpp
@@ -304,6 +305,11 @@ if(BITRIOT_BUILD_GAME)
 # main.cpp + this + bitriot_sim.
 add_library(bitriot_core STATIC ${SOURCES})
 target_link_libraries(bitriot_core PUBLIC bitriot_sim)
+if(BITRIOT_NETPLAY)
+  # Network play (brief 07): the game's side of it (NetGame) and the session library.
+  target_sources(bitriot_core PRIVATE ./src/NetGame.cpp)
+  target_link_libraries(bitriot_core PUBLIC bitriot_net)
+endif()
 
 # PUBLIC: the test target links bitriot_core and needs the same headers.
 target_include_directories(bitriot_core PUBLIC

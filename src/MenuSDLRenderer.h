@@ -66,6 +66,19 @@ class MenuSDLRenderer
     // (the web build's test hook), which starts a round without going through the menus.
     void closeAllMenus();
     bool showMenu();
+
+    // -- netplay (brief 07) ---------------------------------------------------------
+    // The lobby page: closes every page and opens netlobby.rml (Start match / Leave).
+    void showNetLobby();
+    // Opens the main menu page (after a network game is left).
+    void showMainMenu();
+    bool netLobbyOpen() const;
+    // Sets the page's headline and body (plain text; newlines become line breaks) and
+    // whether the "Start match" button shows (and what it says).
+    void updateNetLobby(const std::string& title, const std::string& text, bool showStart, const std::string& startLabel);
+    // The scoreboard's "Play Again" button on a machine that cannot start the next round:
+    // relabels it (an empty label restores "Play Again") and greys it out when disabled.
+    void setScoreboardPlayAgain(const std::string& label, bool enabled);
     virtual ~MenuSDLRenderer();
 
   private:

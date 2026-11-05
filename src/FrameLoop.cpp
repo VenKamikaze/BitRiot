@@ -81,7 +81,7 @@ uint32_t FrameLoop::sleepHintMs() const
   {
     // A tick is owed but was held back (or the frame hit its cap). Do not spin:
     // look again in a few milliseconds.
-    return 2;
+    return m_heldPollMs;
   }
   return untilDue;
 }

@@ -22,6 +22,9 @@
 #include "GameSettings.h"
 #include "GameOverTimer.h"
 #include "MickSDLRenderer.h"
+#ifdef BITRIOT_NETPLAY
+#include "NetGame.h"
+#endif
 
 class GameEngine
 {
@@ -71,6 +74,18 @@ class GameEngine
     // changing or going away); otherwise the overlay would be composited over the
     // previous frame's text, or left behind.
     void requestRedraw() { m_drawNeeded = true; }
+#ifdef BITRIOT_NETPLAY
+    // Network play (brief 07). Opens the network, saves the player's settings and shows the
+    // lobby page instead of the main menu; false and `error` if it cannot start. Call it
+    // after setMenuSystem(). From then on pumpEvents() runs the session every frame, in
+    // every state, and canStep()/extraTicks() come from it.
+    bool startNetplay(const NetGame::Params& params, std::string* error);
+    // Leaves the session (the others are told), restores the player's settings. Safe to
+    // call when there is none. main() calls it when the game closes.
+    void stopNetplay();
+    bool netplayActive() const { return static_cast<bool>(m_net); }
+#endif
+
     // One tick: samples the local devices into a TickInputs (the control events
     // produced since the last tick included), hands it to Simulation::step(), buzzes
     // the pads of the players that tick hurt, and notes when it ended the round (or
@@ -105,6 +120,28 @@ class GameEngine
     std::string m_recordStamp; // UTC date and time the recorded round started
     std::unique_ptr<MatchRecorder> m_recorder; // a round is being recorded
     void startRecording();
+#ifdef BITRIOT_NETPLAY
+    // -- network play ----------------------------------------------------------------
+    std::unique_ptr<NetGame> m_net;
+    netplay::RoundStart m_netRound;      // the round the session announced, until resetGame() builds it
+    bool m_netRoundPending = false;
+    bool m_netEndedShown = false;        // the "disconnected" page is up
+    bool m_hostWantsRound = false;       // the host pressed Play Again; waiting for the peers to hold the last tick
+    std::string m_netMessage;            // overrides the lobby page's text (a desync, a failed start)
+    bool m_netDesyncHandled = false;
+    uint32_t m_netDesyncDeadline = 0;
+    std::string m_netLastTitle;
+    std::string m_netLastStall;
+    std::string m_netLastPage;
+    uint32_t m_netLastTitleAt = 0;
+    void netFrame();
+    void stepNetTick();
+    void resetNetGame();
+    void showNetPage();
+    void leaveNetplayToMenu(const std::string& why);
+    void netRoundFinishedHere();
+    void drawNetOverlay(const std::string& text);
+#endif
     // The deterministic world: setup (start) and the per-tick step. Everything the
     // sim needs lives in there; this class keeps rendering, the InfoPanel, sound,
     // the menu and input, and drives the Simulation.

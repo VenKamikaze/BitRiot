@@ -1,0 +1,14 @@
+.menu-container {
+  margin-top: 8%;
+}
+
+.menu {
+  font-size: 18pt;
+}
+
+#netlobbytext {
+  font-size: 12pt;
+  color: #cccccc;
+  padding-bottom: 1em;
+  line-height: 1.3em;
+}

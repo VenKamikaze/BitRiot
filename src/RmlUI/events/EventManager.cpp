@@ -46,6 +46,13 @@ EventHandlerMap event_handlers;
 
 static EventManager* managerInstance = nullptr;
 
+static std::function<bool(const Rml::String&)> commandInterceptor;
+
+void EventManager::SetCommandInterceptor(std::function<bool(const Rml::String&)> interceptor)
+{
+	commandInterceptor = std::move(interceptor);
+}
+
 EventManager::EventManager(Rml::Context* rmlContext)
 {
 	context = rmlContext;
@@ -98,6 +105,8 @@ void EventManager::ProcessEvent(Rml::Event& event, const Rml::String& value)
 
 		if (values.empty())
 			return;
+		if (commandInterceptor && commandInterceptor(commands[i]))
+			continue;
 		if (values[0] == "start")
 		{
 			// Gate: refuse to start when the current player count needs a taller map

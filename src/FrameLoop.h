@@ -79,6 +79,11 @@ class FrameLoop
 
     FrameResult frame();
 
+    // How long sleepHintMs() asks for while a tick is owed but held back (2 ms by default).
+    // A network game raises it: a stalled peer re-uploads and presents the picture once
+    // per frame, which at 2 ms is about 500 times a second for nothing.
+    void setHeldPollMs(uint32_t ms) { m_heldPollMs = ms; }
+
     // How long the caller should sleep before the next frame: until the next tick
     // is due, or a short poll while ticks are owed but held back. Never negative.
     uint32_t sleepHintMs() const;
@@ -90,6 +95,7 @@ class FrameLoop
     TickPacer m_pacer;
     int m_maxExtraTicks;
     bool m_started = false;
+    uint32_t m_heldPollMs = 2;
     bool m_held = false; // the last frame ended with a tick owed that it did not run
 };
 

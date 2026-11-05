@@ -84,8 +84,7 @@ void LockstepSession::init(vnet* v, int sock, uint16_t port, const SessionOption
   m_opt = o;
   if (m_opt.localPlayers < 1) m_opt.localPlayers = 1;
   if (m_opt.localPlayers > MAX_SLOTS) m_opt.localPlayers = MAX_SLOTS;
-  std::random_device rd;
-  m_rng.seed(o.randomSeed != 0 ? o.randomSeed : (((uint64_t) rd() << 32) ^ rd()));
+  m_rng.seed(o.randomSeed);
   m_now = vnet_time(v);
 }
 

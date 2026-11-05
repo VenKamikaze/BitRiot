@@ -9,6 +9,16 @@
 # be pasted straight into the environment's "Setup script" box. Safe to re-run.
 set -euo pipefail
 
+# Network play (brief 07) builds against the ext/vnet submodule (pinned to vnet v0.4.0). If
+# this script is run from inside a BitRiot checkout, fetch it; a bare paste of the script
+# into an environment's setup box has no checkout yet, and the build then needs
+#   git submodule update --init ext/vnet
+# (or -DBITRIOT_NETPLAY=OFF; CMake says which when it is missing).
+here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
+if [ -n "${here}" ] && [ -f "${here}/../CMakeLists.txt" ] && [ -e "${here}/../.gitmodules" ]; then
+  git -C "${here}/.." submodule update --init ext/vnet || echo "warning: could not fetch ext/vnet; configure with -DBITRIOT_NETPLAY=OFF"
+fi
+
 RMLUI_TAG=4.3
 RMLUI_PREFIX=/usr/local
 

@@ -40,7 +40,7 @@ InputHandler::~InputHandler()
 }
 
 void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerCharacters,
-                               JoinIndicatorView * panel)
+                               JoinIndicatorView * panel, uint32_t humanSlotsHere)
 {
   //m_numPlayers = playerCharacters.size();
   p_players = playerCharacters;
@@ -91,14 +91,20 @@ void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerC
     // on it is this class's own mapping (brief 04b), changed by takeovers and unplugs.
     Player * setup = settings->getPlayer(canonicalIndex);
     m_slotController[slot] = setup->attachedControllerId;
-    if (!player->isControlledByAI())
+    // A human on another machine (netplay) is not read here: no local slot, no pad, no keys.
+    const bool humanHere = !player->isControlledByAI() && (humanSlotsHere & (1u << slot)) != 0;
+    if (!player->isControlledByAI() && !humanHere)
     {
-      m_localSlots |= (1u << slot); // every human is local today
+      m_slotController[slot] = -1;
+    }
+    if (humanHere)
+    {
+      m_localSlots |= (1u << slot);
     }
 
     // Keyboard sets go only to human players without a controller: AI players
     // are never driven by the keyboard, and controller players use the pad.
-    if(player->isControlledByAI() || m_slotController[slot] != -1)
+    if(!humanHere || m_slotController[slot] != -1)
     {
       continue;
     }

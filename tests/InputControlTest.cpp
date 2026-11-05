@@ -106,6 +106,53 @@ class InputControlTest : public HeadlessGameTest
 };
 
 // ---------------------------------------------------------------------------
+// Network play (brief 07): a human on another machine is not read here
+// ---------------------------------------------------------------------------
+
+TEST_F(InputControlTest, AHumanOnAnotherMachineGetsNoKeysNoPadAndNoLocalSlot)
+{
+  configurePlayers(4);
+  std::GameSettings* settings = std::GameSettings::getInstance();
+  settings->setPlayerAI(0, false);
+  settings->setPlayerAI(1, false);
+  settings->setPlayerAI(2, false);
+  settings->setPlayerController(1, PAD);
+  settings->setNpcSpawnerEnabled(false);
+  startRound();
+  m_handler = std::make_unique<InputHandler>();
+  m_handler->setRumble(&m_rumble);
+  // Slots 0 and 2 are played here; slot 1 (with a pad in the menu) is a player on another machine.
+  m_handler->setPointers(allPlayers(), &m_view, (1u << 0) | (1u << 2));
+
+  EXPECT_TRUE(m_handler->isLocalSlot(0));
+  EXPECT_FALSE(m_handler->isLocalSlot(1));
+  EXPECT_TRUE(m_handler->isLocalSlot(2));
+  EXPECT_EQ(m_handler->localSlotMask(), 0b101u);
+  EXPECT_EQ(m_handler->controllerForSlot(1), -1) << "the menu's pad for slot 1 means nothing in a network game";
+  EXPECT_EQ(m_handler->m_keyMap.count(1), 0u);
+  EXPECT_EQ(m_handler->m_keyMap.count(0), 1u);
+  EXPECT_EQ(m_handler->m_keyMap.count(2), 1u);
+  // The two local players got two different keyboard sets.
+  EXPECT_NE(m_handler->m_keyMap.at(0)[InputHandler::UP_KEY], m_handler->m_keyMap.at(2)[InputHandler::UP_KEY]);
+
+  // A key of the remote player's would-be set does nothing; the local ones sample.
+  m_handler->keyboardEvent(m_handler->m_keyMap.at(0)[InputHandler::UP_KEY], true);
+  const TickInputs t = m_handler->sampleTick();
+  EXPECT_TRUE(t.slot[0].held(PlayerInput::UP));
+  EXPECT_EQ(t.slot[1].bits, 0);
+  // The pad of the remote slot's menu entry cannot be bound to a slot that is not ours.
+  EXPECT_EQ(m_handler->getPlayerAttachedToController(PAD), nullptr);
+}
+
+TEST_F(InputControlTest, TheDefaultStillMeansEveryHumanIsLocal)
+{
+  startRound4();   // setPointers(players, view) with no mask: the single-machine game
+  EXPECT_TRUE(m_handler->isLocalSlot(0));
+  EXPECT_TRUE(m_handler->isLocalSlot(1));
+  EXPECT_EQ(m_handler->localSlotMask(), 0b0011u);
+}
+
+// ---------------------------------------------------------------------------
 // Joining
 // ---------------------------------------------------------------------------
 

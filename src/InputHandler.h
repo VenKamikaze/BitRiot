@@ -34,7 +34,16 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
     ~InputHandler();
 
     // `panel` shows the join indicators (the InfoPanel in the game; nullptr or a recorder in tests).
-    void setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerCharacters, JoinIndicatorView * panel);
+    // `humanSlotsHere` is the set of human slots whose input this machine reads (bit n is
+    // slot n). Locally that is every human slot (the default); a networked match passes
+    // only its own players, so that a human on another machine gets no keyboard set and
+    // no sampler entry here (brief 07).
+    static const uint32_t ALL_SLOTS = 0xFFFFFFFFu;
+    void setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerCharacters, JoinIndicatorView * panel,
+                     uint32_t humanSlotsHere = ALL_SLOTS);
+    // The slots a device on this machine drives right now (bit n is slot n): what a
+    // networked match tells the session it sampled.
+    uint32_t localSlotMask() const { return m_localSlots & InputSampler::ALL_SLOTS; }
 
     // Reads pending device and window events into the sampler (every key and pad
     // button change of a driven slot, the quit key, a controller plug and the join

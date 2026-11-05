@@ -106,3 +106,67 @@ TEST(GameOptionsTest, ParsingTwiceInOneProcessGivesTheSameAnswer)
     EXPECT_FALSE(parse({}).options.bigMap);
   }
 }
+
+
+// -- network play (brief 07) -----------------------------------------------------------
+
+TEST(GameOptionsTest, NoNetworkOptionsMeansLocalPlay)
+{
+  const Parsed p = parse({ "-b" });
+  EXPECT_FALSE(p.options.networked());
+  EXPECT_FALSE(p.options.host);
+  EXPECT_TRUE(p.options.join.empty());
+  EXPECT_EQ(p.options.localPlayers, 1);
+}
+
+TEST(GameOptionsTest, HostTakesAnOptionalPortInEitherSpelling)
+{
+  Parsed p = parse({ "--host" });
+  EXPECT_FALSE(p.options.error) << p.err;
+  EXPECT_TRUE(p.options.host);
+  EXPECT_EQ(p.options.hostPort, 7777);
+  EXPECT_TRUE(p.options.networked());
+
+  p = parse({ "--host", "9000" });
+  EXPECT_FALSE(p.options.error) << p.err;
+  EXPECT_EQ(p.options.hostPort, 9000);
+
+  p = parse({ "--host=9001", "-b" });
+  EXPECT_FALSE(p.options.error) << p.err;
+  EXPECT_EQ(p.options.hostPort, 9001);
+  EXPECT_TRUE(p.options.bigMap);
+
+  // A word that is not a port is not swallowed: it is an unexpected argument.
+  p = parse({ "--host", "extra" });
+  EXPECT_TRUE(p.options.error);
+  EXPECT_TRUE(parse({ "--host=0" }).options.error);
+  EXPECT_TRUE(parse({ "--host=70000" }).options.error);
+  EXPECT_TRUE(parse({ "--host=abc" }).options.error);
+}
+
+TEST(GameOptionsTest, JoinNeedsHostAndPort)
+{
+  Parsed p = parse({ "--join", "127.0.0.1:7777", "--name", "Ann", "--local-players", "2" });
+  EXPECT_FALSE(p.options.error) << p.err;
+  EXPECT_EQ(p.options.join, "127.0.0.1:7777");
+  EXPECT_EQ(p.options.name, "Ann");
+  EXPECT_EQ(p.options.localPlayers, 2);
+  EXPECT_TRUE(p.options.networked());
+  EXPECT_FALSE(p.options.host);
+
+  EXPECT_TRUE(parse({ "--join", "noport" }).options.error);
+  EXPECT_TRUE(parse({ "--join" }).options.error);
+}
+
+TEST(GameOptionsTest, NetworkOptionsAreRefusedWhenTheyMakeNoSense)
+{
+  EXPECT_TRUE(parse({ "--host", "--join", "1.2.3.4:5" }).options.error);          // both
+  EXPECT_TRUE(parse({ "--name", "Ann" }).options.error);                           // no network
+  EXPECT_TRUE(parse({ "--local-players", "2" }).options.error);
+  EXPECT_TRUE(parse({ "--join", "1.2.3.4:5", "--players", "4" }).options.error);   // the host decides
+  EXPECT_TRUE(parse({ "--host", "--local-players", "0" }).options.error);
+  EXPECT_TRUE(parse({ "--host", "--local-players", "7" }).options.error);
+  EXPECT_TRUE(parse({ "--host", "--players", "1" }).options.error);
+  EXPECT_FALSE(parse({ "--host", "--players", "4", "--name", "H" }).options.error);
+  EXPECT_EQ(parse({ "--host", "--players", "4" }).options.players, 4);
+}

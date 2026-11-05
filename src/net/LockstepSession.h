@@ -60,12 +60,12 @@
 #include <deque>
 #include <map>
 #include <memory>
-#include <random>
 #include <string>
 #include <vector>
 
 #include "MatchConfig.h"
 #include "NetProtocol.h"
+#include "NetRandom.h"
 #include "TickInputs.h"
 #include "vnet.h"
 
@@ -99,7 +99,7 @@ namespace netplay
     // the session stalls for good. The tests turn it off to show they need it.
     bool redundancy = true;
 
-    // Seed for session ids, nonces and tokens; 0 = std::random_device.
+    // Seed for session ids, nonces and tokens; 0 = from the system (NetRandom.h).
     uint64_t randomSeed = 0;
   };
 
@@ -391,7 +391,7 @@ namespace netplay
       RejectInfo m_reject;
       uint64_t m_now = 0;
       uint16_t m_localPort = 0;
-      std::mt19937_64 m_rng;
+      NetRandom m_rng;
 
       uint32_t m_sessionId = 0;
       uint8_t m_myId = NO_PEER;

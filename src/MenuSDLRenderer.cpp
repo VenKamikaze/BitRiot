@@ -3,6 +3,7 @@
 #include "MenuSDLRenderer.h"
 #include "RmlUI/MickRmlUIElementUtil.h"
 #include "RmlUI/events/EventHandlerPlayerSelect.h"
+#include "RmlUI/events/EventHandlerNetLobby.h"
 #include "SDL_events.h"
 #include <RmlUi/Core/Core.h>
 #include <RmlUi/Core/ElementDocument.h>
@@ -69,6 +70,7 @@ void MenuSDLRenderer::initGui(SDL_Renderer* renderer, SDL_Window *screen)
 
   EventManager::getInstance()->RegisterEventHandler("gameoptions.rml", new EventHandlerOptions());
   EventManager::getInstance()->RegisterEventHandler("playerselect.rml", m_eHandlerPlayerSelect.get());
+  EventManager::getInstance()->RegisterEventHandler(EventHandlerNetLobby::RML_FILENAME, new EventHandlerNetLobby());
   
   m_playersBinder = make_unique<PlayersSelectBinder>(context);
 
@@ -98,6 +100,93 @@ void MenuSDLRenderer::clearScoreBoard()
 void MenuSDLRenderer::closeAllMenus()
 {
   context->UnloadAllDocuments();
+}
+
+namespace
+{
+Rml::ElementDocument* findDocument(Rml::Context* context, const std::string& file)
+{
+  for (int i = 0; i < context->GetNumDocuments(); i++)
+  {
+    Rml::ElementDocument* doc = context->GetDocument(i);
+    if (doc && doc->GetSourceURL() == file)
+    {
+      return doc;
+    }
+  }
+  return nullptr;
+}
+
+// Plain text to RML: escaped, with line breaks.
+std::string textToRml(const std::string& text)
+{
+  std::string out;
+  for (char c : text)
+  {
+    switch (c)
+    {
+      case '&': out += "&amp;"; break;
+      case '<': out += "&lt;"; break;
+      case '>': out += "&gt;"; break;
+      case '\n': out += "<br />"; break;
+      default: out += c; break;
+    }
+  }
+  return out;
+}
+} // namespace
+
+void MenuSDLRenderer::showNetLobby()
+{
+  context->UnloadAllDocuments();
+  loadMenu(EventHandlerNetLobby::RML_FILENAME, true);
+}
+
+void MenuSDLRenderer::showMainMenu()
+{
+  context->UnloadAllDocuments();
+  loadMenu("mainmenu.rml", true);
+}
+
+bool MenuSDLRenderer::netLobbyOpen() const
+{
+  return findDocument(context, EventHandlerNetLobby::RML_FILENAME) != nullptr;
+}
+
+void MenuSDLRenderer::updateNetLobby(const std::string& title, const std::string& text, bool showStart, const std::string& startLabel)
+{
+  Rml::ElementDocument* doc = findDocument(context, EventHandlerNetLobby::RML_FILENAME);
+  if (!doc)
+  {
+    return;
+  }
+  if (Rml::Element* e = doc->GetElementById("nettitle"))
+  {
+    e->SetInnerRML(textToRml(title));
+  }
+  if (Rml::Element* e = doc->GetElementById("netlobbytext"))
+  {
+    e->SetInnerRML(textToRml(text));
+  }
+  if (Rml::Element* e = doc->GetElementById("netstart"))
+  {
+    e->SetProperty("display", showStart ? "inline-block" : "none");
+    e->SetInnerRML(textToRml(startLabel));
+  }
+}
+
+void MenuSDLRenderer::setScoreboardPlayAgain(const std::string& label, bool enabled)
+{
+  Rml::ElementDocument* doc = findDocument(context, "scoreboard.rml");
+  if (!doc)
+  {
+    return;
+  }
+  if (Rml::Element* e = doc->GetElementById("quickstart"))
+  {
+    e->SetInnerRML(textToRml(label.empty() ? std::string("Play Again") : label));
+    e->SetProperty("color", enabled ? "#ffffff" : "#777777");
+  }
 }
 
 void MenuSDLRenderer::handleWindowResize()
