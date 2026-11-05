@@ -132,7 +132,7 @@ Browser players and native players join the same Bit Riot match through the vnet
 - Mobile, a server browser, WebTransport behind a general reverse proxy: out of scope as the brief says.
 - Ctrl+W (Player 1's weapon key) closing the tab is still 09's open point.
 
-**Deployment note (item 6; nothing was deployed)**
+**Deployment note (item 6; nothing was deployed)** (A full step-by-step guide for Apache and a relay on aarch64, with the ports to open, is [`deploy.md`](deploy.md).)
 
 *What to host.* Two things: the static game files (`build-wasm/index.html`, `BitRiot.js`, `BitRiot.wasm`, `BitRiot.data`; about 8.5 MB, 3 MB compressed) and a `vnet-relay`. Build the game with `-DBITRIOT_WEB_TEST_FILES=OFF`. (`-DBITRIOT_DEFAULT_RELAY=...` is for native builds only; a page derives its relay from where it was loaded, or from `window.BITRIOT_RELAY = "wss://relay.example.org/vnet";` set in a `<script>` before the game's script, or from `?relay=`.) The page must be **HTTPS** (a secure context) to use `wss://` and WebTransport; plain `http://localhost` also counts as secure for development. Serve `.wasm` as `application/wasm` and `.data` as binary; gzip or brotli them. No COOP/COEP headers (the build has no threads).
 
