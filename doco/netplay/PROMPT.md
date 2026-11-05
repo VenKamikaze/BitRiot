@@ -35,7 +35,7 @@ The goal is deterministic lockstep online multiplayer for Bit Riot, a browser (W
   - The web smoke test passes 41/41.
 - **vnet:** unchanged. `claude` is at 579a410, tag `v0.4.0`, CI green (run 36). Read run logs with the GitHub MCP tools (`actions_list`, `get_job_logs`). BitRiot has no CI workflow.
 
-**Next ready: 08** (lobby UI). It depends on 07 only. Read 07's Outcome first: decisions 9–12, the lobby page, `NetGame` and the follow-ups for 08.
+**Next ready: 08** (lobby UI). It depends on 07 only. Its brief was refreshed after 07 merged: "Where 07 left things" lists the APIs to build on and what the protocol lacks (ready flags, back to lobby). Read 07's Outcome first.
 - After 08: 12 (browser netplay, which needs 07, 08, 09, 10 and 14) and 13 (disconnects and hot-join, which needs 05, 07 and 08). 12 and 13 can run in parallel in separate worktrees.
 - Nothing can run in parallel with 08.
 
@@ -122,6 +122,9 @@ The goal is deterministic lockstep online multiplayer for Bit Riot, a browser (W
 
 1. **Attach both repos** to the session if they aren't already. In both repos, work from the **`claude`** branch: it is the base for all work, not `main`/`master`.
 2. **Install dependencies.** If the environment has no setup script configured, run `scripts/cloud-setup.sh` from BitRiot. It installs SDL2 and GTest, and builds RmlUi 4.3 into `/usr/local`.
+   - Also run `git submodule update --init ext/vnet` (07's netplay; without it `BITRIOT_NETPLAY` falls back to OFF with a warning).
+   - Run `git submodule update --init ext/RmlUi/RmlUi` too, if you build the web version.
+   - For the web build and the determinism gate's wasm rows, run `scripts/setup-emsdk.sh --with-ports`.
 3. **Build and test** BitRiot to confirm a green baseline:
    ```bash
    cmake -S . -B build && cmake --build build -j8 && ./build/tests/bitriot_tests
