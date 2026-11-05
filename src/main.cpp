@@ -299,6 +299,14 @@ int main(int argc, char* argv[])
         return 2;
       }
     }
+#ifndef BITRIOT_NETPLAY
+    if(options.networked())
+    {
+      // Before any window opens: this build cannot do what was asked.
+      std::cerr << "This build has no network play (it was configured with BITRIOT_NETPLAY=OFF)." << std::endl;
+      return 2;
+    }
+#endif
     applyOptions(options);
   }
 

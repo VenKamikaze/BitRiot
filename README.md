@@ -69,7 +69,7 @@ Things that I'd like to do, but likely won't ever find time for (in order of per
 * Scaling and fullscreen options (mostly done - fullscreen parameter '-f' available - (should be added to Game Options), resizing window works fine).
 * Cleanups (code formatting and style, also some collections always grow e.g. in the input code)
 * Write up some notes to explain the porting process to SDL2, as a quick 'n' dirty tutorial for others thinking of doing this for other games.
-* Network play (this will probably never get done)
+* Network play (native, lockstep over UDP: see "Network play" below)
 
 # Build
 
@@ -91,6 +91,17 @@ cmake ../
 make
 ./BitRiot
 ```
+
+### Network play
+
+Two to six players on different machines (each may have local players too), over UDP, built on the [vnet](https://github.com/VenKamikaze/vnet) submodule (`ext/vnet`, fetched by `--recurse-submodules`; configure with `-DBITRIOT_NETPLAY=OFF` to build without it). One machine hosts:
+
+```
+./BitRiot --host 7777 --players 4 --name Alice      # 4 player slots: the others are computer players
+./BitRiot --join 192.168.1.20:7777 --name Bob       # on another machine (or 127.0.0.1:7777 on the same one)
+```
+
+The host presses Enter in the lobby to start; only the host starts the next round. ESC leaves (a leaving player becomes a computer player; if the host leaves the session ends). `--local-players N` puts N players on one machine, `--record <dir>` writes the match records. `VNET_IMPAIR="lat=80,jit=20,loss=5,seed=1"` simulates a bad network. The protocol is in `doco/netplay/protocol.md`; `bitriot_headless host|join` plays networked rounds with no window.
 
 ### CMake with MinGW
 
