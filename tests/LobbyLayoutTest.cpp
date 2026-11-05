@@ -9,8 +9,15 @@
 #include <string>
 #include <vector>
 
+#include <RmlUi/Core/Elements/ElementFormControlInput.h>
+#include <cstdio>
+#include <fstream>
+#include <unistd.h>
+
+#include "NetGame.h"
 #include "RmlUI/MickRmlUIElementUtil.h"
 #include "RmlUI/binders/NetLobbyBinder.h"
+#include "RmlUI/events/EventHandlerNetLobby.h"
 #include "net/LobbyModel.h"
 
 namespace bitriot_test
@@ -407,5 +414,208 @@ TEST_F(LobbyLayoutTest, TheOverlayLoadsAndItsPiecesStayInsideTheWindow)
   const CellBox toasts = boxOf(doc->GetElementById("toasts"));
   EXPECT_GT(toasts.height, 0.0f);
   EXPECT_EQ(doc->GetNumChildren(), 4);
+}
+
+// -- the buttons: what a press asks for ----------------------------------------------------------------------------
+
+namespace
+{
+std::string scratchFile(const std::string& leaf)
+{
+  const char* dir = std::getenv("TMPDIR");
+  return std::string(dir ? dir : "/tmp") + "/bitriot-lobbylayout-" + std::to_string((long) getpid()) + "-" + leaf;
+}
+}
+
+class NetFormTest : public LobbyLayoutTest
+{
+  protected:
+    void SetUp() override
+    {
+      LobbyLayoutTest::SetUp();
+      EventHandlerNetLobby::requests() = NetUiRequests();
+      EventHandlerNetForm::setPrefsPath("");   // no file unless a test names one
+    }
+    void TearDown() override
+    {
+      EventHandlerNetForm::setPrefsPath("");
+      EventHandlerNetLobby::requests() = NetUiRequests();
+      LobbyLayoutTest::TearDown();
+    }
+    static void type(Rml::ElementDocument* doc, const char* id, const std::string& value)
+    {
+      auto* input = dynamic_cast<Rml::ElementFormControlInput*>(doc->GetElementById(id));
+      ASSERT_NE(input, nullptr) << id;
+      input->SetValue(value);
+    }
+    static std::string valueOf(Rml::ElementDocument* doc, const char* id)
+    {
+      auto* input = dynamic_cast<Rml::ElementFormControlInput*>(doc->GetElementById(id));
+      return input ? input->GetValue() : std::string("<no such input>");
+    }
+    // Presses a button of the page the way the event manager would: the page's handler gets the command.
+    void press(EventHandler& handler, Rml::ElementDocument* doc, const char* buttonId, const std::string& command)
+    {
+      Rml::Event event(doc->GetElementById(buttonId), Rml::EventId::Click, "click", Rml::Dictionary(), true);
+      handler.ProcessEvent(event, command);
+    }
+};
+
+TEST_F(NetFormTest, TheHostFormChecksThePortAndAsksForTheLobbyWithCleanedValues)
+{
+  Rml::ElementDocument* doc = loadDocument("nethost.rml");
+  ASSERT_NE(doc, nullptr);
+  EventHandlerNetForm handler;
+  NetUiRequests& rq = EventHandlerNetLobby::requests();
+
+  type(doc, "f-name", "  Venom\x01  ");
+  type(doc, "f-port", "99999");
+  press(handler, doc, "formgo", "nethostgo");
+  EXPECT_FALSE(rq.hostGo) << "a port that is not 1..65535 must not open a lobby";
+  EXPECT_NE(doc->GetElementById("formerror")->GetInnerRML(), "");
+
+  type(doc, "f-port", "7123");
+  press(handler, doc, "formgo", "nethostgo");
+  EXPECT_TRUE(rq.hostGo);
+  EXPECT_EQ(rq.form.port, 7123);
+  EXPECT_EQ(rq.form.name, "Venom");
+  EXPECT_EQ(rq.form.localPlayers, 1);
+  EXPECT_FALSE(rq.joinGo);
+}
+
+TEST_F(NetFormTest, TheJoinFormNormalisesTheAddressAndExplainsABadOne)
+{
+  Rml::ElementDocument* doc = loadDocument("netjoin.rml");
+  ASSERT_NE(doc, nullptr);
+  EventHandlerNetForm handler;
+  NetUiRequests& rq = EventHandlerNetLobby::requests();
+
+  type(doc, "f-addr", "not an address");
+  press(handler, doc, "formgo", "netjoingo");
+  EXPECT_FALSE(rq.joinGo);
+  EXPECT_NE(doc->GetElementById("formerror")->GetInnerRML().find("character"), std::string::npos) << doc->GetElementById("formerror")->GetInnerRML();
+
+  type(doc, "f-addr", " Example.org ");
+  type(doc, "f-name", "Bob");
+  press(handler, doc, "formgo", "netjoingo");
+  EXPECT_TRUE(rq.joinGo);
+  EXPECT_EQ(rq.form.address, "Example.org:7777");
+  EXPECT_EQ(rq.form.name, "Bob");
+  EXPECT_FALSE(rq.hostGo);
+}
+
+TEST_F(NetFormTest, ThePlayersHereButtonCyclesOneToFourAndTheFormsFillFromTheSavedFile)
+{
+  const std::string path = scratchFile("prefs.txt");
+  netplay::NetPrefs saved;
+  saved.name = "Zed";
+  saved.joinAddress = "10.0.0.5:7001";
+  saved.hostPort = 7002;
+  saved.localPlayers = 3;
+  ASSERT_TRUE(netplay::saveNetPrefs(path, saved));
+  EventHandlerNetForm::setPrefsPath(path);
+
+  Rml::ElementDocument* doc = loadDocument("netjoin.rml");
+  ASSERT_NE(doc, nullptr);
+  EventHandlerNetForm handler;
+  press(handler, doc, "f-name", "netforminit");
+  EXPECT_EQ(valueOf(doc, "f-name"), "Zed");
+  EXPECT_EQ(valueOf(doc, "f-addr"), "10.0.0.5:7001");
+  EXPECT_EQ(doc->GetElementById("f-local")->GetInnerRML(), "3");
+  Rml::ElementDocument* hostDoc = loadDocument("nethost.rml");
+  ASSERT_NE(hostDoc, nullptr);
+  press(handler, hostDoc, "f-name", "netforminit");
+  EXPECT_EQ(valueOf(hostDoc, "f-port"), "7002");
+  EXPECT_EQ(valueOf(hostDoc, "f-name"), "Zed");
+  press(handler, doc, "f-local", "netlocal");
+  EXPECT_EQ(doc->GetElementById("f-local")->GetInnerRML(), "4");
+  press(handler, doc, "f-local", "netlocal");
+  EXPECT_EQ(doc->GetElementById("f-local")->GetInnerRML(), "1") << "after the four keyboard sets it wraps";
+
+  // What a successful host or join used is written back.
+  EventHandlerNetForm::rememberJoin("Zed", "10.0.0.9:7000", 2);
+  netplay::NetPrefs back;
+  ASSERT_TRUE(netplay::loadNetPrefs(path, back));
+  EXPECT_EQ(back.joinAddress, "10.0.0.9:7000");
+  EXPECT_EQ(back.localPlayers, 2);
+  EXPECT_EQ(back.hostPort, 7002) << "the host port is kept when a join is remembered";
+  EventHandlerNetForm::rememberHost("Zed", 7100, 2);
+  ASSERT_TRUE(netplay::loadNetPrefs(path, back));
+  EXPECT_EQ(back.hostPort, 7100);
+  EXPECT_EQ(back.joinAddress, "10.0.0.9:7000");
+  std::remove(path.c_str());
+}
+
+TEST_F(NetFormTest, TheFormsOpenWithTheDefaultsWhenThereIsNoSavedFile)
+{
+  Rml::ElementDocument* doc = loadDocument("nethost.rml");
+  ASSERT_NE(doc, nullptr);
+  EventHandlerNetForm handler;
+  press(handler, doc, "f-name", "netforminit");
+  EXPECT_EQ(valueOf(doc, "f-name"), "");
+  EXPECT_EQ(valueOf(doc, "f-port"), "7777");
+  EXPECT_EQ(doc->GetElementById("f-local")->GetInnerRML(), "1");
+}
+
+TEST_F(NetFormTest, TheLobbyButtonsRaiseTheRequestsTheEngineActsOn)
+{
+  Rml::ElementDocument* doc = loadDocument("netlobby.rml");
+  ASSERT_NE(doc, nullptr);
+  EventHandlerNetLobby handler;
+  NetUiRequests& rq = EventHandlerNetLobby::requests();
+  press(handler, doc, "netstart", "netstart");
+  EXPECT_TRUE(rq.startMatch);
+  press(handler, doc, "netleave", "netleave");
+  EXPECT_TRUE(rq.leave);
+  press(handler, doc, "r2-team", "netteam 2");
+  EXPECT_EQ(rq.teamSlot, 2);
+  press(handler, doc, "r1-kick", "netkick 1");
+  EXPECT_EQ(rq.kickSlot, 1);
+  // The five settings, in the order of NetGame::HostSetting (the engine casts the number).
+  const std::pair<const char*, int> settings[] = {{"mapw", NetGame::SET_MAP_WIDTH}, {"maph", NetGame::SET_MAP_HEIGHT}, {"blocks", NetGame::SET_BLOCKS},
+                                                  {"spawner", NetGame::SET_SPAWNER}, {"slots", NetGame::SET_SLOTS}};
+  for (const auto& s : settings)
+  {
+    rq.setting = -1;
+    press(handler, doc, "set-mapw", std::string("netset ") + s.first);
+    EXPECT_EQ(rq.setting, s.second) << s.first;
+  }
+  press(handler, doc, "set-mapw", "netset nonsense");
+  EXPECT_EQ(rq.setting, -1);
+}
+
+TEST_F(NetFormTest, EveryButtonOfTheOnlinePagesNamesACommandTheirHandlerKnows)
+{
+  // A typo in an onclick would make a button do nothing at all. Every command the pages use is checked against the handlers.
+  const std::pair<const char*, std::vector<std::string>> pages[] = {
+      {"netlobby.rml", {"netstart", "netleave", "netteam 0", "netkick 0", "netset mapw", "netset maph", "netset blocks", "netset spawner", "netset slots"}},
+      {"nethost.rml", {"netforminit", "netlocal", "nethostgo", "open mainmenu.rml"}},
+      {"netjoin.rml", {"netforminit", "netlocal", "netjoingo", "open mainmenu.rml"}},
+  };
+  for (const auto& page : pages)
+  {
+    Rml::ElementDocument* doc = loadDocument(page.first);
+    ASSERT_NE(doc, nullptr);
+    std::vector<std::string> used;
+    std::vector<Rml::Element*> all;
+    doc->GetElementsByTagName(all, "button");
+    doc->GetElementsByTagName(all, "body");
+    for (Rml::Element* e : all)
+    {
+      for (const char* attr : {"onclick", "onload"})
+      {
+        if (e->HasAttribute(attr)) used.push_back(e->GetAttribute<Rml::String>(attr, ""));
+      }
+    }
+    EXPECT_GE(used.size(), 3u) << page.first;
+    for (const std::string& command : used)
+    {
+      // "netteam 0" and "netkick 0" in the document are written per row ("netteam 3"): compare by the verb.
+      const std::string verb = command.substr(0, command.find(' '));
+      bool known = false;
+      for (const std::string& c : page.second) known = known || c.substr(0, c.find(' ')) == verb;
+      EXPECT_TRUE(known) << page.first << " uses '" << command << "' which the test (and so the handler) does not know";
+    }
+  }
 }
 } // namespace bitriot_test
