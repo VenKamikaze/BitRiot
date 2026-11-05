@@ -408,24 +408,34 @@ TEST(HotJoin, AMachineThatArrivesOnTheScoreboardJoinsTheNextRoundLikeAnyoneElse)
 
 TEST(HotJoin, ATakeoverMessageThatArrivesAfterTheJoinerPassedItsTickIsBackfilledAndTheMatchResumes)
 {
-  // TAKEOVER_AT is lost on the way (the host's sends mostly vanish for a moment): the joiner steps on to the tick the host
-  // waits for before it knows it was given a slot, so the records of the ticks it already passed are neutral ones. Without
+  // TAKEOVER_AT is lost on the way (the joiner drops what arrives in the first 600 ms, a test knob): it steps on to the tick the
+  // host waits for before it knows it was given a slot, so the records of the ticks it already passed are neutral ones. Without
   // them the host waits for a record nobody will ever make.
   ClusterOptions o = delayed(10);
   o.lobby.totalSlots = 4;
   Cluster c(2, o);
   ASSERT_TRUE(c.startRound(1, 0));
   ASSERT_TRUE(c.runUntil([&] { return c.allStepped(300); }, 60000));
-  Machine& j = c.addMachine(1);
-  ASSERT_TRUE(c.runUntil([&] { return j.s->joinStage() == LockstepSession::JOIN_WAITING; }, 20000));
-  c.impair(0, "loss=85");
-  c.run(1500);
-  c.impair(0, "");
+  Machine& j = c.addMachine(1, 0, 0, [](netplay::SessionOptions& so) { so.testDropTakeoverForMs = 600; });
   ASSERT_TRUE(c.runUntil([&] { return joined(j); }, 20000));
   const uint32_t ts = j.s->takeoverTick();
+  EXPECT_GT(j.s->nextStepTick(), ts - (uint32_t) j.round.delay) << "it had stepped past the tick of its first record";
   ASSERT_TRUE(c.runUntil([&] { return c.allStepped(ts + 150); }, 60000)) << "the match never resumed";
   expectSameLogs(c, {0, 1, 2}, ts + 150);
   EXPECT_EQ(firstEvent(c.machine(0), 2, ControlEvent::HUMAN_TAKES_OVER), (int) ts);
+}
+
+TEST(HotJoin, AJoinerThatSaysItIsReadyFarBehindTheLiveTickIsNotGivenASlot)
+{
+  ClusterOptions o = delayed(10);
+  o.lobby.totalSlots = 4;
+  Cluster c(2, o);
+  ASSERT_TRUE(c.startRound(1, 0));
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(300); }, 60000));
+  Machine& j = c.addMachine(1, 0, 0, [](netplay::SessionOptions& so) { so.testReadyAtLag = 200; });
+  c.run(4000);
+  EXPECT_FALSE(joined(j)) << "a joiner 200 ticks behind could not make its first record in time";
+  EXPECT_EQ(j.s->grantedSlots(), 0);
 }
 
 TEST(HotJoin, ABotTheHostSaysIsNotWorthTakingIsNotDealt)

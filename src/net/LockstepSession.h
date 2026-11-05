@@ -127,6 +127,11 @@ namespace netplay
     // Host: confirmed ticks of a round kept for late joiners; past it the round cannot be joined (REJECT_IN_PROGRESS). The
     // default is MatchRecord's own bound (1,048,576 ticks, about 9.7 hours of play).
     uint32_t historyLimit = 1u << 20;
+    // TEST ONLY (peer): a TAKEOVER_AT that arrives within this many ms of the first READY_AT is dropped, as if lost, so the joiner
+    // steps past the tick the host waits for before it hears of it (the backfill of neutral records).
+    uint32_t testDropTakeoverForMs = 0;
+    // TEST ONLY (peer): READY_AT reports a tick this much lower than the truth, a joiner that is not near the live tick.
+    uint32_t testReadyAtLag = 0;
   };
 
   // What the host's lobby will build the next round from.
@@ -621,6 +626,7 @@ namespace netplay
       uint8_t m_takeoverReason = 0;
       uint32_t m_participateFrom = 0;
       uint64_t m_lastReadyAtSent = 0;
+      uint64_t m_firstReadyAtSent = 0;
 
       std::string m_delayNote;
       Stats m_stats;

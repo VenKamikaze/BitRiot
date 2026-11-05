@@ -1469,6 +1469,7 @@ void LockstepSession::setupRound(const StartMsg& s, bool joining)
   m_takeoverTick = 0;
   m_takeoverReason = 0;
   m_lastReadyAtSent = 0;
+  m_firstReadyAtSent = 0;
   if (!joining)
   {
     m_headKnown = 0;
@@ -2488,6 +2489,10 @@ void LockstepSession::onTakeoverAt(const TakeoverAtMsg& msg)
   {
     return;
   }
+  if (m_firstReadyAtSent != 0 && m_now - m_firstReadyAtSent < m_opt.testDropTakeoverForMs)
+  {
+    return;
+  }
   m_joinStage = JOIN_DONE;
   m_takeoverTick = msg.tick;
   m_grantedMask = (uint8_t) (msg.slotMask & slotBits(m_numSlots));
@@ -2545,7 +2550,8 @@ void LockstepSession::sendReadyAt()
   }
   ReadyAtMsg r;
   r.round = m_round;
-  r.tick = m_nextStep - 1;
+  r.tick = m_nextStep - 1 > m_opt.testReadyAtLag ? m_nextStep - 1 - m_opt.testReadyAtLag : 0;
+  if (m_firstReadyAtSent == 0) m_firstReadyAtSent = m_now;
   sendMsg(MSG_READY_AT, m_hostAddr, r);
   m_members[0].lastSent = m_now;
   m_lastReadyAtSent = m_now;
