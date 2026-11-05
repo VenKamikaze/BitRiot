@@ -534,6 +534,8 @@ int Runner::onEnded()
     return EXIT_OK;
   }
   m_err << "error: the session ended: " << m_session->endText() << "\n";
+  m_err << "  (stepped through tick " << m_session->nextStepTick() - 1 << ", held up to " << m_session->catchUpHead() << ", "
+        << m_session->stats().packetsReceived << " packets received)\n";
   return EXIT_FAILED;
 }
 
@@ -628,7 +630,11 @@ int Runner::run()
       {
         // Every round has been played. Stay until the peers hold the last tick and have had
         // time to step it, then close.
-        if (m_session->canStartRound() && t - lastRoundEndAt >= 1500)
+        // (A late joiner or a spectator is not waited for by canStartRound(), but the session is not closed on one that is still
+        // catching up the round: it gets up to CLOSE_GRACE_MS to hold the last tick, after which it is left behind.)
+        const uint64_t CLOSE_GRACE_MS = 12000;
+        if (m_session->canStartRound() && t - lastRoundEndAt >= 1500
+            && (m_session->everyoneHoldsLastTick() || t - lastRoundEndAt >= CLOSE_GRACE_MS))
         {
           m_session->leave(netplay::LEAVE_HOST_CLOSED);
           return EXIT_OK;

@@ -1222,6 +1222,20 @@ int LockstepSession::peerRtt(uint8_t id) const
 
 // -- rounds ----------------------------------------------------------------------------------------------
 
+bool LockstepSession::everyoneHoldsLastTick() const
+{
+  if (m_role != HOST || m_state != BETWEEN_ROUNDS)
+  {
+    return true;
+  }
+  for (int id = 1; id < MAX_PEERS; id++)
+  {
+    const Member& m = m_members[id];
+    if (m.present && !m.gone && m.ackedTicks < m_finalTick) return false;
+  }
+  return true;
+}
+
 bool LockstepSession::canStartRound() const
 {
   if (m_role != HOST || (m_state != LOBBY && m_state != BETWEEN_ROUNDS))
@@ -2831,6 +2845,7 @@ void LockstepSession::sendInputToHost(bool force)
     m_mySentUpTo = std::max(m_mySentUpTo, from + (uint32_t) msg.records.size() - 1);
   }
   m_stats.inputRecordsSent += msg.records.size();
+  m_stats.inputPacketsSent++;
   sendMsg(MSG_INPUT, m_hostAddr, msg);
   m_lastInputSent = m_now;
   m_lastAckSent = m_confirmed;
@@ -2891,8 +2906,11 @@ void LockstepSession::peerSend()
     {
       sendInputToHost(true);
     }
-    else if (m_now - m_members[0].lastSent >= m_opt.keepaliveMs)
+    else if (m_now - (m_state == RUNNING ? m_lastInputSent : m_members[0].lastSent) >= m_opt.keepaliveMs)
     {
+      // (The running keepalive is an INPUT, timed by the last INPUT, not by anything sent to the host: a late joiner that is
+      // waiting sends READY_AT every 120 ms, which used to keep this from ever firing, so an acknowledgement lost on the way was
+      // never repeated; see "the stalled joiner" in the Outcome.)
       if (m_state == RUNNING)
       {
         sendInputToHost(true);   // an empty INPUT is the running keepalive

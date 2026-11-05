@@ -390,6 +390,10 @@ namespace netplay
       uint8_t takeoverReason() const { return m_takeoverReason; }
       // The tick from which the host waits for this machine's inputs (0: always; ~0u: never).
       uint32_t participateFrom() const { return m_participateFrom; }
+      // Host, after a round: every machine still in the session (a spectator or a late joiner the match does not wait for included)
+      // holds the round's last tick. canStartRound() leaves those out on purpose; a host that is about to close the session
+      // uses this, with a bound of its own, so as not to leave a slow joiner behind.
+      bool everyoneHoldsLastTick() const;
       // Host: the late joiners / reconnects it has admitted, for display and tests.
       int hotJoinsAdmitted() const { return m_hotJoins; }
 
@@ -401,6 +405,7 @@ namespace netplay
         uint64_t packetsDropped = 0;      // vnet refused a send (EAGAIN/EIO) - a lost packet
         uint64_t badPackets = 0;          // undecodable, wrong session, wrong sender
         uint64_t inputRecordsSent = 0;    // peer: per-tick input records put on the wire (a spectator sends none)
+        uint64_t inputPacketsSent = 0;    // peer: INPUT datagrams (the acknowledgement of the host's ticks rides in them, and the running keepalive)
         uint64_t maxCatchUpInFlight = 0;  // host: the most ticks streamed to a late joiner beyond what it had acknowledged
       };
       const Stats& stats() const { return m_stats; }

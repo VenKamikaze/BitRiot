@@ -438,6 +438,75 @@ TEST(HotJoin, AJoinerThatSaysItIsReadyFarBehindTheLiveTickIsNotGivenASlot)
   EXPECT_EQ(j.s->grantedSlots(), 0);
 }
 
+TEST(HotJoin, ACaughtUpJoinerWhoseAcknowledgementsWereLostKeepsSendingThemAndIsNotStarved)
+{
+  // The stalled joiner (see the Outcome): everything the joiner sent while it caught up is lost, so the host believes it holds
+  // almost nothing and streams ticks from there; the joiner (it had them all, within the window) is caught up and says READY_AT every
+  // 120 ms. That used to keep its running keepalive INPUT (the repeat of its acknowledgement) from ever firing, so once the link
+  // was fine again the host went on repeating old ticks, the joiner never got a new one, and it timed out after 10 s with "lost
+  // the connection to the host" in a match that was going well.
+  ClusterOptions o = delayed(10);
+  o.lobby.totalSlots = 4;
+  Cluster c(2, o);
+  ASSERT_TRUE(c.startRound(1, 0));
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(600); }, 60000));
+  Machine& j = c.addMachine(1);
+  const int ji = c.size() - 1;
+  ASSERT_TRUE(c.runUntil([&] { return j.s->state() == LockstepSession::RUNNING; }, 5000));
+  c.impair(ji, "loss=100");   // nothing it sends gets through
+  ASSERT_TRUE(c.runUntil([&] { return j.s->joinStage() == LockstepSession::JOIN_WAITING; }, 20000));
+  c.run(1000);
+  c.impair(ji, "");           // the link is fine again
+  ASSERT_TRUE(c.runUntil([&] { return joined(j); }, 20000)) << "starved: it holds up to " << j.s->catchUpHead();
+  EXPECT_FALSE(j.s->ended());
+  const uint32_t ts = j.s->takeoverTick();
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(ts + 100); }, 60000));
+  expectSameLogs(c, {0, 1, ji}, ts + 100);
+}
+
+TEST(HotJoin, AJoinerThatIsSendingReadyAtStillRepeatsItsAcknowledgementEveryKeepalive)
+{
+  // The stalled joiner (see the Outcome). A caught-up joiner says READY_AT every 120 ms, and that send counted as "something was
+  // sent to the host", which kept the running keepalive INPUT (the repeat of its acknowledgement, 250 ms) from ever firing. An
+  // acknowledgement lost on the way was then never repeated: the host, believing the joiner held ticks it had long had, repeated
+  // old ticks, never sent it a new one, and it timed out after 10 s in a match that was going well. This joiner never gets a slot
+  // (its checksums are never reported), so it stays in that state; its INPUT datagrams must keep coming even when no tick arrives.
+  ClusterOptions o = delayed(10);
+  o.lobby.totalSlots = 4;
+  Cluster c(2, o);
+  ASSERT_TRUE(c.startRound(1, 0));
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(200); }, 60000));
+  Machine& j = c.addMachine(1);
+  j.reportHashes = false;
+  ASSERT_TRUE(c.runUntil([&] { return j.s->joinStage() == LockstepSession::JOIN_WAITING; }, 20000));
+  c.run(500);
+  c.impair(0, "loss=100");   // nothing new reaches the joiner for a while, so no tick advances its acknowledgement: only the keepalive can send it
+  const uint64_t before = j.s->stats().inputPacketsSent;
+  c.run(3000);
+  c.impair(0, "");
+  EXPECT_GE(j.s->stats().inputPacketsSent - before, 10u) << "no keepalive INPUT while READY_AT is being sent";
+}
+
+TEST(HotJoin, ASessionThatIsAboutToCloseCanTellWhetherALateJoinerStillLacksTheLastTick)
+{
+  // canStartRound() does not wait for a late joiner; a host that closes the session (the headless runner) waits for this instead,
+  // for a bounded time, or a slow joiner would be left with "lost the connection to the host" at the end of a good round.
+  ClusterOptions o = delayed(10);
+  o.lobby.totalSlots = 4;
+  Cluster c(2, o);
+  ASSERT_TRUE(c.startRound(1, 200));
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(100); }, 60000));
+  Machine& j = c.addMachine(1);
+  ASSERT_TRUE(c.runUntil([&] { return j.s->state() == LockstepSession::RUNNING; }, 5000));
+  j.frozen = true;   // a starved process: it acknowledges nothing
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->state() == LockstepSession::BETWEEN_ROUNDS
+                                      && c.machine(1).s->state() == LockstepSession::BETWEEN_ROUNDS; }, 60000));
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 20000));
+  EXPECT_FALSE(c.machine(0).s->everyoneHoldsLastTick()) << "the joiner has not acknowledged the end of the round";
+  j.frozen = false;
+  EXPECT_TRUE(c.runUntil([&] { return c.machine(0).s->everyoneHoldsLastTick(); }, 20000));
+}
+
 TEST(HotJoin, ABotTheHostSaysIsNotWorthTakingIsNotDealt)
 {
   // The game's host narrows the choice to bots that are alive (NetMatch's filter); the session just asks.
