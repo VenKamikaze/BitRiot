@@ -1686,9 +1686,11 @@ uint32_t LockstepSession::delayNeededBy(const Member& m) const
   uint32_t worst = 0;
   const size_t n = std::min<size_t>(m.rtt.size(), 3);
   for (size_t i = m.rtt.size() - n; i < m.rtt.size(); i++) worst = std::max(worst, m.rtt[i]);
-  // Not clamped to maxDelay: the question is what the joiner NEEDS, and a round on a relay can have a D of 12, where a clamp at 12 (or at
-  // the old 8) would call a machine that needs 20 "fine".
-  return (uint32_t) chooseDelay(worst, 0, m_opt.tickMs, 1000);
+  // Clamped one above maxDelay, not at it: what matters is whether the joiner needs MORE than any D this host would ever choose
+  // (maxDelay: 8, or 12 on a relay), which is a joiner no round could carry. A clamp at 8, as it was, called a machine that needs 26
+  // "fine" for a relay round's D of 12; a clamp at maxDelay itself could never exceed a D of maxDelay. (Unclamped is wrong in the
+  // other direction: a test that runs the clock 10 times faster, tickMs 3, turns an ordinary 69 ms first ping into a need of 24.)
+  return (uint32_t) chooseDelay(worst, 0, m_opt.tickMs, m_opt.maxDelay + 1);
 }
 
 void LockstepSession::onReadyAt(Member& m, const ReadyAtMsg& msg)
