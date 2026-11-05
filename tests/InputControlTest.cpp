@@ -176,6 +176,41 @@ TEST_F(InputControlTest, InANetworkGameAPadsStartBindsItToThisMachinesOwnSlotsBe
   EXPECT_TRUE(m_handler->sampleTick().slot[0].held(PlayerInput::UP));
 }
 
+TEST_F(InputControlTest, ASlotTheHostGaveALateJoinerIsLocalAtOnceOnTheLowestFreeKeyboardSetWithNoControlEvent)
+{
+  // Brief 13: a machine that joined with no slot (every human slot is someone else's) is dealt bots by the host. The input
+  // layer's half is local only: the sim gets the takeover from the host, in the final inputs.
+  configurePlayers(4);
+  std::GameSettings* settings = std::GameSettings::getInstance();
+  settings->setPlayerAI(0, false);
+  settings->setPlayerAI(1, false);
+  settings->setNpcSpawnerEnabled(false);
+  startRound();
+  m_handler = std::make_unique<InputHandler>();
+  m_handler->setPointers(allPlayers(), &m_view, 0);   // nothing here is ours
+  EXPECT_EQ(m_handler->localSlotMask(), 0u);
+  EXPECT_EQ(m_handler->m_keyMap.count(2), 0u);
+
+  m_handler->grantSlot(2);
+  EXPECT_TRUE(m_handler->isLocalSlot(2));
+  EXPECT_EQ(m_handler->localSlotMask(), 0b0100u);
+  ASSERT_EQ(m_handler->m_keyMap.count(2), 1u) << "a keyboard set drives it";
+  EXPECT_TRUE(m_handler->sampleTick().control.empty()) << "no control event: the host decided";
+  m_handler->keyboardEvent(m_handler->m_keyMap.at(2)[InputHandler::LEFT_KEY], true);
+  EXPECT_TRUE(m_handler->sampleTick().slot[2].held(PlayerInput::LEFT));
+  ASSERT_FALSE(m_view.calls.empty());
+  EXPECT_EQ(m_view.calls.back().team, 3);
+  EXPECT_EQ(m_view.calls.back().state, JoinIndicatorView::JOIN_READY);
+
+  // A second slot gets the next set, not the same one; an out-of-range slot is ignored.
+  m_handler->grantSlot(3);
+  EXPECT_EQ(m_handler->localSlotMask(), 0b1100u);
+  EXPECT_NE(m_handler->m_keyMap.at(2)[InputHandler::ACTION1_KEY], m_handler->m_keyMap.at(3)[InputHandler::ACTION1_KEY]);
+  m_handler->grantSlot(-1);
+  m_handler->grantSlot(99);
+  EXPECT_EQ(m_handler->localSlotMask(), 0b1100u);
+}
+
 TEST_F(InputControlTest, WithoutThatFlagStartStillOnlyOpensTheSelector)
 {
   startRound4();

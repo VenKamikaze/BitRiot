@@ -68,6 +68,8 @@ class NetGame
       int totalSlots = 0;          // host: player slots in all (0: as many as humans, at least 2)
       std::string recordDir;       // --record: a round record per round (the final inputs)
       bool requireReady = false;   // host: the lobby's Start waits until every peer is ready (the menus: yes; --host: no, as in 07)
+      uint32_t reconnectToken = 0; // peer: the token an earlier session with this host issued (brief 13); 0 = none
+      bool spectate = false;       // peer: watch only
     };
 
     // Opens the network and the session. A peer's `join` host name is resolved here (the
@@ -123,6 +125,9 @@ class NetGame
     std::string statusLine() const;
     // What the stall overlay says ("waiting for peer1"), or "".
     std::string stallText() const;
+    // A late joiner's banner (brief 13): "Joining... catching up 43%", "Joining... waiting for a free player", or what a
+    // spectator sees; "" for everyone else.
+    std::string joinText() const;
 
   private:
     NetGame() {}

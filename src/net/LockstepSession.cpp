@@ -1789,7 +1789,7 @@ uint8_t LockstepSession::waitingMask() const
 
 std::string LockstepSession::waitingText() const
 {
-  if (m_state != RUNNING || canStep())
+  if (m_state != RUNNING || canStep() || catchingUp())
   {
     return "";
   }

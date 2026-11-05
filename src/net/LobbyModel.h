@@ -147,9 +147,14 @@ namespace netplay
     std::string joinAddress;
     int hostPort = 7777;
     int localPlayers = 1;
+    // Brief 13: the reconnect token the host at `tokenHost` issued, so a game that crashed or was dropped can come back as the
+    // same player. Not written when there is none.
+    uint32_t token = 0;
+    std::string tokenHost;
     bool operator==(const NetPrefs& o) const
     {
-      return name == o.name && joinAddress == o.joinAddress && hostPort == o.hostPort && localPlayers == o.localPlayers;
+      return name == o.name && joinAddress == o.joinAddress && hostPort == o.hostPort && localPlayers == o.localPlayers
+             && token == o.token && tokenHost == o.tokenHost;
     }
   };
   // key=value lines. A missing file is not an error (`out` keeps its defaults, false is returned); a corrupt
@@ -168,6 +173,11 @@ namespace netplay
   // The sentence for a control event in a stepped tick that the others should hear about ("" = none): a slot that a
   // person leaves ("Bob left - now AI"). `who` is the name of the slot's player (clipped here), or "" if unknown.
   std::string eventToast(const ControlEvent& e, const std::string& who);
+
+  // A late joiner's banner over the round (brief 13): "Joining... catching up 43%" while it replays the host's record,
+  // "Joining... waiting for a free player" once it has caught up and the host is deciding, and for a machine that only
+  // watches ("Watching" if it chose to, "Watching - no player is free to take over" if no bot was free). "" otherwise.
+  std::string joinSentence(LockstepSession::JoinStage stage, double catchUpFraction, bool spectating, bool spectatingByChoice);
 
   // LockstepSession::waitingText() ("waiting for Bob, Carol") as the overlay's sentence ("Waiting for Bob, Carol...").
   std::string stallSentence(const std::string& waitingText);

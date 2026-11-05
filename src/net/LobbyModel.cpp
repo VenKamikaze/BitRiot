@@ -568,6 +568,18 @@ bool parseNetPrefs(const std::string& text, NetPrefs& out)
     {
       if (value.size() == 1 && value[0] >= '1' && value[0] <= '4') out.localPlayers = value[0] - '0';
     }
+    else if (key == "token")
+    {
+      if (!value.empty() && value.size() <= 10 && value.find_first_not_of("0123456789") == std::string::npos)
+      {
+        const unsigned long long v = std::strtoull(value.c_str(), nullptr, 10);
+        if (v != 0 && v <= 0xFFFFFFFFull) out.token = (uint32_t) v;
+      }
+    }
+    else if (key == "token_host")
+    {
+      out.tokenHost = value.size() <= 260 ? sanitizeUtf8(value) : std::string();
+    }
   }
   return true;
 }
@@ -593,6 +605,10 @@ std::string formatNetPrefs(const NetPrefs& p)
     << "join=" << sanitizeUtf8(p.joinAddress) << "\n"
     << "port=" << p.hostPort << "\n"
     << "players=" << p.localPlayers << "\n";
+  if (p.token != 0 && !p.tokenHost.empty())
+  {
+    t << "token=" << p.token << "\n" << "token_host=" << sanitizeUtf8(p.tokenHost) << "\n";
+  }
   return t.str();
 }
 
@@ -631,6 +647,29 @@ std::string eventToast(const ControlEvent& e, const std::string& who)
   }
   const std::string name = who.empty() ? std::string("A player") : clipUtf8(who, 20);
   return name + " left - now AI";
+}
+
+std::string joinSentence(LockstepSession::JoinStage stage, double catchUpFraction, bool spectating, bool spectatingByChoice)
+{
+  switch (stage)
+  {
+    case LockstepSession::JOIN_CATCHING_UP:
+    {
+      int percent = (int) (catchUpFraction * 100.0);
+      percent = std::max(0, std::min(99, percent));
+      return "Joining... catching up " + std::to_string(percent) + "%";
+    }
+    case LockstepSession::JOIN_WAITING:
+      return "Joining... waiting for a free player";
+    case LockstepSession::JOIN_DONE:
+    case LockstepSession::JOIN_NONE:
+      break;
+  }
+  if (!spectating)
+  {
+    return "";
+  }
+  return spectatingByChoice ? "Watching" : "Watching - no player is free to take over";
 }
 
 std::string stallSentence(const std::string& waitingText)

@@ -108,6 +108,8 @@ std::unique_ptr<NetGame> NetGame::build(const Params& params, Simulation& sim, c
   so.localPlayers = params.localPlayers;
   so.tickMs = std::GameSettings::NORMAL_TICKS_SPEED;
   so.requireReady = params.requireReady;
+  so.reconnectToken = params.reconnectToken;
+  so.spectate = params.spectate && !params.host;
 
   std::string sessionError;
   if (params.host)
@@ -278,6 +280,16 @@ bool NetGame::startRound(std::string* error)
 std::string NetGame::stallText() const
 {
   return m_session->waitingText();
+}
+
+std::string NetGame::joinText() const
+{
+  const netplay::LockstepSession& s = *m_session;
+  if (s.state() != netplay::LockstepSession::RUNNING)
+  {
+    return "";
+  }
+  return netplay::joinSentence(s.joinStage(), s.catchUpFraction(), s.spectating(), m_params.spectate);
 }
 
 std::string NetGame::statusLine() const

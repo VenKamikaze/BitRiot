@@ -38,6 +38,7 @@ set(SIM_TEST_SOURCES
   DataHashTest.cpp
   BuildIdTest.cpp
   HeadlessCliTest.cpp
+  FastForwardBenchmarkTest.cpp
 )
 
 set(CORE_TEST_SOURCES

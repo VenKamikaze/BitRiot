@@ -56,6 +56,9 @@ class EventHandlerNetForm : public EventHandler
     // Writes what the last successful host or join used (name, port or address, local players).
     static void rememberHost(const std::string& name, int port, int localPlayers);
     static void rememberJoin(const std::string& name, const std::string& address, int localPlayers);
+    // Brief 13: the reconnect token the host at `host` (as typed) issued; and the one saved for that host, or 0.
+    static void rememberToken(const std::string& host, uint32_t token);
+    static uint32_t savedToken(const std::string& host);
     void ProcessEvent(Rml::Event& event, const Rml::String& value) override;
 };
 

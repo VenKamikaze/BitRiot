@@ -89,6 +89,10 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
     // machine claimed the same bot in the same moment). The slot stops being ours: no pad, no keys,
     // no sampler entry, no indicator, and no event is queued (the simulation never made it ours).
     void revokeSlot(int slot);
+    // A network game (brief 13): the host dealt this machine a slot (a late joiner, or a player that came back with its
+    // token). The same local mapping as a takeover through the selector - the lowest keyboard set no live player drives, or
+    // none (a pad's START then binds it) - but no control event: the host put the HUMAN_TAKES_OVER in the final inputs itself.
+    void grantSlot(int slot);
     // A network game (brief 07): a pad whose START is pressed while it drives nobody first takes one of THIS
     // machine's own human slots that has no pad (lowest first; its keyboard set is released), and only
     // then opens the join selector for a bot. Purely local: no control event, nothing sent. Off by default,
