@@ -1416,6 +1416,20 @@ TEST(LockstepLobby, TheHostCanRemoveAPeerAndItIsToldWhy)
   EXPECT_EQ(host.peerCount(), 2);
 }
 
+TEST(LockstepLobby, ARemovedPeerWhoseLeavePacketsWereAllLostIsStillToldWhy)
+{
+  Cluster c(2, readyOptions());
+  c.impair(0, "loss=100");   // the host's three LEAVEs go nowhere
+  ASSERT_TRUE(c.machine(0).s->kick(1));
+  c.run(50);
+  c.impair(0, "");
+  EXPECT_FALSE(c.machine(1).s->ended());
+  // The peer is still talking (its keepalives): the host answers with the reason, not with silence.
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(1).s->ended(); }, 3000));
+  EXPECT_EQ(c.machine(1).s->endReason(), LockstepSession::END_REMOVED);
+  EXPECT_EQ(c.machine(0).s->peerCount(), 0);
+}
+
 TEST(LockstepLobby, ARoundInProgressCannotKickAndANewJoinerBetweenRoundsHasToBeReadyOnlyInTheLobby)
 {
   Cluster c(2, readyOptions());

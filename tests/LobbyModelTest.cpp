@@ -444,6 +444,7 @@ TEST(LobbyModelEnd, HostNotAnsweringHostLeftAndTheOtherEndings)
   EXPECT_EQ(m.title, "The host did not answer");
   EXPECT_NE(allText(m).find("192.168.1.20:7777"), std::string::npos);
   EXPECT_NE(allText(m).find("forwarded"), std::string::npos);
+  EXPECT_EQ(allText(m).find("ten"), std::string::npos) << "the timeout is a setting: the text names no number";
 
   EXPECT_EQ(describeEnd(LockstepSession::END_HOST_LOST, none, "", mine, "").title, "Lost the connection to the host");
   EXPECT_EQ(describeEnd(LockstepSession::END_HOST_CLOSED, none, "the host ended the session", mine, "").title, "The host left");
@@ -535,8 +536,11 @@ TEST(LobbyModelPrefs, RoundTripThroughAFile)
   ASSERT_TRUE(loadNetPrefs(path, back));
   EXPECT_EQ(back, p);
   std::remove(path.c_str());
-  std::ifstream tmp((path + ".tmp").c_str());
+  std::ifstream tmp((path + "." + std::to_string((long) getpid()) + ".tmp").c_str());
   EXPECT_FALSE(tmp.good()) << "the temporary file is renamed away";
+  // Nothing is left under the shared name either: the temporary name belongs to this process.
+  std::ifstream shared((path + ".tmp").c_str());
+  EXPECT_FALSE(shared.good());
 }
 
 TEST(LobbyModelPrefs, AMissingFileIsNotAnError)

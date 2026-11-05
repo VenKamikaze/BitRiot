@@ -97,17 +97,52 @@ void MenuSDLRenderer::initGui(SDL_Renderer* renderer, SDL_Window *screen)
     {
       return;
     }
-    if (Rml::Element* menu = doc.GetElementById("mainmenuitems"))
+    // The two online buttons go in after "Play", into the list mainmenu.rml has: the tab indexes of what follows move up by two.
+    Rml::Element* play = doc.GetElementById("quickstart");
+    Rml::Element* menu = play ? play->GetParentNode() : nullptr;
+    if (!menu)
     {
-      menu->SetInnerRML(
-        "<button class=\"tabbed\" id=\"quickstart\" autofocus tabindex=\"1\" onclick=\"open playerselect.rml\">Play</button><br />"
-        "<button class=\"tabbed\" id=\"nethost\" tabindex=\"2\" onclick=\"open nethost.rml\">Host online game</button><br />"
-        "<button class=\"tabbed\" id=\"netjoin\" tabindex=\"3\" onclick=\"open netjoin.rml\">Join online game</button><br />"
-        "<button class=\"tabbed\" id=\"options\" tabindex=\"4\" onclick=\"open gameoptions.rml\">Game Options</button><br />"
-        "<button class=\"tabbed\" id=\"exit\" tabindex=\"5\" escapeAction=\"1\" onclick=\"exit\">Exit</button><br />");
+      return;
     }
+    Rml::ElementList buttons;
+    doc.GetElementsByTagName(buttons, "button");
+    for (Rml::Element* b : buttons)
+    {
+      const int index = MickRmlUIElementUtil::getTabIndex(b);
+      if (index >= 2)
+      {
+        b->SetAttribute("tabindex", std::to_string(index + 2));
+      }
+    }
+    // Inserted before the first button after Play (Rml has no insert-after: the buttons are followed by <br />).
+    Rml::Element* before = nullptr;
+    for (int i = 0; i < menu->GetNumChildren(); i++)
+    {
+      if (menu->GetChild(i) == play)
+      {
+        // Play, its <br />, then the next child.
+        before = i + 2 < menu->GetNumChildren() ? menu->GetChild(i + 2) : nullptr;
+        break;
+      }
+    }
+    auto add = [&](const char* id, const char* page, int tab, const char* label) {
+      Rml::ElementPtr b = doc.CreateElement("button");
+      b->SetId(id);
+      b->SetClassNames("tabbed");
+      b->SetAttribute("tabindex", std::to_string(tab));
+      b->SetAttribute("onclick", Rml::String("open ") + page);
+      b->SetInnerRML(label);
+      Rml::Element* raw = menu->InsertBefore(std::move(b), before);
+      (void) raw;
+      menu->InsertBefore(doc.CreateElement("br"), before);
+    };
+    add("nethost", "nethost.rml", 2, "Host online game");
+    add("netjoin", "netjoin.rml", 3, "Join online game");
   });
 #endif
+
+  // SDL2 turns text input on at video init on the desktop; it is wanted only while a text field has the focus.
+  SDL_StopTextInput();
 
   m_playersBinder = make_unique<PlayersSelectBinder>(context);
 

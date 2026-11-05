@@ -16,6 +16,7 @@ const size_t MAX_HASHES = 64;
 // events, so a tick never holds more than 4 * MAX_SLOTS = 24.
 const size_t MAX_PEER_EVENTS = 18;
 const uint32_t DESYNC_RESEND_MS = 100;
+const uint64_t REMOVED_MEMORY_MS = 30000;   // how long a removed peer's packets are answered with LEAVE_REMOVED
 const uint32_t CHECKSUM_RESEND_MS = 400;
 
 std::string hex64(uint64_t v)
@@ -445,6 +446,30 @@ void LockstepSession::hostHandle(const vnet_addr& from, const Header& h, Reader&
     {
       id = i;
       break;
+    }
+  }
+  if (id < 0)
+  {
+    for (size_t i = 0; i < m_removed.size();)
+    {
+      Removed& r = m_removed[i];
+      if (m_now >= r.until)
+      {
+        m_removed.erase(m_removed.begin() + (long) i);
+        continue;
+      }
+      if (vnet_addr_equal(&r.addr, &from) && h.session == m_sessionId)
+      {
+        if (m_now - r.lastSent >= 1000)
+        {
+          LeaveMsg l;
+          l.reason = LEAVE_REMOVED;
+          sendMsg(MSG_LEAVE, from, l);
+          r.lastSent = m_now;
+        }
+        return;
+      }
+      i++;
     }
   }
   if (id < 0 || h.sender != id || h.session != m_sessionId)
@@ -1080,6 +1105,12 @@ bool LockstepSession::kick(uint8_t peerId)
   LeaveMsg l;
   l.reason = LEAVE_REMOVED;
   for (int k = 0; k < 3; k++) sendMsg(MSG_LEAVE, m_members[peerId].addr, l);
+  // The three LEAVEs above may all be lost: for a while a packet from this address is answered with the same reason.
+  Removed r;
+  r.addr = m_members[peerId].addr;
+  r.until = m_now + REMOVED_MEMORY_MS;
+  r.lastSent = m_now;
+  m_removed.push_back(r);
   removePeer(peerId, "removed by the host");
   return true;
 }

@@ -120,6 +120,20 @@ void showError(Rml::ElementDocument* doc, const std::string& text)
     e->SetInnerRML(text);   // plain sentences from LobbyModel: no markup characters in them
   }
 }
+// The note under the host form names the port in the field, as typed (what is typed is only ever shown as text).
+void setPortNote(Rml::ElementDocument* doc, const std::string& typed)
+{
+  std::string shown;
+  for (char c : typed)
+  {
+    if (c >= '0' && c <= '9') shown += c;
+  }
+  if (shown.empty()) shown = "?";
+  for (const char* id : {"portnote"})
+  {
+    if (Rml::Element* e = doc->GetElementById(id)) e->SetInnerRML(shown);
+  }
+}
 } // namespace
 
 void EventHandlerNetForm::setPrefsPath(const std::string& path)
@@ -171,6 +185,11 @@ void EventHandlerNetForm::ProcessEvent(Rml::Event& event, const Rml::String& val
     {
       b->SetInnerRML(std::to_string(g_localPlayers));
     }
+    setPortNote(doc, valueOf(doc, "f-port"));
+  }
+  else if (value == "netport")
+  {
+    setPortNote(doc, valueOf(doc, "f-port"));
   }
   else if (value == "netlocal")
   {

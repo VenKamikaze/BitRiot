@@ -566,6 +566,22 @@ TEST_F(NetFormTest, TheSavedFilesPathIsOnlyAskedForWhenAnOnlinePageNeedsIt)
   std::remove(path.c_str());
 }
 
+TEST_F(NetFormTest, TheHostFormsNoteNamesThePortInTheField)
+{
+  Rml::ElementDocument* doc = loadDocument("nethost.rml");
+  ASSERT_NE(doc, nullptr);
+  EventHandlerNetForm handler;
+  press(handler, doc, "f-name", "netforminit");
+  EXPECT_EQ(doc->GetElementById("portnote")->GetInnerRML(), "7777");
+  type(doc, "f-port", "7123");
+  press(handler, doc, "f-port", "netport");
+  EXPECT_EQ(doc->GetElementById("portnote")->GetInnerRML(), "7123");
+  type(doc, "f-port", "<b>9");
+  press(handler, doc, "f-port", "netport");
+  EXPECT_EQ(doc->GetElementById("portnote")->GetInnerRML(), "9") << "only digits are ever echoed";
+  EXPECT_EQ(doc->GetElementById("f-port")->GetAttribute<Rml::String>("onchange", ""), "netport") << "the field tells the page when it changes";
+}
+
 TEST_F(NetFormTest, TheFormsOpenWithTheDefaultsWhenThereIsNoSavedFile)
 {
   Rml::ElementDocument* doc = loadDocument("nethost.rml");
@@ -609,7 +625,7 @@ TEST_F(NetFormTest, EveryButtonOfTheOnlinePagesNamesACommandTheirHandlerKnows)
   // A typo in an onclick would make a button do nothing at all. Every command the pages use is checked against the handlers.
   const std::pair<const char*, std::vector<std::string>> pages[] = {
       {"netlobby.rml", {"netstart", "netleave", "netteam 0", "netkick 0", "netset mapw", "netset maph", "netset blocks", "netset spawner", "netset slots"}},
-      {"nethost.rml", {"netforminit", "netlocal", "nethostgo", "open mainmenu.rml"}},
+      {"nethost.rml", {"netforminit", "netport", "netlocal", "nethostgo", "open mainmenu.rml"}},
       {"netjoin.rml", {"netforminit", "netlocal", "netjoingo", "open mainmenu.rml"}},
   };
   for (const auto& page : pages)

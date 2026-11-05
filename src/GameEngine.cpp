@@ -779,8 +779,10 @@ void GameEngine::netFrame()
   {
     rq.leave = false;
     // The error page of a join that failed goes back to the join form; every other leave goes to the main menu.
-    const bool failedJoin = s.state() == LockstepSession::ENDED && !m_net->isHost() && s.endReason() != LockstepSession::END_LEFT
-                            && m_netEndedShown;
+    // Cancel while the session is still asking the host (a numeric address) is the same Cancel as during the name lookup.
+    const bool failedJoin = !m_net->isHost()
+                            && ((s.state() == LockstepSession::ENDED && s.endReason() != LockstepSession::END_LEFT && m_netEndedShown)
+                                || s.state() == LockstepSession::CONNECTING);
     leaveNetplayToMenu(failedJoin ? "netjoin.rml" : "mainmenu.rml");
     return;
   }

@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
+#include <unistd.h>
 
 namespace netplay
 {
@@ -365,12 +366,12 @@ EndMessage describeEnd(LockstepSession::EndReason reason, const RejectInfo& rj, 
     }
     case L::END_CONNECT_TIMEOUT:
       m.title = "The host did not answer";
-      m.lines.push_back("Nothing came back from " + (address.empty() ? std::string("the host") : address) + " after ten seconds.");
+      m.lines.push_back("Nothing came back from " + (address.empty() ? std::string("the host") : address) + " in time.");
       m.lines.push_back("Check the address and the port, that the host is running, and that its UDP port is reachable (forwarded) if it is outside your network.");
       break;
     case L::END_HOST_LOST:
       m.title = "Lost the connection to the host";
-      m.lines.push_back("No packet came from the host for ten seconds. The match is over.");
+      m.lines.push_back("No packet came from the host for too long. The match is over.");
       break;
     case L::END_HOST_CLOSED:
       if (sessionText.find("diverged") != std::string::npos)
@@ -597,7 +598,8 @@ std::string formatNetPrefs(const NetPrefs& p)
 
 bool saveNetPrefs(const std::string& path, const NetPrefs& p)
 {
-  const std::string tmp = path + ".tmp";
+  // A name of this process's own: two game windows sharing a preferences folder must not write the same temporary file.
+  const std::string tmp = path + "." + std::to_string((long) getpid()) + ".tmp";
   {
     std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
     if (!f)

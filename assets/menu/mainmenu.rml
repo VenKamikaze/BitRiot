@@ -8,7 +8,7 @@
 	<body class="background">
 		
     <div class="menu-container">
-      <div class="menu" id="mainmenuitems">
+      <div class="menu">
 	      <button class="tabbed" id="quickstart" autofocus tabindex="1" onclick="open playerselect.rml">Play</button><br />
 	      <button class="tabbed" id="options" tabindex="2" onclick="open gameoptions.rml">Game Options</button><br />
 	      <button class="tabbed" id="exit" tabindex="3" escapeAction="1" onclick="exit">Exit</button><br />

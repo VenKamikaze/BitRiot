@@ -158,7 +158,9 @@ namespace netplay
   bool loadNetPrefs(const std::string& path, NetPrefs& out);
   bool parseNetPrefs(const std::string& text, NetPrefs& out);
   std::string formatNetPrefs(const NetPrefs& p);
-  // Writes via a temporary file and a rename, so a crash cannot leave half a file. False if it cannot be written.
+  // Writes via a temporary file (named for this process) and a rename, so a crash cannot leave half a file. False if it
+  // cannot be written. (POSIX rename replaces the old file; std::rename on Windows refuses to: handle that when netplay is
+  // enabled for MinGW.)
   bool saveNetPrefs(const std::string& path, const NetPrefs& p);
 
   // -- during a round -----------------------------------------------------------------------------

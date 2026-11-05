@@ -178,6 +178,20 @@ Brief 07 (merged in 0ccdb66) built native lockstep netplay, driven from the comm
 - **Untested glue** (needs a display): `GameEngine::netIdleFrame`/`netFrame`/`updateNetOverlay` as a whole, the main menu hook, `MenuSDLRenderer`'s text input and overlay drawing, the scoreboard buttons. All were driven under Xvfb as listed above.
 - **Known limit**: the sanitiser keeps any well-formed UTF-8 a peer sends in its name (up to 24 bytes); FreeMono has no glyph for most of it, so such a name shows blanks. It cannot overflow or break the page.
 
+**Review fix round** (an Opus review of bc77dab: merge after fixes; new commits on top, no history change)
+
+1. `cycleTeam` wrap tested (2 seats: team 1, 0, 1); `% MAX_SLOTS` now fails it.
+2. A host that waits for ready could never start with `bitriot_headless join`: a joining runner now says ready once it is in the lobby; `bitriot_headless host --require-ready 1` (new) makes the process test `AHostThatWaitsForReadyStartsWithAHeadlessPeer` possible; without the `setReady` it times out and fails.
+3. The round and phase checks in `onLobby` are tested with a `FakeHost` (a raw-socket host and a real peer session); removing either fails it.
+4. Cancel while the session is CONNECTING returns a joiner to the join form (address kept), like Cancel during the lookup.
+5. Removed-peer memory (30 s): if every `LEAVE` reason 4 is lost, the host answers the peer's later packets with it. Tested with 100% loss during the kick.
+6. `SDL_StopTextInput()` once in `initGui`.
+7. The main menu hook now inserts the two buttons into mainmenu.rml's own list and moves the later tab indexes up by two (`mainmenuitems` id removed); checked under Xvfb and by the web smoke test.
+8. The orphan comment in GameEngine.h and the unused `BASE_TITLE` are gone.
+9. The host form's note names the port in the field and follows it (`onchange`). **Note on settings:** the lobby's map, blocks, enemies, player-count and team controls are *new lobby buttons* (`NetGame::cycleSetting`, the same steps and limits), not the Game Options screen's own controls; the host's local Game Options are only where the lobby starts from.
+10. `describeEnd` names no number of seconds.
+11. The settings file's temporary name includes the process id. Follow-up: `std::rename` does not replace an existing file on Windows; handle it when netplay is enabled for MinGW (no Windows code was added).
+
 **Play-test** (pending; two windows on one machine are enough; a second machine and a pad make it better). The commands are untested on Arch (the container is Ubuntu); the dependencies are the same as brief 07's.
 
 ```bash

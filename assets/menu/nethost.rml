@@ -11,9 +11,9 @@
         <h2>Host an online game</h2>
         <div class="form">
           <div class="frow"><span class="flabel">Your name</span><input type="text" id="f-name" class="tabbed text" tabindex="1" maxlength="24" autofocus /></div>
-          <div class="frow"><span class="flabel">UDP port</span><input type="text" id="f-port" class="tabbed text" tabindex="2" maxlength="5" /></div>
+          <div class="frow"><span class="flabel">UDP port</span><input type="text" id="f-port" class="tabbed text" tabindex="2" maxlength="5" onchange="netport" /></div>
           <div class="frow"><span class="flabel">Players here</span><button class="tabbed formbtn" id="f-local" tabindex="3" onclick="netlocal">1</button></div>
-          <p class="note">Friends on your network join with this machine's address and the port above. Friends outside it need that UDP port forwarded to this machine on your router.</p>
+          <p class="note">Friends on your network join with this machine's address and the port above. Friends outside it need UDP port <span id="portnote">7777</span> reachable: forwarded to this machine on your router.</p>
           <p class="error" id="formerror"></p>
         </div>
         <div class="formbuttons">

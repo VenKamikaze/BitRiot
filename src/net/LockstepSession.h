@@ -479,6 +479,8 @@ namespace netplay
       uint32_t m_lastHostHashTick = 0;
       std::map<uint32_t, std::vector<int>> m_claims;   // tick -> slots asked for in that tick's record
       std::vector<int> m_rejectedClaims;
+      struct Removed { vnet_addr addr; uint64_t until; uint64_t lastSent; };
+      std::vector<Removed> m_removed;             // host: peers it removed from the lobby; answered with LEAVE_REMOVED for a while
       std::vector<ControlEvent> m_hostEvents;     // host: RETURN_TO_AI for peers that left, for the next confirmed tick
 
       // Checksums.
