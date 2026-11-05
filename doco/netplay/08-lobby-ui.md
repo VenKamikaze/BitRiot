@@ -192,6 +192,8 @@ Brief 07 (merged in 0ccdb66) built native lockstep netplay, driven from the comm
 10. `describeEnd` names no number of seconds.
 11. The settings file's temporary name includes the process id. Follow-up: `std::rename` does not replace an existing file on Windows; handle it when netplay is enabled for MinGW (no Windows code was added).
 
+Results after the fix round: GCC and Clang `bitriot_tests` **678**, `bitriot_sim_tests` **532**; ctest 3/3 (the process test now has 8 cases); `-DBITRIOT_NETPLAY=OFF` 526 and 412; web smoke 41 of 41; 200-seed sweep (GCC, tree not rebuilding) 0 failing seeds on both binaries; build id still `0x6767612d056ba8af`. "Ready survives setting changes" stays a documented follow-up.
+
 **Play-test** (pending; two windows on one machine are enough; a second machine and a pad make it better). The commands are untested on Arch (the container is Ubuntu); the dependencies are the same as brief 07's.
 
 ```bash
