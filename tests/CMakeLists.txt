@@ -51,9 +51,17 @@ set(CORE_TEST_SOURCES
   GameOptionsTest.cpp
 )
 
+# Netplay (brief 07): the wire format and the lockstep session, on vnet's loopback network.
+if(BITRIOT_NETPLAY)
+  list(APPEND SIM_TEST_SOURCES NetProtocolTest.cpp LockstepSessionTest.cpp)
+endif()
+
 add_library(bitriot_sim_test_objs OBJECT ${SIM_TEST_SOURCES})
 target_include_directories(bitriot_sim_test_objs PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(bitriot_sim_test_objs PRIVATE bitriot_sim bitriot_headless_cli GTest::gtest)
+if(BITRIOT_NETPLAY)
+  target_link_libraries(bitriot_sim_test_objs PRIVATE bitriot_net)
+endif()
 
 # The whole project builds as C++17 (CMAKE_CXX_STANDARD in the top-level
 # CMakeLists.txt), which GoogleTest >= 1.17 requires.

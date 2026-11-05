@@ -228,9 +228,9 @@ namespace netplay
       int proposedDelay() const;
       // Pure: ceil((worstRtt + jitter) / tickMs) + 1, clamped to MIN_DELAY..MAX_DELAY.
       static int chooseDelay(uint32_t worstRttMs, uint32_t jitterMs, uint32_t tickMs);
-      static const int MIN_DELAY = 2;
-      static const int MAX_DELAY = 8;
-      static const int DEFAULT_DELAY = 3;   // loopback and tests, and a peer with no measurement yet
+      static constexpr int MIN_DELAY = 2;
+      static constexpr int MAX_DELAY = 8;
+      static constexpr int DEFAULT_DELAY = 3;   // loopback and tests, and a peer with no measurement yet
 
       // Host: true when a round could start now: in the lobby or between rounds, and
       // every peer has acknowledged the last tick of the previous round (so no peer is
