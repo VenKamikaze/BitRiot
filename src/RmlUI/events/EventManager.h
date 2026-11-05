@@ -63,6 +63,9 @@ public:
 	/// "exit", ...) before the manager acts on it. Returning true means the command was
 	/// handled and the manager does nothing more with it. Empty (the default): no hook.
 	static void SetCommandInterceptor(std::function<bool(const Rml::String&)> interceptor);
+	/// Netplay (brief 08): a hook called with every document right after it was loaded and before it is shown, and
+	/// the name it was loaded under. The main menu uses it to add its online entries only in a build that has netplay.
+	static void SetDocumentLoadedHook(std::function<void(Rml::ElementDocument&, const Rml::String&)> hook);
 
 	/// Loads a window and binds the event handler for it.
 	/// @param[in] window_name The name of the window to load.

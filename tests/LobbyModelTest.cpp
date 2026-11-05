@@ -158,14 +158,14 @@ TEST(LobbyModelRows, MixedSlotsMapToHostRemoteAiAndOpenRows)
   ASSERT_EQ(rows.size(), 6u);
 
   EXPECT_EQ(rows[0].kind, SlotKind::HOST);
-  EXPECT_EQ(rows[0].name, "Alice 1/2");   // a machine with two players names which one
+  EXPECT_EQ(rows[0].name, "Alice 1/2 (you)");   // a machine with two players names which one; the viewer's own seats say so
   EXPECT_TRUE(rows[0].mine);
   EXPECT_FALSE(rows[0].showReady);
   EXPECT_EQ(rows[0].pingMs, -1);
   EXPECT_FALSE(rows[0].kickable);
 
   EXPECT_EQ(rows[1].kind, SlotKind::HOST);
-  EXPECT_EQ(rows[1].name, "Alice 2/2");
+  EXPECT_EQ(rows[1].name, "Alice 2/2 (you)");
 
   EXPECT_EQ(rows[2].kind, SlotKind::REMOTE);
   EXPECT_EQ(rows[2].name, "Bob");
@@ -274,6 +274,7 @@ TEST(LobbyModelRows, LongAndOddNamesAreClippedAndStayWellFormed)
   v.peers[0].name = "\xff\xfe\x80Bad\x1b[";
   LobbyContext ctx;
   ctx.isHost = true;
+  ctx.myId = 0;
   ctx.nameChars = 14;
   for (const LobbyRow& r : buildLobbyRows(v, ctx))
   {
@@ -283,8 +284,9 @@ TEST(LobbyModelRows, LongAndOddNamesAreClippedAndStayWellFormed)
   const std::vector<LobbyRow> rows = buildLobbyRows(v, ctx);
   EXPECT_EQ(rows[2].name, "WWWWWWWWWWW...");
   EXPECT_EQ(rows[0].name.find('\xff'), std::string::npos);
-  // A suffix is counted in the budget: a long name with "1/2" still fits.
+  // A suffix is counted in the budget: a long name with "1/2 (you)" still fits.
   EXPECT_LE(utf8Length(rows[0].name), 14u);
+  EXPECT_NE(rows[0].name.find("(you)"), std::string::npos);
 }
 
 TEST(LobbyModelScreen, TheHostSeesWhoIsBlockingTheStart)
@@ -301,6 +303,11 @@ TEST(LobbyModelScreen, TheHostSeesWhoIsBlockingTheStart)
   EXPECT_EQ(sc.startLabel, "Start match");
   EXPECT_EQ(sc.title, "Hosting a network game");
   EXPECT_EQ(sc.settings, "Map 17 x 19, blocks 55%, enemies on, 6 players");
+  EXPECT_EQ(sc.settingButtons[0], "Width 17");
+  EXPECT_EQ(sc.settingButtons[1], "Height 19");
+  EXPECT_EQ(sc.settingButtons[2], "Blocks 55%");
+  EXPECT_EQ(sc.settingButtons[3], "Enemies on");
+  EXPECT_EQ(sc.settingButtons[4], "Players auto");
 
   LobbyView two = v;
   two.peers[1].ready = false;
@@ -561,6 +568,14 @@ TEST(LobbyModelOverlay, ALeavingPlayerIsAnnouncedAndNothingElse)
   EXPECT_EQ(eventToast(ControlEvent(2, ControlEvent::RETURN_TO_AI), ""), "A player left - now AI");
   EXPECT_EQ(eventToast(ControlEvent(2, ControlEvent::HUMAN_TAKES_OVER), "Bob"), "");
   EXPECT_LE(utf8Length(eventToast(ControlEvent(0, ControlEvent::LEAVE), std::string(60, 'x'))), 20u + 14u);
+}
+
+TEST(LobbyModelOverlay, TheStallSentence)
+{
+  EXPECT_EQ(stallSentence("waiting for Bob, Carol"), "Waiting for Bob, Carol...");
+  EXPECT_EQ(stallSentence("waiting for host"), "Waiting for host...");
+  EXPECT_EQ(stallSentence(""), "");
+  EXPECT_EQ(stallSentence("waiting for \xff"), "Waiting for ?...");
 }
 
 TEST(LobbyModelOverlay, TheStallTextWaitsForHalfASecondOfStalling)

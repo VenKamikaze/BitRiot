@@ -10,6 +10,7 @@
 #include "RmlUI/glue/SystemInterfaceSDL2.h"
 #include <RmlUi/Config/Config.h>
 #include <RmlUi/Core/Element.h>
+#include <RmlUi/Core/ComputedValues.h>
 #include <RmlUi/Core/ElementDocument.h>
 #include <RmlUi/Core/Types.h>
 #include <cassert>
@@ -163,6 +164,36 @@ Rml::Element* MickRmlUIElementUtil::getElementWithTabIndex(Rml::ElementDocument*
     if (el->GetAttribute(TAB_INDEX) && atoi(el->GetAttribute(TAB_INDEX)->Get<Rml::String>().c_str()) == tabIndex)
     {
       return el;
+    }
+  }
+  return nullptr;
+}
+
+bool MickRmlUIElementUtil::isDisplayed(Rml::Element* element)
+{
+  for (Rml::Element* e = element; e != nullptr; e = e->GetParentNode())
+  {
+    if (e->GetDisplay() == Rml::Style::Display::None)
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
+Rml::Element* MickRmlUIElementUtil::stepTabIndex(Rml::ElementDocument* document, int fromIndex, int step)
+{
+  // Indexes are small and dense; the bound only guards against a page with a huge gap.
+  for (int i = 1, index = fromIndex + step; i <= 64; i++, index += step)
+  {
+    Rml::Element* e = getElementWithTabIndex(document, index);
+    if (e && isDisplayed(e))
+    {
+      return e;
+    }
+    if (index < -1 || index > 100)
+    {
+      break;
     }
   }
   return nullptr;

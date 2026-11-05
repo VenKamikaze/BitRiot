@@ -201,6 +201,10 @@ std::vector<LobbyRow> buildLobbyRows(const LobbyView& view, const LobbyContext& 
     {
       suffix = " " + std::to_string(index) + "/" + std::to_string(count);
     }
+    if (r.mine)
+    {
+      suffix += " (you)";
+    }
     const size_t room = ctx.nameChars > suffix.size() ? ctx.nameChars - suffix.size() : 1;
     r.name = clipUtf8(name, room) + suffix;
     if (si.owner != HOST_ID)
@@ -233,6 +237,15 @@ LobbyScreen buildLobbyScreen(const LobbyView& view, const LobbyContext& ctx)
   sc.title = ctx.isHost ? "Hosting a network game" : "Network game";
   sc.settings = describeSettings(view.settings, (int) view.slots.size());
   sc.myReady = ctx.myReady;
+  if (ctx.isHost)
+  {
+    const LobbySettings& st = view.settings;
+    sc.settingButtons[0] = "Width " + std::to_string(st.mapWidth);
+    sc.settingButtons[1] = "Height " + std::to_string(st.mapHeight);
+    sc.settingButtons[2] = "Blocks " + std::to_string(st.blockPercentage) + "%";
+    sc.settingButtons[3] = std::string("Enemies ") + (st.npcSpawner ? "on" : "off");
+    sc.settingButtons[4] = "Players " + (st.totalSlots == 0 ? std::string("auto") : std::to_string(st.totalSlots));
+  }
 
   std::vector<std::string> notReady;
   for (const LobbyEntry& e : view.peers)
@@ -613,6 +626,17 @@ std::string eventToast(const ControlEvent& e, const std::string& who)
   }
   const std::string name = who.empty() ? std::string("A player") : clipUtf8(who, 20);
   return name + " left - now AI";
+}
+
+std::string stallSentence(const std::string& waitingText)
+{
+  if (waitingText.empty())
+  {
+    return "";
+  }
+  std::string t = sanitizeUtf8(waitingText);
+  if (!t.empty() && t[0] >= 'a' && t[0] <= 'z') t[0] = (char) (t[0] - 'a' + 'A');
+  return t + "...";
 }
 
 const std::string& StallTimer::update(const std::string& wanted, uint32_t nowMs)

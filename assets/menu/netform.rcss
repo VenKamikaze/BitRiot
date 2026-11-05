@@ -1,0 +1,102 @@
+/* The host and join screens (brief 08): a few labelled fields and two buttons. */
+.menu-container {
+  margin-top: 6%;
+}
+
+.menu {
+  font-size: 14pt;
+  font-weight: normal;
+}
+
+.menu h2 {
+  font-size: 22pt;
+  font-weight: bold;
+  margin: 0;
+  padding-bottom: 10px;
+}
+
+.form {
+  width: 90%;
+  margin: 0 5%;
+  text-align: left;
+}
+
+.frow {
+  display: block;
+  height: 1.9em;
+  line-height: 1.9em;
+}
+
+.flabel {
+  display: inline-block;
+  width: 36%;
+  text-align: right;
+  padding-right: 3%;
+  color: #cccccc;
+}
+
+input.text {
+  display: inline-block;
+  width: 24em;
+  height: 1.5em;
+  line-height: 1.5em;
+  padding: 0 6px;
+  font-size: 14pt;
+  color: white;
+  background-color: #222233;
+  border-width: 2px;
+  border-color: #666688;
+  cursor: text;
+  text-align: left;
+}
+
+input.text.wide {
+  width: 30em;
+}
+
+input.text:focus {
+  border-color: rgb(120,120,255);
+  background-color: #2a2a44;
+}
+
+input.text selection {
+  background-color: #4466cc;
+  color: white;
+}
+
+.formbtn {
+  display: inline-block;
+  font-size: 14pt;
+  padding: 0 8px;
+  border-width: 1px;
+  border-color: #666666;
+}
+
+.note {
+  display: block;
+  font-size: 11pt;
+  color: #aaaaaa;
+  margin: 8px 0 0 0;
+  white-space: normal;
+}
+
+.error {
+  display: block;
+  font-size: 12pt;
+  color: #ff8888;
+  margin: 6px 0 0 0;
+  height: 1.4em;
+  white-space: normal;
+}
+
+.formbuttons {
+  text-align: center;
+  padding-top: 8px;
+  font-size: 20pt;
+  font-weight: bold;
+}
+
+.formbuttons button {
+  display: inline-block;
+  margin: 0 14px;
+}

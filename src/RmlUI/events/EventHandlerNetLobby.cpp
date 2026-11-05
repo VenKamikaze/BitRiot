@@ -1,8 +1,15 @@
 #include "EventHandlerNetLobby.h"
 
+#include <RmlUi/Core/Element.h>
+#include <RmlUi/Core/ElementDocument.h>
+#include <RmlUi/Core/Elements/ElementFormControlInput.h>
+
 #include "MickLogger.h"
+#include "net/LobbyModel.h"
 
 const char* const EventHandlerNetLobby::RML_FILENAME = "netlobby.rml";
+const char* const EventHandlerNetForm::HOST_FILENAME = "nethost.rml";
+const char* const EventHandlerNetForm::JOIN_FILENAME = "netjoin.rml";
 
 NetUiRequests& EventHandlerNetLobby::requests()
 {
@@ -12,16 +19,175 @@ NetUiRequests& EventHandlerNetLobby::requests()
 
 void EventHandlerNetLobby::ProcessEvent(Rml::Event&, const Rml::String& value)
 {
+  NetUiRequests& rq = requests();
   if (value == "netstart")
   {
-    requests().startMatch = true;
+    rq.startMatch = true;
   }
   else if (value == "netleave")
   {
-    requests().leave = true;
+    rq.leave = true;
+  }
+  else if (value.rfind("netteam ", 0) == 0)
+  {
+    rq.teamSlot = std::atoi(value.c_str() + 8);
+  }
+  else if (value.rfind("netkick ", 0) == 0)
+  {
+    rq.kickSlot = std::atoi(value.c_str() + 8);
+  }
+  else if (value.rfind("netset ", 0) == 0)
+  {
+    const std::string which = value.substr(7);
+    // The numbers are NetGame::HostSetting (kept in this order; GameEngine static_asserts nothing, the lobby test clicks each).
+    rq.setting = which == "mapw" ? 0 : which == "maph" ? 1 : which == "blocks" ? 2 : which == "spawner" ? 3 : which == "slots" ? 4 : -1;
   }
   else
   {
     std::MickLogger::getInstance()->debug(this, std::string("netlobby: unknown command ").append(value));
+  }
+}
+
+// -- the forms ---------------------------------------------------------------------------------------
+
+namespace
+{
+std::string g_prefsPath;
+netplay::NetPrefs g_prefs;
+bool g_prefsLoaded = false;
+int g_localPlayers = 1;   // the "Players here" button of the open form
+
+netplay::NetPrefs& prefs()
+{
+  if (!g_prefsLoaded)
+  {
+    g_prefsLoaded = true;
+    if (!g_prefsPath.empty())
+    {
+      netplay::loadNetPrefs(g_prefsPath, g_prefs);   // a missing or corrupt file leaves the defaults
+    }
+  }
+  return g_prefs;
+}
+
+void savePrefs()
+{
+  if (!g_prefsPath.empty() && !netplay::saveNetPrefs(g_prefsPath, g_prefs))
+  {
+    std::MickLogger::getInstance()->warn(nullptr, std::string("Could not save ").append(g_prefsPath));
+  }
+}
+
+std::string valueOf(Rml::ElementDocument* doc, const char* id)
+{
+  if (Rml::Element* e = doc->GetElementById(id))
+  {
+    if (auto* input = dynamic_cast<Rml::ElementFormControlInput*>(e))
+    {
+      return input->GetValue();
+    }
+  }
+  return std::string();
+}
+
+void setValue(Rml::ElementDocument* doc, const char* id, const std::string& value)
+{
+  if (Rml::Element* e = doc->GetElementById(id))
+  {
+    if (auto* input = dynamic_cast<Rml::ElementFormControlInput*>(e))
+    {
+      input->SetValue(value);
+    }
+  }
+}
+
+void showError(Rml::ElementDocument* doc, const std::string& text)
+{
+  if (Rml::Element* e = doc->GetElementById("formerror"))
+  {
+    e->SetInnerRML(text);   // plain sentences from LobbyModel: no markup characters in them
+  }
+}
+} // namespace
+
+void EventHandlerNetForm::setPrefsPath(const std::string& path)
+{
+  g_prefsPath = path;
+  g_prefsLoaded = false;
+  g_prefs = netplay::NetPrefs();
+}
+
+void EventHandlerNetForm::rememberHost(const std::string& name, int port, int localPlayers)
+{
+  netplay::NetPrefs& p = prefs();
+  p.name = name;
+  p.hostPort = port;
+  p.localPlayers = localPlayers;
+  savePrefs();
+}
+
+void EventHandlerNetForm::rememberJoin(const std::string& name, const std::string& address, int localPlayers)
+{
+  netplay::NetPrefs& p = prefs();
+  p.name = name;
+  p.joinAddress = address;
+  p.localPlayers = localPlayers;
+  savePrefs();
+}
+
+void EventHandlerNetForm::ProcessEvent(Rml::Event& event, const Rml::String& value)
+{
+  Rml::ElementDocument* doc = event.GetTargetElement()->GetOwnerDocument();
+  NetUiRequests& rq = EventHandlerNetLobby::requests();
+  if (value == "netforminit")
+  {
+    const netplay::NetPrefs& p = prefs();
+    g_localPlayers = p.localPlayers;
+    setValue(doc, "f-name", p.name);
+    setValue(doc, "f-port", std::to_string(p.hostPort));
+    setValue(doc, "f-addr", p.joinAddress);
+    if (Rml::Element* b = doc->GetElementById("f-local"))
+    {
+      b->SetInnerRML(std::to_string(g_localPlayers));
+    }
+  }
+  else if (value == "netlocal")
+  {
+    g_localPlayers = g_localPlayers >= 4 ? 1 : g_localPlayers + 1;   // the four keyboard sets; a pad joins in the round
+    if (Rml::Element* b = doc->GetElementById("f-local"))
+    {
+      b->SetInnerRML(std::to_string(g_localPlayers));
+    }
+  }
+  else if (value == "nethostgo")
+  {
+    int port = 0;
+    std::string error;
+    if (!netplay::parsePort(valueOf(doc, "f-port"), &port, &error))
+    {
+      showError(doc, error);
+      return;
+    }
+    rq.form.name = netplay::cleanPlayerName(valueOf(doc, "f-name"));
+    rq.form.port = port;
+    rq.form.localPlayers = g_localPlayers;
+    rq.hostGo = true;
+  }
+  else if (value == "netjoingo")
+  {
+    std::string error, normalised;
+    if (!netplay::parseHostPort(valueOf(doc, "f-addr"), 7777, nullptr, nullptr, &error, &normalised))
+    {
+      showError(doc, error);
+      return;
+    }
+    rq.form.name = netplay::cleanPlayerName(valueOf(doc, "f-name"));
+    rq.form.address = normalised;
+    rq.form.localPlayers = g_localPlayers;
+    rq.joinGo = true;
+  }
+  else
+  {
+    std::MickLogger::getInstance()->debug(this, std::string("netform: unknown command ").append(value));
   }
 }

@@ -48,6 +48,13 @@ static EventManager* managerInstance = nullptr;
 
 static std::function<bool(const Rml::String&)> commandInterceptor;
 
+static std::function<void(Rml::ElementDocument&, const Rml::String&)> documentLoadedHook;
+
+void EventManager::SetDocumentLoadedHook(std::function<void(Rml::ElementDocument&, const Rml::String&)> hook)
+{
+	documentLoadedHook = std::move(hook);
+}
+
 void EventManager::SetCommandInterceptor(std::function<bool(const Rml::String&)> interceptor)
 {
 	commandInterceptor = std::move(interceptor);
@@ -171,6 +178,9 @@ Rml::ElementDocument* EventManager::LoadWindow(const Rml::String& window_name, b
 		event_handler = old_event_handler;
 		return nullptr;
 	}
+
+	if (documentLoadedHook)
+		documentLoadedHook(*document, window_name);
 
 	// Set the element's title on the title; IDd 'title' in the RML.
 	Rml::Element* title = document->GetElementById("title");

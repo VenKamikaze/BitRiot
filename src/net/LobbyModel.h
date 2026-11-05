@@ -77,7 +77,7 @@ namespace netplay
     // The session's state is LockstepSession::LOBBY (as against BETWEEN_ROUNDS, shown for a late joiner).
     bool inLobby = true;
     // Characters of a name that fit the table; longer names are cut with "...".
-    size_t nameChars = 14;
+    size_t nameChars = 22;
   };
 
   struct LobbyScreen
@@ -94,6 +94,8 @@ namespace netplay
     bool myReady = false;
     int readyPeers = 0;
     int humanPeers = 0;               // peers excluding the host
+    // Host: the labels of the five setting buttons (width, height, blocks, enemies, players).
+    std::string settingButtons[5];
   };
 
   // Rows for the six seats of the table, from the view as this machine has it.
@@ -164,6 +166,9 @@ namespace netplay
   // The sentence for a control event in a stepped tick that the others should hear about ("" = none): a slot that a
   // person leaves ("Bob left - now AI"). `who` is the name of the slot's player (clipped here), or "" if unknown.
   std::string eventToast(const ControlEvent& e, const std::string& who);
+
+  // LockstepSession::waitingText() ("waiting for Bob, Carol") as the overlay's sentence ("Waiting for Bob, Carol...").
+  std::string stallSentence(const std::string& waitingText);
 
   // Shows the "waiting for ..." text only after it has been wanted for `delayMs` without a break, so a late packet
   // that holds a tick for a frame does not make the HUD flash.

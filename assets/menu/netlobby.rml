@@ -9,9 +9,84 @@
     <div class="menu-container">
       <div class="menu">
         <h2 id="nettitle">Network game</h2>
-        <div id="netlobbytext"></div>
-        <button class="tabbed" id="netstart" autofocus tabindex="1" onclick="netstart">Start match</button><br />
-        <button class="tabbed" id="netleave" tabindex="2" escapeAction="1" onclick="netleave">Leave</button><br />
+        <div id="lobbyview">
+          <div id="netstatus"></div>
+          <div id="settingsbar">
+            <span id="settingstext"></span>
+            <span id="settingsbuttons">
+              <button class="tabbed setbtn" id="set-mapw" tabindex="2" onclick="netset mapw">Width</button>
+              <button class="tabbed setbtn" id="set-maph" tabindex="3" onclick="netset maph">Height</button>
+              <button class="tabbed setbtn" id="set-blocks" tabindex="4" onclick="netset blocks">Blocks</button>
+              <button class="tabbed setbtn" id="set-spawner" tabindex="5" onclick="netset spawner">Enemies</button>
+              <button class="tabbed setbtn" id="set-slots" tabindex="6" onclick="netset slots">Players</button>
+            </span>
+          </div>
+          <div id="slottable">
+            <div class="row head">
+              <span class="cell c-slot">#</span>
+              <span class="cell c-name">Player</span>
+              <span class="cell c-team">Team</span>
+              <span class="cell c-ready">Ready</span>
+              <span class="cell c-ping">Ping</span>
+              <span class="cell c-kick"></span>
+            </div>
+          <div class="row" id="row-0">
+            <span class="cell c-slot" id="r0-num">1</span>
+            <span class="cell c-name" id="r0-name"></span>
+            <span class="cell c-team"><button class="tabbed teambtn" id="r0-team" tabindex="7" onclick="netteam 0">Team</button><span class="teamtext" id="r0-teamtext"></span></span>
+            <span class="cell c-ready" id="r0-ready"></span>
+            <span class="cell c-ping" id="r0-ping"></span>
+            <span class="cell c-kick"><button class="tabbed kickbtn" id="r0-kick" tabindex="13" onclick="netkick 0">x</button></span>
+          </div>
+          <div class="row" id="row-1">
+            <span class="cell c-slot" id="r1-num">2</span>
+            <span class="cell c-name" id="r1-name"></span>
+            <span class="cell c-team"><button class="tabbed teambtn" id="r1-team" tabindex="8" onclick="netteam 1">Team</button><span class="teamtext" id="r1-teamtext"></span></span>
+            <span class="cell c-ready" id="r1-ready"></span>
+            <span class="cell c-ping" id="r1-ping"></span>
+            <span class="cell c-kick"><button class="tabbed kickbtn" id="r1-kick" tabindex="14" onclick="netkick 1">x</button></span>
+          </div>
+          <div class="row" id="row-2">
+            <span class="cell c-slot" id="r2-num">3</span>
+            <span class="cell c-name" id="r2-name"></span>
+            <span class="cell c-team"><button class="tabbed teambtn" id="r2-team" tabindex="9" onclick="netteam 2">Team</button><span class="teamtext" id="r2-teamtext"></span></span>
+            <span class="cell c-ready" id="r2-ready"></span>
+            <span class="cell c-ping" id="r2-ping"></span>
+            <span class="cell c-kick"><button class="tabbed kickbtn" id="r2-kick" tabindex="15" onclick="netkick 2">x</button></span>
+          </div>
+          <div class="row" id="row-3">
+            <span class="cell c-slot" id="r3-num">4</span>
+            <span class="cell c-name" id="r3-name"></span>
+            <span class="cell c-team"><button class="tabbed teambtn" id="r3-team" tabindex="10" onclick="netteam 3">Team</button><span class="teamtext" id="r3-teamtext"></span></span>
+            <span class="cell c-ready" id="r3-ready"></span>
+            <span class="cell c-ping" id="r3-ping"></span>
+            <span class="cell c-kick"><button class="tabbed kickbtn" id="r3-kick" tabindex="16" onclick="netkick 3">x</button></span>
+          </div>
+          <div class="row" id="row-4">
+            <span class="cell c-slot" id="r4-num">5</span>
+            <span class="cell c-name" id="r4-name"></span>
+            <span class="cell c-team"><button class="tabbed teambtn" id="r4-team" tabindex="11" onclick="netteam 4">Team</button><span class="teamtext" id="r4-teamtext"></span></span>
+            <span class="cell c-ready" id="r4-ready"></span>
+            <span class="cell c-ping" id="r4-ping"></span>
+            <span class="cell c-kick"><button class="tabbed kickbtn" id="r4-kick" tabindex="17" onclick="netkick 4">x</button></span>
+          </div>
+          <div class="row" id="row-5">
+            <span class="cell c-slot" id="r5-num">6</span>
+            <span class="cell c-name" id="r5-name"></span>
+            <span class="cell c-team"><button class="tabbed teambtn" id="r5-team" tabindex="12" onclick="netteam 5">Team</button><span class="teamtext" id="r5-teamtext"></span></span>
+            <span class="cell c-ready" id="r5-ready"></span>
+            <span class="cell c-ping" id="r5-ping"></span>
+            <span class="cell c-kick"><button class="tabbed kickbtn" id="r5-kick" tabindex="18" onclick="netkick 5">x</button></span>
+          </div>
+          </div>
+        </div>
+        <div id="endview">
+          <div id="enderrors"></div>
+        </div>
+        <div id="netbuttons">
+          <button class="tabbed" id="netstart" autofocus tabindex="1" onclick="netstart">Start match</button>
+          <button class="tabbed" id="netleave" tabindex="19" escapeAction="1" onclick="netleave">Leave</button>
+        </div>
       </div>
     </div>
   </body>

@@ -722,6 +722,17 @@ void LockstepSession::recomputeRoster()
   rebuildLobbyView();
 }
 
+// The team of a slot: the host's choice, or the slot's own number (free for all). A choice outside 0..slots-1 (it was made
+// when there were more slots) is not a team this round has: the MatchConfig would refuse the round.
+uint8_t LockstepSession::teamOf(int slot) const
+{
+  if (slot < (int) m_settings.teams.size() && m_settings.teams[slot] >= 0 && m_settings.teams[slot] < m_numSlots)
+  {
+    return (uint8_t) m_settings.teams[slot];
+  }
+  return (uint8_t) slot;
+}
+
 void LockstepSession::rebuildLobbyView()
 {
   m_lobbyDirty = true;
@@ -733,7 +744,7 @@ void LockstepSession::rebuildLobbyView()
   {
     SlotInfo si;
     si.owner = m_owner[s];
-    si.team = (uint8_t) ((s < (int) m_settings.teams.size() && m_settings.teams[s] >= 0) ? m_settings.teams[s] : s);
+    si.team = teamOf(s);
     m_lobby.slots.push_back(si);
   }
   m_lobby.peers.clear();
@@ -973,6 +984,32 @@ bool LockstepSession::canStartRound() const
   return true;
 }
 
+std::string LockstepSession::cannotStartBecause() const
+{
+  if (canStartRound())
+  {
+    return "";
+  }
+  if (m_role != HOST)
+  {
+    return "only the host starts a round";
+  }
+  if (m_state == LOBBY && m_opt.requireReady && notReadyCount() > 0)
+  {
+    const int waiting = notReadyCount();
+    return "waiting for " + std::to_string(waiting) + (waiting == 1 ? " player" : " players") + " to be ready";
+  }
+  if (m_state == RUNNING)
+  {
+    return "a round is running";
+  }
+  if (m_desynced)
+  {
+    return "the last round ended out of sync";
+  }
+  return "waiting for the other players to finish the last round";
+}
+
 int LockstepSession::notReadyCount() const
 {
   int n = 0;
@@ -1074,7 +1111,7 @@ bool LockstepSession::buildStart(uint64_t seed, StartMsg& out, std::string* erro
   {
     StartMsg::Slot sl;
     sl.owner = m_owner[s];
-    sl.team = (uint8_t) ((s < (int) m_settings.teams.size() && m_settings.teams[s] >= 0) ? m_settings.teams[s] : s);
+    sl.team = teamOf(s);
     sl.ai = m_owner[s] == NO_PEER;
     out.slots.push_back(sl);
   }
@@ -1114,13 +1151,7 @@ bool LockstepSession::startRound(uint64_t seed, std::string* error)
   }
   if (!canStartRound())
   {
-    if (error)
-    {
-      const int waiting = m_state == LOBBY ? notReadyCount() : 0;
-      *error = waiting > 0 && m_opt.requireReady
-          ? "waiting for " + std::to_string(waiting) + (waiting == 1 ? " player" : " players") + " to be ready"
-          : "waiting for the other players to finish the last round";
-    }
+    if (error) *error = cannotStartBecause();
     return false;
   }
   recomputeRoster();

@@ -41,6 +41,12 @@ class MickRmlUIElementUtil
     static Rml::Element* getChildElementWithClassName(Rml::Element* searchFromParent, const std::string className); // 
     static Rml::Element* getChildElementWithTabIndex(Rml::Element* parentNode, int tabIndex);
     static Rml::Element* getElementWithTabIndex(Rml::ElementDocument* document, int tabIndex);
+    // The element reached by stepping the tab index from `fromIndex` by `step` (+1 or -1), skipping indexes that have no
+    // element and elements that are not displayed (the online lobby hides the host's buttons from a peer). nullptr at the
+    // ends. Pages whose indexes are all shown behave as with getElementWithTabIndex(from + step).
+    static Rml::Element* stepTabIndex(Rml::ElementDocument* document, int fromIndex, int step);
+    // True if the element and every ancestor is laid out (display is not none).
+    static bool isDisplayed(Rml::Element* element);
     static Rml::Element* getParentElementWithAttributeName(Rml::Element* nodeToSearchFrom, const std::string attributeName);
     static void appendTextToTextNode(Rml::Element* element, std::string toAppend);
     static void replaceEndStringInTextNode(Rml::Element* element, std::string toReplace);

@@ -261,6 +261,8 @@ namespace netplay
       // every peer has acknowledged the last tick of the previous round (so no peer is
       // left waiting for ticks the new round would stop sending).
       bool canStartRound() const;
+      // Host: why canStartRound() is false, as a sentence ("" when it is true).
+      std::string cannotStartBecause() const;
       // Host: start a round with this seed. False (and `error`) if it cannot: not the
       // host, a round is running, peers still catching up, or the settings make an
       // invalid MatchConfig. The RoundStart is then available from takeRoundStart(),
@@ -409,6 +411,7 @@ namespace netplay
       void removePeer(uint8_t id, const char* why);
       void recomputeRoster();
       void rebuildLobbyView();
+      uint8_t teamOf(int slot) const;
       int computeDelay(std::string* note) const;
       void checkTimeouts();
       void trimHistory();

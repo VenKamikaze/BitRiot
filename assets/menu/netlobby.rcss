@@ -1,14 +1,159 @@
+/* The online lobby (brief 08): a title, a status sentence, the host's settings, a table of six seats, and the
+   buttons. The same document also shows why a session ended (#endview). Sizes are small on purpose: it has to fit the
+   smallest window the menus are ever shown in (see tests/LobbyLayoutTest.cpp). */
 .menu-container {
-  margin-top: 8%;
+  margin-top: 2%;
 }
 
 .menu {
-  font-size: 18pt;
+  font-size: 12pt;
+  font-weight: normal;
 }
 
-#netlobbytext {
-  font-size: 12pt;
+#nettitle {
+  font-size: 20pt;
+  font-weight: bold;
+  margin: 0;
+  padding-bottom: 4px;
+}
+
+#netstatus {
+  font-size: 11pt;
   color: #cccccc;
-  padding-bottom: 1em;
+  height: 1.3em;
+  overflow: hidden;
+  white-space: nowrap;
+  padding-bottom: 4px;
+}
+
+#settingsbar {
+  font-size: 11pt;
+  color: #cccccc;
+  height: 1.9em;
+  padding-bottom: 4px;
+}
+
+#settingsbuttons {
+  display: none;
+}
+
+.setbtn {
+  display: inline-block;
+  font-size: 10pt;
+  margin: 0 2px;
+  padding: 0 6px;
+  border-width: 1px;
+  border-color: #666666;
+}
+
+#slottable {
+  width: 92%;
+  margin: 0 4%;
+  text-align: left;
+}
+
+.row {
+  display: block;
+  height: 1.55em;
+  line-height: 1.55em;
+  white-space: nowrap;
+  overflow: hidden;
+  font-size: 11pt;
+  color: white;
+}
+
+.row.head {
+  color: #8888ff;
+  border-bottom-width: 1px;
+  border-color: #444444;
+}
+
+.row.hidden {
+  display: none;
+}
+
+.row.open {
+  color: #666666;
+}
+
+.row.mine {
+  color: #ffee88;
+}
+
+.cell {
+  display: inline-block;
+  vertical-align: top;
+  overflow: hidden;
+  white-space: nowrap;
+  height: 1.55em;
+}
+
+.c-slot  { width: 5%;  text-align: center; }
+.c-name  { width: 34%; text-align: left; padding-left: 1%; }
+.c-team  { width: 20%; text-align: left; }
+.c-ready { width: 14%; text-align: center; }
+.c-ping  { width: 14%; text-align: center; }
+.c-kick  { width: 8%;  text-align: center; }
+
+.teambtn, .kickbtn {
+  display: none;
+  font-size: 10pt;
+  padding: 0 4px;
+  height: 1.3em;
   line-height: 1.3em;
+  border-width: 1px;
+  border-color: #666666;
+}
+
+.teamtext {
+  display: inline;
+}
+
+.row.editable .teambtn { display: inline-block; }
+.row.editable .teamtext { display: none; }
+.row.kickable .kickbtn { display: inline-block; }
+
+.team0 { color: #ff6666; }
+.team1 { color: #6da8f5; }
+.team2 { color: #66dd66; }
+.team3 { color: #ffee44; }
+.team4 { color: #17c8d2; }
+.team5 { color: #dd7817; }
+
+.ok { color: #66dd66; }
+.wait { color: #aaaaaa; }
+
+#endview {
+  display: none;
+  width: 86%;
+  margin: 0 7%;
+  text-align: left;
+  font-size: 12pt;
+  color: #dddddd;
+}
+
+#enderrors p {
+  display: block;
+  margin: 0;
+  padding-bottom: 6px;
+  white-space: normal;
+}
+
+#enderrors p.first {
+  color: #ff9999;
+}
+
+#netbuttons {
+  padding-top: 8px;
+  font-size: 18pt;
+  text-align: center;
+}
+
+#netbuttons button {
+  display: inline-block;
+  margin: 0 10px;
+}
+
+button.disabled {
+  color: #777777;
 }

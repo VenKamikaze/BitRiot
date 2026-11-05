@@ -148,7 +148,6 @@ set(SOURCES ./src/EntityRenderer.cpp
 ./src/RmlUI/events/EventHandler.cpp
 ./src/RmlUI/events/EventHandlerOptions.cpp
 ./src/RmlUI/events/EventHandlerPlayerSelect.cpp
-./src/RmlUI/events/EventHandlerNetLobby.cpp
 ./src/RmlUI/events/EventInstancer.cpp
 ./src/RmlUI/events/EventManager.cpp
 ./src/RmlUI/binders/ScoreBoardBinder.cpp
@@ -327,7 +326,10 @@ add_library(bitriot_core STATIC ${SOURCES})
 target_link_libraries(bitriot_core PUBLIC bitriot_sim)
 if(BITRIOT_NETPLAY)
   # Network play (brief 07): the game's side of it (NetGame) and the session library.
-  target_sources(bitriot_core PRIVATE ./src/NetGame.cpp)
+  target_sources(bitriot_core PRIVATE ./src/NetGame.cpp ./src/RmlUI/events/EventHandlerNetLobby.cpp ./src/RmlUI/binders/NetLobbyBinder.cpp)
+  # NetResolve looks a host name up on a worker thread.
+  find_package(Threads REQUIRED)
+  target_link_libraries(bitriot_core PUBLIC Threads::Threads)
   target_link_libraries(bitriot_core PUBLIC bitriot_net)
 endif()
 
