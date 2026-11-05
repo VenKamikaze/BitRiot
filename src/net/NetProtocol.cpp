@@ -103,10 +103,11 @@ std::string Reader::str(size_t max)
   std::string s;
   for (size_t i = 0; i < n; i++)
   {
-    const char c = (char) m_data[m_pos + i];
-    // Control characters have no place in a name or a message; they are replaced so a
-    // hostile peer cannot put escape sequences in someone's terminal or log.
-    s.push_back((c >= 0x20 && c != 0x7F) ? c : '?');
+    const unsigned char c = m_data[m_pos + i];
+    // Control characters (below 0x20, and 0x7F) have no place in a name or a message; they are
+    // replaced so a hostile peer cannot put escape sequences in someone's terminal or log. Bytes
+    // from 0x80 up pass, so a UTF-8 name survives.
+    s.push_back((c >= 0x20 && c != 0x7F) ? (char) c : '?');
   }
   m_pos += n;
   return s;

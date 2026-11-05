@@ -3,6 +3,7 @@
 #include <fstream>
 #include <sstream>
 
+#include "MickLogger.h"
 #include "Simulation.h"
 
 namespace netplay
@@ -32,6 +33,7 @@ void NetMatch::beginRound(const RoundStart& round)
   m_recorder = MatchRecorder(m_opt.checkpointInterval, true);
   m_sim.start(round.config);
   m_recorder.begin(m_sim);
+  m_recording = true;
   m_active = true;
 }
 
@@ -42,7 +44,19 @@ const TickInputs& NetMatch::step(const TickInputs& localSample, uint8_t sampledM
   m_lastInputs = m_session.stepInputs();
   m_session.submitLocal(localSample, sampledMask);
   m_sim.step(m_lastInputs);
-  m_recorder.onStep(m_lastInputs, m_sim);
+  if (m_recording)
+  {
+    try
+    {
+      m_recorder.onStep(m_lastInputs, m_sim);
+    }
+    catch (const std::exception& e)
+    {
+      // Never let the recorder stop a game (past MatchRecord::MAX_TICKS, about 9.7 hours, it refuses).
+      std::MickLogger::getInstance()->error(nullptr, std::string("Match record abandoned: ").append(e.what()));
+      m_recording = false;
+    }
+  }
 
   const uint32_t tick = (uint32_t) m_sim.tick();
   const bool last = m_sim.roundOver();
@@ -66,7 +80,10 @@ const TickInputs& NetMatch::step(const TickInputs& localSample, uint8_t sampledM
   m_session.tickStepped();
   if (last)
   {
-    m_recorder.finish(m_sim);
+    if (m_recording)
+    {
+      try { m_recorder.finish(m_sim); } catch (const std::exception&) { m_recording = false; }
+    }
     m_active = false;
     m_session.roundFinished();
   }

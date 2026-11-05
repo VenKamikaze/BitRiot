@@ -797,16 +797,15 @@ void GameEngine::resetNetGame()
 
   const int numPlayers = settings->getNumberOfPlayers();
   std::vector<bool>* genders = settings->getPlayerGenders();
-  // Which keyboard set or pad a slot had in the menu means nothing here: the slots are
-  // the host's. This machine's players get the keyboard sets in slot order, and the others
-  // nothing (a human on another machine is not read here).
+  // Which keyboard set or pad a slot had in the menu means nothing here: the menu's indexes are
+  // not the host's slot numbers, and a pad chosen for slot 2 there may not even be plugged in.
+  // Devices are assigned deliberately instead: every slot starts with none, and this machine's
+  // players (in slot order) get the keyboard sets 1, 2, ... (setPointers seeds the lowest free
+  // set for a human with no device). A pad joins a bot with its START button, as mid-round.
   for (int i = 0; i < numPlayers; i++)
   {
     settings->setPlayerKeyboard(i, -1);
-    if (!(rs.localSlotMask & (1u << i)))
-    {
-      settings->setPlayerController(i, -1);
-    }
+    settings->setPlayerController(i, -1);
   }
 
   m_pPlayers.resize(numPlayers);

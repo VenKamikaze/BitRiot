@@ -21,7 +21,7 @@ Every datagram starts with the same 8 bytes, in every version:
 | 3 | 1 | sender's peer id: the host is `0`, peers are `1..5`, `0xFF` = not assigned yet |
 | 4 | 4 | session id, chosen at random by the host; `0` in a `HELLO` |
 
-A datagram is dropped (and counted in `Stats::badPackets`) if the magic is wrong, the body does not decode **exactly** (truncated, trailing bytes, a count that does not fit, a value out of range), the session id is not the session's, or it did not come from the address that peer id was given to. A host only believes a packet whose source address *and* claimed peer id match a peer it knows; a peer only believes the host's address.
+A datagram is dropped (and counted in `Stats::badPackets`; it does **not** count as a sign of life, so a peer that sends only garbage times out) if the magic is wrong, the body does not decode **exactly** (truncated, trailing bytes, a count that does not fit, a value out of range), the session id is not the session's, or it did not come from the address that peer id was given to. A host only believes a packet whose source address *and* claimed peer id match a peer it knows; a peer only believes the host's address.
 
 ## Versioning
 
@@ -64,7 +64,7 @@ A datagram is dropped (and counted in `Stats::badPackets`) if the magic is wrong
 | `REJECT_IN_PROGRESS` | 5 | a round is running (joining mid-round is brief 13) |
 | `REJECT_BAD_REQUEST` | 6 | nonsense, e.g. 0 or 7 local players |
 
-The checks run in that order: version, build, data, then the rest. A `REJECT` carries the host's numbers so the peer can show what differs; `text` is a sentence for the player. A peer that receives one ends with `END_REJECTED`.
+The checks run in this order: version, build id, data hash, then (for a `HELLO` from an address already known: the same answer again if the nonce matches) a nonsense request, a round in progress, a full session. A `REJECT` carries the host's numbers so the peer can show what differs; `text` is a sentence for the player. A peer that receives one ends with `END_REJECTED`.
 
 ### 4 LOBBY (host to every peer, every 500 ms in the lobby and between rounds, every second while a round runs, and at once when it changes)
 
@@ -88,7 +88,7 @@ Record `k` is this peer's input for tick `first + k`. `mask` is the slots whose 
 
 `u16 round, u32 ack, u32 first, u8 count, u8 waitingMask, 6 x u8 owner, count x tick`, a tick being `6 x u8 PlayerInput (slots 0..5), u8 nEvents, nEvents x (u8 slot, u8 kind)`.
 
-Tick `k` is the **final** `TickInputs` of tick `first + k`: what every machine, the host included, passes to `Simulation::step()` for that tick. `ack` is the highest tick `t` such that the host holds this peer's records for every tick `1..t`. **Every TICKS repeats all the confirmed ticks the peer has not acknowledged** (`first = peer's ack + 1`), oldest first, as many as fit (about 150 at 7 bytes a tick: five seconds of play in one datagram; the fixed part of a TICKS datagram is 26 bytes). `waitingMask` has bit `n` set for every peer the host is waiting on for its next tick, so a stalled peer can say "waiting for <name>". `owner[s]` says who plays slot `s` after the newest tick in the packet (a peer id, `0xFF` = a bot): a machine that asked to take a bot over learns from it whether the claim was granted (two machines can claim the same bot in the same tick, and the final inputs carry the same event either way). A TICKS with no ticks is the host's keepalive while a round runs.
+Tick `k` is the **final** `TickInputs` of tick `first + k`: what every machine, the host included, passes to `Simulation::step()` for that tick. `ack` is the highest tick `t` such that the host holds this peer's records for every tick `1..t`. **Every TICKS repeats all the confirmed ticks the peer has not acknowledged** (`first = peer's ack + 1`), oldest first, as many as fit (about 150 at 7 bytes a tick: five seconds of play in one datagram; the fixed part of a TICKS datagram is 26 bytes). `waitingMask` has bit `n` set for every peer the host is waiting on for its next tick, so a stalled peer can say "waiting for <name>". `owner[s]` says who plays slot `s` after the last tick actually in the packet (the round's own owners, even once the host has dealt the next round's) (a peer id, `0xFF` = a bot): a machine that asked to take a bot over learns from it whether the claim was granted (two machines can claim the same bot in the same tick, and the final inputs carry the same event either way). A TICKS with no ticks is the host's keepalive while a round runs.
 
 A peer refuses a TICKS whose events the simulation would refuse (a slot outside the round, an unknown kind), and zeroes slot bytes beyond the round's player count.
 
@@ -96,7 +96,7 @@ A peer refuses a TICKS whose events the simulation would refuse (a slot outside 
 
 `u16 round, u8 n (0..8), n x (u32 tick, u64 hash)`
 
-The peer's `Simulation::stateHash()` after stepping each checkpoint tick (every 30th tick, and the round's last), the newest eight, sent when a new one exists and repeated every 400 ms.
+The peer's `Simulation::stateHash()` after stepping each checkpoint tick (every 30th tick, and the round's last), the newest eight, sent when a new one exists and repeated every 400 ms, **also between rounds** (the round's last tick is reported as the round ends, and the host will not start the next round until it holds every peer's hash for it).
 
 ### 9 DESYNC (host to every peer; repeated every 100 ms)
 
@@ -120,7 +120,7 @@ Sent when nothing else went to that machine for 250 ms in states where no round 
 
 `u8 reason`: 0 the player quit, 1 the host is closing the session, 2 stopped because of a desync, 3 (host to a peer) you were silent too long and were dropped.
 
-Sent three times. From a peer: the host turns its slots into bots. From the host: every peer ends its session. A peer that has been dropped but keeps talking gets a `LEAVE` (kicked) back, at most once a second.
+Sent three times (the game and `bitriot_headless` then keep polling for up to 250 ms so that, under `VNET_IMPAIR` latency, they are on the wire before the context is destroyed; otherwise the others would fall back to the 10 s timeout). From a peer: the host turns its slots into bots. From the host: every peer ends its session. A peer that has been dropped but keeps talking gets a `LEAVE` (kicked) back, at most once a second.
 
 ## Tick numbers, and what a peer does with them
 
@@ -133,7 +133,7 @@ Sent three times. From a peer: the host turns its slots into bots. From the host
 
 The host **confirms** tick `t` when it holds a record for `t` from itself and from every peer that has not left. It then builds the final `TickInputs`, deterministically, by going through the machines in id order (host first); for each machine:
 
-1. its **events first**, each checked: a slot outside the round or an unknown kind is dropped; `HUMAN_TAKES_OVER` is taken only if nobody plays the slot (it is a bot's), and then the machine owns the slot from this tick on; `RETURN_TO_AI` and `LEAVE` are taken only from the slot's owner, who then no longer owns it. A dropped event leaves no trace. Accepted events go into the tick's `control` list in that order;
+1. its **events first**, each checked: a slot outside the round or an unknown kind is dropped; `HUMAN_TAKES_OVER` is taken only if nobody plays the slot (it is a bot's), and then the machine owns the slot from this tick on; `RETURN_TO_AI` and `LEAVE` are taken only from the slot's owner, who then no longer owns it. A dropped event leaves no trace. Accepted events go into the tick's `control` list in that order. **At most one event per slot per machine per tick** (the first) and at most 18 from machines in all, so that with the host's own leaver events (at most one per slot) a tick never holds more than 24, the limit of the wire format and of `MatchRecord`; the excess is dropped;
 2. then **the bytes** of the slots the machine owns, from its record's mask (a machine's byte for a slot it does not own is ignored: a stale claim loses);
 3. last, the events the host made itself: a `RETURN_TO_AI` for every slot of a peer that left or timed out since the last confirmed tick (below).
 

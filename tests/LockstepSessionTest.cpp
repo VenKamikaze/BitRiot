@@ -865,6 +865,11 @@ class HostilePeer
 
     uint8_t id() const { return m_id; }
 
+    void sendGarbage()
+    {
+      send(netplay::MSG_INPUT, m_id, m_session, [](netplay::Writer& w) { w.u8(1); });   // too short to decode
+    }
+
   private:
     void send(uint8_t type, uint8_t sender, uint32_t session, const std::function<void(netplay::Writer&)>& body)
     {
@@ -945,6 +950,73 @@ class HostilePeer
 };
 } // namespace
 
+TEST(LockstepSession, AHostilePeerCannotFreezeTheOthersWithATickTooFullOfEvents)
+{
+  // A peer that flips one bot's slot between takeover and give-back 24 times in every record would
+  // fill a merged tick to the protocol's limit of 24; one more event (a leaver's RETURN_TO_AI)
+  // and every TICKS packet holding it would be refused by every peer, for ever, while the packets
+  // still counted as signs of life. One event per slot per machine per tick, and a cap, prevent it.
+  ClusterOptions o = withDelay(10);
+  o.lobby.totalSlots = 5;
+  o.lobby.mapHeight = 19;
+  Cluster c(3, o);
+  HostilePeer mallory(c);
+  ASSERT_TRUE(mallory.join());
+  c.run(1500);
+  std::string error;
+  ASSERT_TRUE(c.machine(0).s->startRound(5, &error)) << error;
+  const auto evil = [](uint32_t) {
+    std::vector<ControlEvent> e;
+    for (int i = 0; i < 12; i++)
+    {
+      e.push_back(ControlEvent(4, ControlEvent::HUMAN_TAKES_OVER));
+      e.push_back(ControlEvent(4, ControlEvent::RETURN_TO_AI));
+    }
+    return e;
+  };
+  mallory.play(1500, evil);
+  c.machine(2).s->leave();   // a leaver: the host adds its RETURN_TO_AI to the next tick
+  mallory.play(5000, evil);
+  ASSERT_GE(c.machine(1).log.size(), 120u) << "the other honest peer froze";
+  expectIdentical(c, {0, 1}, 120);
+  for (const TickInputs& t : c.machine(1).log) EXPECT_LE(t.control.size(), 24u);
+  EXPECT_EQ(countEvents(c.machine(0), 2, ControlEvent::RETURN_TO_AI), 1) << "the leaver still goes back to the AI";
+}
+
+TEST(LockstepSession, GarbageIsNotASignOfLife)
+{
+  // A peer that keeps sending packets that do not decode times out like a silent one.
+  Cluster c(2);
+  HostilePeer mallory(c);
+  ASSERT_TRUE(mallory.join());
+  ASSERT_EQ(c.machine(0).s->peerCount(), 2);
+  for (int i = 0; i < 14000; i += 100)
+  {
+    mallory.sendGarbage();
+    c.run(100);
+  }
+  EXPECT_EQ(c.machine(0).s->peerCount(), 1);
+}
+
+TEST(LockstepSession, ATakeoverInTheLastTicksOfARoundIsNotRevokedByTheNextRoundsSlots)
+{
+  // A claim whose tick is the round's last: the answer comes in TICKS that may be repeated after
+  // the host has dealt the next round's slots; they must still say who played the slot in THIS round.
+  for (uint64_t seed = 1; seed <= 4; seed++)
+  {
+    ClusterOptions o = withDelay(40, "loss=25,reorder=10");
+    o.seedBase = seed * 91;
+    o.lobby.totalSlots = 3;
+    Cluster c(2, o);
+    ASSERT_TRUE(c.startRound(1, 60));
+    const uint32_t d = (uint32_t) c.machine(0).round.delay;
+    c.machine(1).wantEvents[60 - d] = {ControlEvent(2, ControlEvent::HUMAN_TAKES_OVER)};
+    ASSERT_TRUE(c.runUntil([&] { return c.allStepped(60); }, 60000)) << seed;
+    c.run(3000);
+    EXPECT_TRUE(c.machine(1).s->takeRejectedClaims().empty()) << "seed " << seed;
+  }
+}
+
 TEST(LockstepSession, AHostilePeerCannotPutAnEventTheSimulationWouldRefuseIntoATick)
 {
   // Slot 5 of a four-player round, slot 9, an unknown kind, a takeover of the host's slot,
@@ -1011,6 +1083,39 @@ TEST_P(LockstepDesync, ADifferentHashAtACheckpointStopsEverybodyAtThatTick)
 }
 
 INSTANTIATE_TEST_SUITE_P(Impairment, LockstepDesync, ::testing::Values("", "loss=20,dup=3,reorder=5"));
+
+TEST(LockstepSession, ADesyncInTheLastTicksOfARoundIsStillDetectedAndHoldsTheNextRound)
+{
+  // The last periodic checkpoint is at tick 60; the state diverges at 65, so the only hash that
+  // differs is the one reported with the round's last tick (70), as the round finishes: the peer is
+  // BETWEEN_ROUNDS before its next pump, and that report must still go out (and be repeated).
+  for (const char* impair : {"", "loss=20,dup=3,reorder=5"})
+  {
+    Cluster c(3, withDelay(40, impair));
+    ASSERT_TRUE(c.startRound(3, 70));
+    c.machine(2).hashFor = [](uint32_t t) { return t < 65 ? 0x1000u + t : 0xBAD0000u + t; };
+    ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->desynced(); }, 60000)) << "[" << impair << "]";
+    const netplay::DesyncInfo& d = c.machine(0).s->desyncInfo();
+    EXPECT_EQ(d.tick, 70u);
+    EXPECT_EQ(d.offender, 2);
+    EXPECT_EQ(c.machine(0).s->state(), LockstepSession::BETWEEN_ROUNDS);
+    EXPECT_FALSE(c.machine(0).s->canStartRound()) << "a desynced round is not followed by another";
+    ASSERT_TRUE(c.runUntil([&] { return c.machine(1).s->desynced() && c.machine(2).s->desynced(); }, 20000));
+    EXPECT_EQ(c.machine(1).s->desyncInfo().tick, 70u);
+  }
+}
+
+TEST(LockstepSession, TheNextRoundWaitsForTheLastTicksHashToBeCompared)
+{
+  // Peers 200 ms away: when the host has stepped the last tick it holds neither their hash for it
+  // nor their acks; it may start the next round only when it has compared them.
+  Cluster c(3, withDelay(100));
+  ASSERT_TRUE(c.startRound(3, 70));
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->state() == LockstepSession::BETWEEN_ROUNDS; }, 60000));
+  EXPECT_FALSE(c.machine(0).s->canStartRound());
+  ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 10000));
+  EXPECT_FALSE(c.machine(0).s->desynced());
+}
 
 TEST(LockstepSession, MatchingHashesAreNotADesync)
 {

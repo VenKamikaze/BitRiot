@@ -83,7 +83,7 @@ sudo apt-get install cmake libsdl2-dev libsdl2-ttf-dev libsdl2-mixer-dev
 
 ## CMake
 
-Get the BitRiot code and the RmlUi submodule. Build BitRiot and run it.
+Get the BitRiot code and the submodules (RmlUi, and vnet for network play: `git submodule update --init` in an existing checkout). Build BitRiot and run it.
 ```
 git clone --recurse-submodules https://github.com/VenKamikaze/BitRiot.git
 cd BitRiot/target
@@ -94,7 +94,7 @@ make
 
 ### Network play
 
-Two to six players on different machines (each may have local players too), over UDP, built on the [vnet](https://github.com/VenKamikaze/vnet) submodule (`ext/vnet`, fetched by `--recurse-submodules`; configure with `-DBITRIOT_NETPLAY=OFF` to build without it). One machine hosts:
+Two to six players on different machines (each may have local players too), over UDP, built on the [vnet](https://github.com/VenKamikaze/vnet) submodule (`ext/vnet`, fetched by `--recurse-submodules`, or in an existing checkout by `git submodule update --init ext/vnet`; configure with `-DBITRIOT_NETPLAY=OFF` to build without it; the default AUTO warns if the submodule is missing). One machine hosts:
 
 ```
 ./BitRiot --host 7777 --players 4 --name Alice      # 4 player slots: the others are computer players

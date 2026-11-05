@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <iterator>
 
 namespace netplay
 {
@@ -11,6 +12,9 @@ namespace
 {
 const size_t RTT_WINDOW = 16;
 const size_t MAX_HASHES = 64;
+// Events from peers in one merged tick: 18, leaving 6 (one per slot) for the host's own RETURN_TO_AI
+// events, so a tick never holds more than 4 * MAX_SLOTS = 24.
+const size_t MAX_PEER_EVENTS = 18;
 const uint32_t DESYNC_RESEND_MS = 100;
 const uint32_t CHECKSUM_RESEND_MS = 400;
 
@@ -331,6 +335,19 @@ void LockstepSession::onHello(const vnet_addr& from, const uint8_t* body, size_t
     return;
   }
 
+  if (h.buildId != m_opt.buildId)
+  {
+    sendReject(from, h.nonce, REJECT_BUILD,
+               "different game build (host " + hex64(m_opt.buildId) + ", you " + hex64(h.buildId)
+               + "): use the same version as the host");
+    return;
+  }
+  if (h.dataHash != m_opt.dataHash)
+  {
+    sendReject(from, h.nonce, REJECT_DATA,
+               "different game data files (host " + hex64(m_opt.dataHash) + ", you " + hex64(h.dataHash) + ")");
+    return;
+  }
   // A repeat of a HELLO we already answered: say the same again.
   for (int id = 1; id < MAX_PEERS; id++)
   {
@@ -365,19 +382,6 @@ void LockstepSession::onHello(const vnet_addr& from, const uint8_t* body, size_t
     }
   }
 
-  if (h.buildId != m_opt.buildId)
-  {
-    sendReject(from, h.nonce, REJECT_BUILD,
-               "different game build (host " + hex64(m_opt.buildId) + ", you " + hex64(h.buildId)
-               + "): use the same version as the host");
-    return;
-  }
-  if (h.dataHash != m_opt.dataHash)
-  {
-    sendReject(from, h.nonce, REJECT_DATA,
-               "different game data files (host " + hex64(m_opt.dataHash) + ", you " + hex64(h.dataHash) + ")");
-    return;
-  }
   if (h.localPlayers < 1 || h.localPlayers > MAX_SLOTS)
   {
     sendReject(from, h.nonce, REJECT_BAD_REQUEST, "asked for " + std::to_string((int) h.localPlayers) + " players");
@@ -461,7 +465,13 @@ void LockstepSession::hostHandle(const vnet_addr& from, const Header& h, Reader&
     }
     return;
   }
-  m.lastHeard = m_now;
+  const uint64_t heardBefore = m.lastHeard;
+  m.lastHeard = m_now;   // taken back below if the packet does not decode: garbage is not a sign of life
+  struct Undo
+  {
+    Member& m; uint64_t before; const Stats& st; uint64_t bad0;
+    ~Undo() { if (st.badPackets != bad0) m.lastHeard = before; }
+  } undo{m, heardBefore, m_stats, m_stats.badPackets};
 
   switch (h.type)
   {
@@ -610,6 +620,7 @@ void LockstepSession::reportChecksum(uint32_t tick, uint64_t hash)
   }
   if (m_role == HOST)
   {
+    m_lastHostHashTick = std::max(m_lastHostHashTick, tick);
     m_hostHashes[tick] = hash;
     while (m_hostHashes.size() > MAX_HASHES)
     {
@@ -909,10 +920,22 @@ bool LockstepSession::canStartRound() const
   }
   if (m_state == BETWEEN_ROUNDS)
   {
+    if (m_desynced)
+    {
+      return false;
+    }
     for (int id = 1; id < MAX_PEERS; id++)
     {
       const Member& m = m_members[id];
       if (m.present && !m.gone && m.ackedTicks < m_finalTick)
+      {
+        return false;
+      }
+      // Every peer that played the round has also reported the hash of its last checkpoint (the
+      // round's last tick): until the host has compared it, a desync in the final ticks could race
+      // the next START. (A machine that joined after the round has played nothing.)
+      if (m.present && !m.gone && m.ackedTicks != 0xFFFFFFFFu && m_lastHostHashTick != 0
+          && m.hashes.count(m_lastHostHashTick) == 0)
       {
         return false;
       }
@@ -1029,6 +1052,8 @@ void LockstepSession::setupRound(const StartMsg& s, uint8_t /*unused*/)
   m_roundStart.owner = m_owner;
   m_roundStartPending = true;
 
+  m_ownersAt.clear();
+  m_roundStartOwners = m_owner;
   m_ticks.clear();
   for (int t = 1; t <= m_delay; t++)
   {
@@ -1051,6 +1076,7 @@ void LockstepSession::setupRound(const StartMsg& s, uint8_t /*unused*/)
   m_ownersSeen = m_owner;
   m_ownersAsOf = 0;
   m_hostHashes.clear();
+  m_lastHostHashTick = 0;
   m_myChecksums.clear();
   m_checksumDirty = false;
   m_desynced = false;
@@ -1188,6 +1214,11 @@ void LockstepSession::trimHistory()
   {
     m_ticks.erase(m_ticks.begin());
   }
+  // Keep one owners entry at or below the oldest kept tick (the "as of" lookup finds it).
+  while (m_ownersAt.size() > 1 && std::next(m_ownersAt.begin())->first <= keepFrom)
+  {
+    m_ownersAt.erase(m_ownersAt.begin());
+  }
 }
 
 std::vector<int> LockstepSession::takeRejectedClaims()
@@ -1273,20 +1304,28 @@ bool LockstepSession::mergeTick(uint32_t t, TickInputs& out)
       }
     }
     if (rec == nullptr) continue;
+    // At most one event per slot per machine per tick (the first), and at most MAX_PEER_EVENTS in
+    // all, so that with the host's own leaver events a tick never exceeds the protocol's and the
+    // record's limit (4 per slot); the excess is dropped, the same way on the one machine that decides.
+    uint32_t slotsUsed = 0;
     for (const ControlEvent& e : rec->events)
     {
       if (!validEvent(e, m_numSlots)) continue;
       const int s = e.slot;
+      if (slotsUsed & (1u << s)) continue;
+      if (out.control.size() >= MAX_PEER_EVENTS) break;
       if (e.kind == ControlEvent::HUMAN_TAKES_OVER)
       {
         if (m_owner[s] != NO_PEER) continue;   // taken already, or a human's own slot
         m_owner[s] = (uint8_t) id;
+        slotsUsed |= 1u << s;
         out.control.push_back(e);
       }
       else
       {
         if (m_owner[s] != id) continue;        // only the owner gives a slot back
         m_owner[s] = NO_PEER;
+        slotsUsed |= 1u << s;
         out.control.push_back(e);
       }
     }
@@ -1342,6 +1381,7 @@ void LockstepSession::confirmTicks()
     TickInputs merged;
     mergeTick(t, merged);
     m_ticks[t] = merged;
+    m_ownersAt[t] = m_owner;
     m_confirmed = t;
     m_myRecs.erase(m_myRecs.begin(), m_myRecs.upper_bound(t));
     for (int id = 1; id < MAX_PEERS; id++)
@@ -1414,10 +1454,6 @@ void LockstepSession::sendTicksTo(Member& m, bool force)
   msg.ack = m.contig;
   msg.first = haveNew ? from : m_confirmed + 1;
   msg.waitingMask = m_waitingMask;
-  for (int i = 0; i < MAX_SLOTS; i++)
-  {
-    msg.owners[i] = m_owner[i];
-  }
   size_t used = TICKS_FIXED_SIZE;
   if (haveNew)
   {
@@ -1440,6 +1476,14 @@ void LockstepSession::sendTicksTo(Member& m, bool force)
   if (!msg.ticks.empty())
   {
     m.sentUpTo = std::max(m.sentUpTo, msg.first + (uint32_t) msg.ticks.size() - 1);
+  }
+  // The owners are those after the last tick actually in this packet (the round's own, even after
+  // the host has dealt the next round's slots), not after the newest confirmed tick.
+  {
+    const uint32_t last = msg.ticks.empty() ? msg.first - 1 : msg.first + (uint32_t) msg.ticks.size() - 1;
+    auto at = m_ownersAt.upper_bound(last);
+    const std::array<uint8_t, MAX_SLOTS>& o = at == m_ownersAt.begin() ? m_roundStartOwners : std::prev(at)->second;
+    for (int i = 0; i < MAX_SLOTS; i++) msg.owners[i] = o[i];
   }
   sendMsg(MSG_TICKS, m.addr, msg);
   m.lastTicksSent = m_now;
@@ -1627,7 +1671,13 @@ void LockstepSession::peerHandle(const vnet_addr& from, const Header& h, Reader&
     m_stats.badPackets++;
     return;
   }
+  const uint64_t hostHeardBefore = m_members[0].lastHeard;
   m_members[0].lastHeard = m_now;
+  struct Undo
+  {
+    Member& m; uint64_t before; const Stats& st; uint64_t bad0;
+    ~Undo() { if (st.badPackets != bad0) m.lastHeard = before; }
+  } undo{m_members[0], hostHeardBefore, m_stats, m_stats.badPackets};
   switch (h.type)
   {
     case MSG_LOBBY:
@@ -1879,9 +1929,9 @@ void LockstepSession::sendInputToHost(bool force)
 
 void LockstepSession::sendChecksums(bool force)
 {
-  if (m_myChecksums.empty() || m_state != RUNNING)
+  if (m_myChecksums.empty() || (m_state != RUNNING && m_state != BETWEEN_ROUNDS))
   {
-    return;
+    return;   // between rounds too: the last tick's hash is reported as the round ends
   }
   if (!force && m_now - m_lastChecksumSent < CHECKSUM_RESEND_MS)
   {
@@ -1952,6 +2002,24 @@ void LockstepSession::peerSend()
     sendMsg(MSG_KEEPALIVE, m_hostAddr, k);
     m_members[0].lastSent = m_now;
   }
+}
+
+void LockstepSession::flushOutgoing(uint32_t maxMs)
+{
+  // Datagrams held back by simulated latency are released by vnet_poll() once their time has
+  // come, so give them that long (bounded) before the context is destroyed. Backends that cannot
+  // wait (loopback, the browser) return at once.
+  if (m_v == nullptr || vnet_wait(m_v, 0) < 0)
+  {
+    return;
+  }
+  const uint64_t until = vnet_time(m_v) + maxMs;
+  while (vnet_time(m_v) < until)
+  {
+    vnet_poll(m_v);
+    vnet_wait(m_v, 5);
+  }
+  vnet_poll(m_v);
 }
 
 // -- leaving ---------------------------------------------------------------------------------------------------------------------

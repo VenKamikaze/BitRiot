@@ -12,6 +12,7 @@ NetGame::~NetGame()
   if (m_session)
   {
     m_session->leave();   // a no-op if it has ended; otherwise the others are told at once
+    m_session->flushOutgoing();   // under VNET_IMPAIR the LEAVEs are still held back by the simulated latency
     m_session.reset();
   }
   if (m_v != nullptr)

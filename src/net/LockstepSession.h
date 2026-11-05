@@ -293,6 +293,11 @@ namespace netplay
       // Leave: tell the other side (a peer tells the host, which turns its slots into
       // bots; the host tells every peer, which ends the session there), and end.
       void leave(LeaveReason reason = LEAVE_QUIT);
+      // After leave(): keeps polling for up to maxMs so datagrams that simulated latency
+      // (VNET_IMPAIR) still holds are put on the wire before the context goes away. A no-op on a
+      // backend that cannot wait. Without it a LEAVE sent under latency is lost and the others
+      // fall back to their 10 s timeout.
+      void flushOutgoing(uint32_t maxMs = 250);
 
       // -- diagnostics -----------------------------------------------------------------------
       struct Stats
@@ -437,6 +442,9 @@ namespace netplay
       uint64_t m_lastTicksHeard = 0;
       std::array<uint8_t, MAX_SLOTS> m_ownersSeen;   // peer: who plays each slot, as of the newest TICKS
       uint32_t m_ownersAsOf = 0;
+      std::map<uint32_t, std::array<uint8_t, MAX_SLOTS>> m_ownersAt;   // host: who played each slot after each confirmed tick
+      std::array<uint8_t, MAX_SLOTS> m_roundStartOwners;
+      uint32_t m_lastHostHashTick = 0;
       std::map<uint32_t, std::vector<int>> m_claims;   // tick -> slots asked for in that tick's record
       std::vector<int> m_rejectedClaims;
       std::vector<ControlEvent> m_hostEvents;     // host: RETURN_TO_AI for peers that left, for the next confirmed tick

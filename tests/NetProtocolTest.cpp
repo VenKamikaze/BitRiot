@@ -114,6 +114,12 @@ TEST(NetProtocol, StringsAreBoundedAndControlCharactersReplaced)
   EXPECT_EQ(r.str(), "ok?[31m");
   EXPECT_TRUE(r.done());
 
+  // Bytes from 0x80 up pass: a UTF-8 name survives.
+  Writer wu;
+  wu.str("Z\xc3\xb6" "e \xe2\x9c\x93");
+  Reader ru(wu.bytes().data(), wu.bytes().size());
+  EXPECT_EQ(ru.str(), "Z\xc3\xb6" "e \xe2\x9c\x93");
+
   // A length that runs past the end, and one over the bound.
   const uint8_t over[] = {30, 'a', 'b'};
   Reader r2(over, 3);

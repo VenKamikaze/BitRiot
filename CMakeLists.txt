@@ -240,12 +240,21 @@ target_compile_options(bitriot_headless PRIVATE -Wall -Wno-comment
 # a different transport, and the MinGW build has not been checked against vnet. The
 # default is therefore ON for native Linux/macOS builds that have the submodule, and
 # OFF otherwise; asking for ON without the submodule is an error that says how to get it.
-if(EMSCRIPTEN OR MINGW OR NOT EXISTS ${PROJECT_SOURCE_DIR}/ext/vnet/CMakeLists.txt)
-  set(BITRIOT_NETPLAY_DEFAULT OFF)
-else()
-  set(BITRIOT_NETPLAY_DEFAULT ON)
+# BITRIOT_NETPLAY is AUTO (the default), ON or OFF. AUTO means ON where it can be (native, with the
+# submodule) and OFF otherwise, and it is re-evaluated on every configure: fetching ext/vnet later
+# and re-running cmake turns it on (a plain ON/OFF default would be cached by the first configure).
+set(BITRIOT_NETPLAY AUTO CACHE STRING "Native lockstep netplay (src/net/, needs the ext/vnet submodule): AUTO, ON or OFF")
+set_property(CACHE BITRIOT_NETPLAY PROPERTY STRINGS AUTO ON OFF)
+if(BITRIOT_NETPLAY STREQUAL "AUTO")
+  if(EMSCRIPTEN OR MINGW)
+    set(BITRIOT_NETPLAY OFF)
+  elseif(NOT EXISTS ${PROJECT_SOURCE_DIR}/ext/vnet/CMakeLists.txt)
+    message(WARNING "Network play is NOT built: the vnet submodule is missing. Run `git submodule update --init ext/vnet` and configure again (or pass -DBITRIOT_NETPLAY=OFF to silence this).")
+    set(BITRIOT_NETPLAY OFF)
+  else()
+    set(BITRIOT_NETPLAY ON)
+  endif()
 endif()
-option(BITRIOT_NETPLAY "Build native lockstep netplay (src/net/, needs the ext/vnet submodule)" ${BITRIOT_NETPLAY_DEFAULT})
 if(BITRIOT_NETPLAY)
   if(EMSCRIPTEN OR MINGW)
     message(FATAL_ERROR "BITRIOT_NETPLAY is native-only for now (browser netplay is brief 12; MinGW is unchecked): configure with -DBITRIOT_NETPLAY=OFF")

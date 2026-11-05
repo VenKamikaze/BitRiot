@@ -163,6 +163,7 @@ class Runner
     Runner(const Options& o, std::ostream& out, std::ostream& err) : m_o(o), m_out(out), m_err(err) {}
     ~Runner()
     {
+      if (m_session) m_session->flushOutgoing();
       m_session.reset();
       if (m_v != nullptr)
       {
@@ -444,6 +445,10 @@ int Runner::onEnded()
 {
   using netplay::LockstepSession;
   const bool allDone = m_roundsDone >= m_o.rounds;
+  if (m_session->desynced())
+  {
+    return EXIT_FAILED;   // the host closed after telling us the state diverged
+  }
   switch (m_session->endReason())
   {
     case LockstepSession::END_REJECTED:

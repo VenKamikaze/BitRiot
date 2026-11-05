@@ -335,6 +335,24 @@ TEST(NetplayProcess, ADesyncIsDetectedAtTheNextCheckpointAndEveryoneWritesTheEvi
   }
 }
 
+TEST(NetplayProcess, ADesyncInTheLastTicksOfARoundIsDetectedToo)
+{
+  // Seed 10 on this config ends at tick 1526; the periodic checkpoints are every 30 ticks (the last at
+  // 1500). Perturbing before tick 1515 changes only the hash reported with the round's last tick.
+  Scratch dir;
+  const std::string port = dir.file("port");
+  Proc host({"host", "--port-file", port, "--peers", "1", "--seed", "10", "--config", kConfig3, "--tick-ms", "2", "--delay", "12",
+             "--out", dir.dir("h")}, impairSpec(0), dir.file("h.out"), dir.file("h.err"));
+  const int p = waitForPort(port);
+  ASSERT_GT(p, 0) << host.err();
+  Proc peer({"join", "127.0.0.1:" + std::to_string(p), "--tick-ms", "2", "--perturb-at", "1515", "--out", dir.dir("p")},
+            impairSpec(1), dir.file("p.out"), dir.file("p.err"));
+  EXPECT_EQ(host.wait(kTimeout), 1) << host.err() << host.out();
+  EXPECT_EQ(peer.wait(30), 1) << peer.err() << peer.out();
+  EXPECT_NE(host.out().find("desync round 1 tick 1526 "), std::string::npos) << host.out();
+  EXPECT_NE(peer.out().find("desync round 1 tick 1526 "), std::string::npos) << peer.out();
+}
+
 TEST(NetplayProcess, WithoutThePerturbationTheSameSetupDoesNotDesync)
 {
   // The negative control of the test above: same seeds, same processes, nobody perturbed.

@@ -101,6 +101,7 @@ namespace netplay
       Simulation& m_sim;
       Options m_opt;
       bool m_active = false;
+      bool m_recording = false;   // false once the recorder has refused a tick
       RoundStart m_round;
       MatchRecorder m_recorder;
       std::deque<Dump> m_dumps;

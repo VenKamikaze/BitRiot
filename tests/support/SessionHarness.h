@@ -302,7 +302,7 @@ inline void Cluster::tickMachine(Machine& m)
     m.log.push_back(s.stepInputs());
     m.stepTimes.push_back(t);
     s.submitLocal(sample, m.localMask);
-    if (m.checkpointEvery != 0 && tick % m.checkpointEvery == 0)
+    if ((m.checkpointEvery != 0 && tick % m.checkpointEvery == 0) || (m.roundTicks != 0 && tick >= m.roundTicks))   // and the last tick, as NetMatch does
     {
       const uint64_t h = m.hashFor(tick);
       m.reported.push_back(std::make_pair(tick, h));
