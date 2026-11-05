@@ -1090,11 +1090,9 @@ bool LockstepSession::returnToLobby()
   {
     return false;
   }
+  // Every ready flag is already clear: setupRound() cleared them when the round started, and onReady() ignores
+  // answers outside the lobby, so nobody can have said ready since.
   m_state = LOBBY;
-  for (int id = 1; id < MAX_PEERS; id++)
-  {
-    m_members[id].ready = false;
-  }
   recomputeRoster();
   return true;
 }
