@@ -487,6 +487,10 @@ void encode(Writer& w, const TicksMsg& m)
   w.u32(m.first);
   w.u8((uint8_t) std::min(m.ticks.size(), MAX_TICKS_PER_PACKET));
   w.u8(m.waitingMask);
+  for (int i = 0; i < MAX_SLOTS; i++)
+  {
+    w.u8(m.owners[i]);
+  }
   for (size_t k = 0; k < m.ticks.size() && k < MAX_TICKS_PER_PACKET; k++)
   {
     const TickInputs& t = m.ticks[k];
@@ -505,6 +509,14 @@ bool decode(Reader& r, TicksMsg& m)
   m.first = r.u32();
   const size_t n = r.u8();
   m.waitingMask = r.u8();
+  for (int i = 0; i < MAX_SLOTS; i++)
+  {
+    m.owners[i] = r.u8();
+    if (m.owners[i] >= MAX_PEERS && m.owners[i] != NO_PEER)
+    {
+      return false;
+    }
+  }
   if (!r.ok() || m.first == 0)
   {
     return false;

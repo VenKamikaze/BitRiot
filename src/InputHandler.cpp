@@ -538,6 +538,20 @@ bool InputHandler::processJoinControllerEvent(int controllerId, Uint8 button)
   return true;
 }
 
+void InputHandler::revokeSlot(int slot)
+{
+  if (slot < 0 || slot >= std::GameSettings::MAX_PLAYERS)
+  {
+    return;
+  }
+  m_slotController[slot] = -1;
+  m_keyMap.erase(slot);
+  m_localSlots &= ~(1u << slot);
+  m_sampler.clearSlot(slot);
+  setJoinIndicator(slot + 1, InfoPanel::JOIN_NONE);
+  MickLogger::getInstance()->debug(this, string("Takeover of slot ").append(to_string(slot)).append(" was not granted: it is not ours"));
+}
+
 void InputHandler::detachController(int controllerId)
 {
   if (controllerId < 0)

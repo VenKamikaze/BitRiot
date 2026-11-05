@@ -211,6 +211,9 @@ namespace netplay
     uint32_t ack = 0;          // the highest tick t such that the host holds this peer's records for every tick up to t
     uint32_t first = 1;
     uint8_t waitingMask = 0;   // peers (bit = peer id) the host is waiting on for its next tick
+    // Who plays each slot after the newest tick in this packet (a peer id, NO_PEER = a bot):
+    // how a machine learns whether a takeover it asked for was granted.
+    uint8_t owners[MAX_SLOTS] = {NO_PEER, NO_PEER, NO_PEER, NO_PEER, NO_PEER, NO_PEER};
     std::vector<TickInputs> ticks;
   };
 
@@ -338,7 +341,7 @@ namespace netplay
   size_t encodedSize(const TickInputs& t);
   // The bytes of an INPUT / TICKS datagram before its first record.
   const size_t INPUT_FIXED_SIZE = HEADER_SIZE + 2 + 4 + 4 + 1;
-  const size_t TICKS_FIXED_SIZE = HEADER_SIZE + 2 + 4 + 4 + 1 + 1;
+  const size_t TICKS_FIXED_SIZE = HEADER_SIZE + 2 + 4 + 4 + 1 + 1 + MAX_SLOTS;
 
   // True for a control event the simulation would accept in a round of numSlots
   // players: a known kind and a slot inside the roster.

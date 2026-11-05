@@ -750,6 +750,11 @@ void GameEngine::stepNetTick()
   const TickInputs sample = m_pInputHandler->sampleTick();
   match.step(sample, mask);
   m_ticksThisFrame++;
+  // A takeover the host did not grant (someone else took that bot at the same moment).
+  for (const int slot : m_net->session().takeRejectedClaims())
+  {
+    m_pInputHandler->revokeSlot(slot);
+  }
   m_pInputHandler->rumbleForHits(m_sim);
   if (m_sim.roundOver())
   {

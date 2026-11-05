@@ -277,6 +277,7 @@ TEST(NetProtocol, TicksRoundTripAndTheSizeIsAsBudgeted)
   m.ack = 7;
   m.first = 8;
   m.waitingMask = 0b10;
+  m.owners[0] = 0; m.owners[1] = 2; m.owners[2] = NO_PEER; m.owners[5] = 5;
   for (int i = 0; i < 20; i++)
   {
     TickInputs t;
@@ -289,6 +290,7 @@ TEST(NetProtocol, TicksRoundTripAndTheSizeIsAsBudgeted)
   ASSERT_TRUE(decodeBody(bytes, back));
   ASSERT_EQ(back.ticks.size(), 20u);
   EXPECT_EQ(back.waitingMask, 0b10);
+  for (int s = 0; s < 6; s++) EXPECT_EQ(back.owners[s], m.owners[s]) << s;
   for (size_t i = 0; i < 20; i++)
   {
     for (int s = 0; s < 6; s++) EXPECT_EQ(back.ticks[i].slot[s], m.ticks[i].slot[s]);
@@ -297,7 +299,7 @@ TEST(NetProtocol, TicksRoundTripAndTheSizeIsAsBudgeted)
   size_t expected = TICKS_FIXED_SIZE;
   for (const TickInputs& t : m.ticks) expected += encodedSize(t);
   EXPECT_EQ(bytes.size(), expected);
-  EXPECT_EQ(TICKS_FIXED_SIZE, HEADER_SIZE + 12);
+  EXPECT_EQ(TICKS_FIXED_SIZE, HEADER_SIZE + 12 + 6);   // + the owner of each slot
 }
 
 TEST(NetProtocol, OnePacketRepeatsSecondsOfTicks)
@@ -426,7 +428,10 @@ TEST(NetProtocol, CountsThatDoNotFitAreRefusedBeforeAnythingIsAllocated)
   bytes = packet(MSG_INPUT, 1, 1, [](Writer& w) { w.u16(1); w.u32(0); w.u32(1); w.u8(1); w.u8(0xFF); });
   EXPECT_FALSE(decodeBody(bytes, m));
   TicksMsg t;
-  bytes = packet(MSG_TICKS, 0, 1, [](Writer& w) { w.u16(1); w.u32(0); w.u32(1); w.u8(255); w.u8(0); });
+  bytes = packet(MSG_TICKS, 0, 1, [](Writer& w) { w.u16(1); w.u32(0); w.u32(1); w.u8(255); w.u8(0); for (int i = 0; i < 6; i++) w.u8(NO_PEER); });
+  EXPECT_FALSE(decodeBody(bytes, t));
+  // An owner that is no peer id.
+  bytes = packet(MSG_TICKS, 0, 1, [](Writer& w) { w.u16(1); w.u32(0); w.u32(1); w.u8(0); w.u8(0); for (int i = 0; i < 6; i++) w.u8(77); });
   EXPECT_FALSE(decodeBody(bytes, t));
   LobbyMsg l;
   bytes = packet(MSG_LOBBY, 0, 1, [](Writer& w) { w.u8(0); w.u16(0); w.u8(17); w.u8(13); w.u8(55); w.u8(1); w.u8(7); });

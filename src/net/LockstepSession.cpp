@@ -1046,6 +1046,10 @@ void LockstepSession::setupRound(const StartMsg& s, uint8_t /*unused*/)
   m_waitingMask = 0;
   m_lastTicksHeard = m_now;
   m_hostEvents.clear();
+  m_claims.clear();
+  m_rejectedClaims.clear();
+  m_ownersSeen = m_owner;
+  m_ownersAsOf = 0;
   m_hostHashes.clear();
   m_myChecksums.clear();
   m_checksumDirty = false;
@@ -1115,6 +1119,10 @@ void LockstepSession::submitLocal(const TickInputs& sample, uint8_t sampledMask)
     if (rec.events.size() < 4 * (size_t) MAX_SLOTS && validEvent(e, m_numSlots))
     {
       rec.events.push_back(e);
+      if (e.kind == ControlEvent::HUMAN_TAKES_OVER)
+      {
+        m_claims[m_nextLocal].push_back(e.slot);   // the answer is in that tick's final inputs
+      }
     }
   }
   m_myRecs[m_nextLocal++] = rec;
@@ -1125,6 +1133,31 @@ void LockstepSession::tickStepped()
   if (m_state != RUNNING)
   {
     return;
+  }
+  // The tick just stepped may answer a takeover request this machine made D ticks ago.
+  auto claim = m_claims.find(m_nextStep);
+  if (claim != m_claims.end())
+  {
+    auto fin = m_ticks.find(m_nextStep);
+    for (int slot : claim->second)
+    {
+      // Granted if the final tick carries the takeover AND the slot is now ours: another machine's
+      // takeover of the same bot, in the same tick, puts the same event in the same tick.
+      bool event = false;
+      if (fin != m_ticks.end())
+      {
+        for (const ControlEvent& e : fin->second.control)
+        {
+          if (e.slot == slot && e.kind == ControlEvent::HUMAN_TAKES_OVER) event = true;
+        }
+      }
+      const uint8_t owner = m_role == HOST ? m_owner[slot] : m_ownersSeen[slot];
+      if (!event || owner != m_myId) m_rejectedClaims.push_back(slot);
+    }
+  }
+  while (!m_claims.empty() && m_claims.begin()->first <= m_nextStep)
+  {
+    m_claims.erase(m_claims.begin());
   }
   m_nextStep++;
   if (m_role == HOST)
@@ -1155,6 +1188,13 @@ void LockstepSession::trimHistory()
   {
     m_ticks.erase(m_ticks.begin());
   }
+}
+
+std::vector<int> LockstepSession::takeRejectedClaims()
+{
+  std::vector<int> out;
+  out.swap(m_rejectedClaims);
+  return out;
 }
 
 uint32_t LockstepSession::unsteppedTicks() const
@@ -1374,6 +1414,10 @@ void LockstepSession::sendTicksTo(Member& m, bool force)
   msg.ack = m.contig;
   msg.first = haveNew ? from : m_confirmed + 1;
   msg.waitingMask = m_waitingMask;
+  for (int i = 0; i < MAX_SLOTS; i++)
+  {
+    msg.owners[i] = m_owner[i];
+  }
   size_t used = TICKS_FIXED_SIZE;
   if (haveNew)
   {
@@ -1729,6 +1773,15 @@ void LockstepSession::onTicks(const TicksMsg& msg)
   }
   m_lastTicksHeard = m_now;
   m_waitingMask = msg.waitingMask;
+  const uint32_t asOf = msg.first + (uint32_t) msg.ticks.size();   // the owners are those after the packet's newest tick
+  if (asOf >= m_ownersAsOf)
+  {
+    m_ownersAsOf = asOf;
+    for (int i = 0; i < MAX_SLOTS; i++)
+    {
+      m_ownersSeen[i] = msg.owners[i];
+    }
+  }
   m_ackOfMine = std::max(m_ackOfMine, msg.ack);
   while (!m_myRecs.empty() && m_myRecs.begin()->first <= m_ackOfMine)
   {

@@ -274,6 +274,12 @@ namespace netplay
       uint8_t waitingMask() const;
       // "waiting for <name>[, <name>]" or "" when not stalled.
       std::string waitingText() const;
+      // Takeover requests (HUMAN_TAKES_OVER in a submitted sample) that the host did not
+      // grant: the slot was taken by another machine in the same moment (the first claim in
+      // id order wins) or was not a bot's. Known when the tick the request was for is stepped
+      // (D ticks after it was made). The caller takes the slot back from its local input layer:
+      // until then the player believes it drives a slot it does not. Each slot is returned once.
+      std::vector<int> takeRejectedClaims();
       // The round is over on this machine (the simulation said so): stop stepping,
       // keep acknowledging and keep the connection alive until the next START or LEAVE.
       void roundFinished();
@@ -429,6 +435,10 @@ namespace netplay
       uint64_t m_lastInputSent = 0;
       uint8_t m_waitingMask = 0;
       uint64_t m_lastTicksHeard = 0;
+      std::array<uint8_t, MAX_SLOTS> m_ownersSeen;   // peer: who plays each slot, as of the newest TICKS
+      uint32_t m_ownersAsOf = 0;
+      std::map<uint32_t, std::vector<int>> m_claims;   // tick -> slots asked for in that tick's record
+      std::vector<int> m_rejectedClaims;
       std::vector<ControlEvent> m_hostEvents;     // host: RETURN_TO_AI for peers that left, for the next confirmed tick
 
       // Checksums.

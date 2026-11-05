@@ -394,6 +394,27 @@ TEST(FrameLoopTest, AHeldTickMakesTheLoopPollNotSpin)
   EXPECT_LE(loop.sleepHintMs(), 10u) << "and look again soon";
 }
 
+TEST(FrameLoopTest, TheHeldPollIntervalCanBeRaisedForANetworkGame)
+{
+  // Brief 07: a stalled peer re-presents the picture every frame; at the default 2 ms that is
+  // 500 times a second, so a network game asks for a longer poll (the sleep ends early when a
+  // datagram arrives anyway).
+  FakeGame game;
+  FrameLoop loop(game.hooks(), TICK, CAP);
+  loop.frame();
+  game.canStep = false;
+  game.now += TICK;
+  loop.frame();
+  EXPECT_EQ(loop.sleepHintMs(), 2u) << "the default is unchanged";
+  loop.setHeldPollMs(4);
+  EXPECT_EQ(loop.sleepHintMs(), 4u);
+  game.canStep = true;
+  loop.frame();   // the held tick runs
+  game.now += 5;
+  EXPECT_LE(loop.sleepHintMs(), 33u);
+  EXPECT_NE(loop.sleepHintMs(), 4u) << "not held any more: the time until the next tick again";
+}
+
 TEST(FrameLoopTest, OutsideARoundTheSleepHintHoldsTheFrameRate)
 {
   FakeGame game;

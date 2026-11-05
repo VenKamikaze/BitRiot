@@ -36,11 +36,12 @@ using netplay::LockstepSession;
 using netplay::SessionOptions;
 using netplay::RoundStart;
 
-// The byte a machine samples for a slot for the tick it is about to step. Deterministic
-// and slot-dependent so a mix-up of slots or ticks shows. Only the six held bits.
-inline uint8_t sampleByte(int slot, uint32_t tick)
+// The byte a machine samples for a slot for a tick. Deterministic, and different for every
+// slot, tick and machine (peer id), so that a mix-up of any of the three shows. Only the
+// six held bits.
+inline uint8_t sampleByte(int slot, uint32_t tick, int machine)
 {
-  return (uint8_t) ((slot * 37 + tick * 11 + 5) & 0x3F);
+  return (uint8_t) ((slot * 37 + tick * 11 + machine * 19 + 5) & 0x3F);
 }
 
 struct Machine
@@ -295,7 +296,7 @@ inline void Cluster::tickMachine(Machine& m)
     {
       if (m.localMask & (1u << slot))
       {
-        sample.slot[slot] = PlayerInput(sampleByte(slot, tick + (uint32_t) m.round.delay));
+        sample.slot[slot] = PlayerInput(sampleByte(slot, tick + (uint32_t) m.round.delay, s.myId()));
       }
     }
     m.log.push_back(s.stepInputs());
@@ -345,7 +346,6 @@ inline bool Cluster::runUntil(const std::function<bool()>& done, uint32_t limitM
 
 inline bool Cluster::startRound(uint64_t seed, uint32_t roundTicks, std::string* error)
 {
-  const int target = m_machines[0]->roundsStarted + 1;
   for (auto& m : m_machines)
   {
     m->roundTicks = roundTicks;
@@ -354,11 +354,12 @@ inline bool Cluster::startRound(uint64_t seed, uint32_t roundTicks, std::string*
   {
     return false;
   }
-  return runUntil([this, target] {
+  const uint16_t round = m_machines[0]->s->round();
+  return runUntil([this, round] {
     for (auto& m : m_machines)
     {
       if (m->s->state() == LockstepSession::ENDED) continue;
-      if (m->roundsStarted < target) return false;
+      if (!m->haveRound || m->round.round != round) return false;
     }
     return true;
   }, 5000);

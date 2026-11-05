@@ -85,6 +85,10 @@ class InputHandler : public std::enable_shared_from_this<InputHandler>
     int getKeyboardSetForActionKey(KEY k); // get the fixed keyboard-set index whose action1/action2 key is k, or -1. Used by the player-select menu (keyboard-join); searches the fixed m_availableKeySets table, not the per-game m_keyMap.
 
     shared_ptr<PlayerCharacterEntity> getPlayerAttachedToController(int controllerId);
+    // A network game (brief 07): the host did not grant a takeover this machine asked for (another
+    // machine claimed the same bot in the same moment). The slot stops being ours: no pad, no keys,
+    // no sampler entry, no indicator, and no event is queued (the simulation never made it ours).
+    void revokeSlot(int slot);
     // The pad was unplugged. If it drove a live player that has no keyboard set, that
     // slot goes back to the AI (a RETURN_TO_AI event in the next sample); a player that
     // also has a keymap stays human on the keys.

@@ -50,7 +50,7 @@ void expectModel(const Machine& m, uint32_t n, const std::vector<uint8_t>& owner
       uint8_t expected = 0;
       if (t > d && s < (int) owners.size() && owners[s] != netplay::NO_PEER)
       {
-        expected = sampleByte(s, t);
+        expected = sampleByte(s, t, owners[s]);
       }
       ASSERT_EQ(m.log[t - 1].slot[s].bits, expected) << "tick " << t << " slot " << s;
     }
@@ -228,6 +228,42 @@ TEST(LockstepSession, ManySeedsOfHeavyLossAllAgree)
   }
 }
 
+TEST(LockstepSession, ALossyLinkStillDeliversTheLastTicksOfARound)
+{
+  // The host finishes the round as soon as it has stepped the last tick, but a peer may not
+  // hold the last few yet: the host keeps repeating them to it (between rounds) until it
+  // acknowledges them, and will not start the next round before.
+  for (uint64_t seed = 1; seed <= 6; seed++)
+  {
+    ClusterOptions o = withDelay(50, "loss=35,dup=5,reorder=10,jit=15");
+    o.seedBase = seed * 777;
+    Cluster c(3, o);
+    ASSERT_TRUE(c.startRound(seed, 70)) << "seed " << seed;
+    ASSERT_TRUE(c.runUntil([&] { return c.allStepped(70); }, 120000)) << "seed " << seed << ": "
+        << c.machine(0).log.size() << "/" << c.machine(1).log.size() << "/" << c.machine(2).log.size();
+    expectIdentical(c, {0, 1, 2}, 70);
+    ASSERT_TRUE(c.runUntil([&] { return c.machine(0).s->canStartRound(); }, 60000)) << "seed " << seed;
+  }
+}
+
+TEST(LockstepSession, LateRepeatsOfARoundCannotReachTheNextOne)
+{
+  // Half the packets are held back for half a second: whatever round 1 still has in flight when
+  // round 2 starts arrives during round 2, and must be thrown away.
+  for (uint64_t seed = 1; seed <= 4; seed++)
+  {
+    ClusterOptions o = withDelay(20, "loss=5,reorder=50,rdelay=500");
+    o.seedBase = seed * 313;
+    Cluster c(3, o);
+    ASSERT_TRUE(c.startRound(1, 70)) << seed;
+    ASSERT_TRUE(c.runUntil([&] { return c.allStepped(70) && c.machine(0).s->canStartRound(); }, 120000)) << seed;
+    ASSERT_TRUE(c.startRound(2, 0)) << seed;
+    ASSERT_TRUE(c.runUntil([&] { return c.allStepped(120); }, 120000)) << seed;
+    expectIdentical(c, {0, 1, 2}, 120);
+    expectModel(c.machine(0), 120, ownersOf(c.machine(0)));
+  }
+}
+
 TEST(LockstepSession, BurstLossIsRiddenOut)
 {
   // A burst model: packets drop in runs of about 8, the thing an input delay is really sized for.
@@ -280,8 +316,8 @@ TEST(LockstepSession, FirstTicksAreEmptyAndInputArrivesExactlyDTicksLate)
     for (int s = 0; s < 6; s++) EXPECT_EQ(h.log[t - 1].slot[s].bits, 0) << t;
   }
   // The first real input is the sample taken at the first step, for tick D + 1.
-  EXPECT_EQ(h.log[d].slot[0].bits, sampleByte(0, d + 1));
-  EXPECT_EQ(h.log[d].slot[1].bits, sampleByte(1, d + 1));
+  EXPECT_EQ(h.log[d].slot[0].bits, sampleByte(0, d + 1, 0));   // the host's
+  EXPECT_EQ(h.log[d].slot[1].bits, sampleByte(1, d + 1, 1));   // peer 1's
   expectModel(h, 40, ownersOf(h));
 }
 
@@ -679,6 +715,27 @@ TEST(LockstepSession, JoiningWhileARoundRunsIsRefused)
   EXPECT_EQ(late.s->rejectInfo().reason, netplay::REJECT_IN_PROGRESS);
 }
 
+TEST(LockstepSession, AMachineThatJoinsBetweenRoundsPlaysTheNextRound)
+{
+  ClusterOptions o = withDelay(20, "loss=5");
+  o.lobby.mapHeight = 13;
+  Cluster c(2, o);
+  ASSERT_TRUE(c.startRound(1, 40));
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(40) && c.machine(0).s->canStartRound(); }, 60000));
+  // The scoreboard is up; a third machine walks in.
+  Machine& late = c.addMachine(1);
+  ASSERT_TRUE(c.runUntil([&] { return late.s->state() == LockstepSession::LOBBY; }, 5000)) << late.s->endText();
+  EXPECT_EQ(c.machine(0).s->peerCount(), 2);
+  EXPECT_TRUE(c.machine(0).s->canStartRound()) << "a machine that played nothing does not hold the next round up";
+  std::string error;
+  ASSERT_TRUE(c.startRound(2, 0, &error)) << error;
+  EXPECT_EQ(late.round.owner[2], late.s->myId());
+  EXPECT_EQ(late.round.config.numPlayers(), 3);
+  ASSERT_TRUE(c.runUntil([&] { return c.allStepped(80); }, 60000));
+  expectIdentical(c, {0, 1, 2}, 80);
+  expectModel(c.machine(0), 80, ownersOf(c.machine(0)));
+}
+
 TEST(LockstepSession, AHelloRepeatedByALossyLinkIsOnePeer)
 {
   Cluster c(2, withDelay(50, "loss=40,dup=30"));
@@ -728,6 +785,7 @@ TEST(LockstepSession, ATakeoverOfABotRidesWithItsInputsAndOnlyTheFirstClaimWins)
                                  ControlEvent(0, ControlEvent::HUMAN_TAKES_OVER),   // the host's slot
                                  ControlEvent(1, ControlEvent::RETURN_TO_AI),       // not its own
                                  ControlEvent(9, ControlEvent::RETURN_TO_AI),       // no such slot
+                                 ControlEvent(5, ControlEvent::HUMAN_TAKES_OVER),   // a slot this four-player round does not have
                                  ControlEvent(2, (ControlEvent::Kind) 7)};          // no such kind
   ASSERT_TRUE(c.runUntil([&] { return c.allStepped(140); }, 60000));
   expectIdentical(c, {0, 1, 2}, 140);
@@ -739,15 +797,19 @@ TEST(LockstepSession, ATakeoverOfABotRidesWithItsInputsAndOnlyTheFirstClaimWins)
   EXPECT_EQ(events, 1);
   ASSERT_EQ(h.log[at + d - 1].control.size(), 1u);
   EXPECT_EQ(h.log[at + d - 1].control[0], ControlEvent(3, ControlEvent::HUMAN_TAKES_OVER));
+  // Peer 2 is told its claim was not granted (so its game can take the slot back); peer 1 is not.
+  EXPECT_EQ(c.machine(2).s->takeRejectedClaims(), std::vector<int>({3, 0}));   // slot 3 lost the race, slot 0 is the host's (slot 5, 9 and kind 7 never left the machine)
+  EXPECT_TRUE(c.machine(1).s->takeRejectedClaims().empty());
+  EXPECT_TRUE(c.machine(2).s->takeRejectedClaims().empty()) << "each is reported once";
   // Slot 3 carries peer 1's inputs from that tick on (and nothing before); peer 2's stale
   // claim of the same slot is ignored.
   for (uint32_t t = 1; t < at + d; t++) EXPECT_EQ(h.log[t - 1].slot[3].bits, 0) << t;
-  for (uint32_t t = at + d; t <= 140; t++) EXPECT_EQ(h.log[t - 1].slot[3].bits, sampleByte(3, t)) << t;
+  for (uint32_t t = at + d; t <= 140; t++) EXPECT_EQ(h.log[t - 1].slot[3].bits, sampleByte(3, t, 1)) << t;   // peer 1's, not peer 2's
   // The host's own slot and the others never took the bad requests.
   for (uint32_t t = d + 1; t <= 140; t++)
   {
-    EXPECT_EQ(h.log[t - 1].slot[0].bits, sampleByte(0, t));
-    EXPECT_EQ(h.log[t - 1].slot[1].bits, sampleByte(1, t));
+    EXPECT_EQ(h.log[t - 1].slot[0].bits, sampleByte(0, t, 0));
+    EXPECT_EQ(h.log[t - 1].slot[1].bits, sampleByte(1, t, 1));
   }
 }
 
@@ -764,6 +826,158 @@ TEST(LockstepSession, AHumanGivingItsSlotBackOwnsItNoMore)
   const uint32_t d = (uint32_t) h.round.delay;
   EXPECT_EQ(firstTickWithEvent(h, 1, ControlEvent::RETURN_TO_AI), (int) (at + d));
   for (uint32_t t = at + d; t <= 100; t++) EXPECT_EQ(h.log[t - 1].slot[1].bits, 0) << t;
+}
+
+namespace
+{
+// A peer written by hand on a raw socket: a real handshake, then INPUT packets of its own
+// making, to say what no LockstepSession would (it filters its own requests). It runs the
+// minimum of the protocol: acknowledge what it sees, and send records ahead of the host.
+class HostilePeer
+{
+  public:
+    HostilePeer(Cluster& c) : m_c(c), m_raw(c.openRaw()) {}
+
+    bool join()
+    {
+      netplay::HelloMsg h;
+      h.buildId = 0xB111D;
+      h.dataHash = 0xDA7A;
+      h.nonce = 99;
+      h.name = "mallory";
+      send(netplay::MSG_HELLO, netplay::NO_PEER, 0, [&](netplay::Writer& w) { netplay::encode(w, h); });
+      return m_c.runUntil([&] { pumpRaw(); return m_id != 0; }, 3000);
+    }
+
+    // Plays along for `ms`: reads, acknowledges, and sends `evil(tick)` events in each record.
+    void play(uint32_t ms, const std::function<std::vector<ControlEvent>(uint32_t)>& evil)
+    {
+      for (uint32_t i = 0; i < ms; i++)
+      {
+        m_c.run(1);
+        pumpRaw();
+        if (m_started)
+        {
+          sendInput(evil);
+        }
+      }
+    }
+
+    uint8_t id() const { return m_id; }
+
+  private:
+    void send(uint8_t type, uint8_t sender, uint32_t session, const std::function<void(netplay::Writer&)>& body)
+    {
+      netplay::Writer w;
+      netplay::Header h;
+      h.type = type;
+      h.sender = sender;
+      h.session = session;
+      netplay::writeHeader(w, h);
+      body(w);
+      vnet_sendto(m_raw.v, m_raw.sock, w.bytes().data(), w.bytes().size(), &m_c.hostAddr());
+    }
+
+    void pumpRaw()
+    {
+      uint8_t buf[VNET_MAX_DATAGRAM];
+      vnet_addr from;
+      for (;;)
+      {
+        const int n = vnet_recvfrom(m_raw.v, m_raw.sock, buf, sizeof(buf), &from);
+        if (n < 0) break;
+        netplay::Reader r(buf, (size_t) n);
+        netplay::Header h;
+        if (!netplay::readHeader(r, h)) continue;
+        if (h.type == netplay::MSG_WELCOME)
+        {
+          netplay::WelcomeMsg w;
+          if (netplay::decode(r, w)) { m_id = w.peerId; m_session = h.session; }
+        }
+        else if (h.type == netplay::MSG_START)
+        {
+          netplay::StartMsg st;
+          if (netplay::decode(r, st) && !m_started)
+          {
+            m_started = true;
+            m_round = st.round;
+            m_delay = st.delay;
+            m_hostAck = st.delay;
+            m_have = st.delay;
+          }
+        }
+        else if (h.type == netplay::MSG_TICKS && m_started)
+        {
+          netplay::TicksMsg t;
+          if (netplay::decode(r, t) && t.round == m_round)
+          {
+            m_hostAck = std::max(m_hostAck, t.ack);
+            if (t.first <= m_have + 1) m_have = std::max(m_have, t.first + (uint32_t) t.ticks.size() - 1);
+          }
+        }
+      }
+    }
+
+    void sendInput(const std::function<std::vector<ControlEvent>(uint32_t)>& evil)
+    {
+      netplay::InputMsg m;
+      m.round = m_round;
+      m.ack = m_have;
+      m.first = m_hostAck + 1;
+      // Records up to the furthest tick the host will accept: it confirms at most D ahead of what it holds.
+      for (uint32_t t = m.first; t <= m_have + (uint32_t) m_delay && m.records.size() < 20; t++)
+      {
+        netplay::InputRecord rec;
+        rec.mask = 0;
+        rec.events = evil(t);
+        m.records.push_back(rec);
+      }
+      send(netplay::MSG_INPUT, m_id, m_session, [&](netplay::Writer& w) { netplay::encode(w, m); });
+    }
+
+    Cluster& m_c;
+    Cluster::Raw m_raw;
+    uint8_t m_id = 0;
+    uint32_t m_session = 0;
+    bool m_started = false;
+    uint16_t m_round = 0;
+    uint32_t m_delay = 0, m_hostAck = 0, m_have = 0;
+};
+} // namespace
+
+TEST(LockstepSession, AHostilePeerCannotPutAnEventTheSimulationWouldRefuseIntoATick)
+{
+  // Slot 5 of a four-player round, slot 9, an unknown kind, a takeover of the host's slot,
+  // another peer's slot given back: none may reach a tick (Simulation::step throws on the
+  // first two kinds, and a TICKS packet holding one would be refused by every peer).
+  ClusterOptions o = withDelay(10);
+  o.lobby.totalSlots = 4;
+  Cluster c(2, o);
+  HostilePeer mallory(c);
+  ASSERT_TRUE(mallory.join());
+  c.run(1500);   // the lobby pings
+  ASSERT_TRUE(c.machine(0).s->startRound(5, nullptr));
+  const auto evil = [](uint32_t t) {
+    std::vector<ControlEvent> e;
+    if (t % 3 == 0)
+    {
+      e.push_back(ControlEvent(5, ControlEvent::HUMAN_TAKES_OVER));
+      e.push_back(ControlEvent(9, ControlEvent::RETURN_TO_AI));
+      e.push_back(ControlEvent(2, (ControlEvent::Kind) 7));
+      e.push_back(ControlEvent(0, ControlEvent::HUMAN_TAKES_OVER));   // the host's
+      e.push_back(ControlEvent(1, ControlEvent::RETURN_TO_AI));       // peer 1's
+    }
+    return e;
+  };
+  mallory.play(4000, evil);
+  // The honest machines kept stepping and saw no event at all.
+  ASSERT_GE(c.machine(0).log.size(), 100u);
+  ASSERT_GE(c.machine(1).log.size(), 100u);
+  expectIdentical(c, {0, 1}, 100);
+  for (size_t t = 0; t < 100; t++)
+  {
+    EXPECT_TRUE(c.machine(0).log[t].control.empty()) << "tick " << t + 1;
+  }
 }
 
 // -- desyncs --------------------------------------------------------------------------------------------------------
