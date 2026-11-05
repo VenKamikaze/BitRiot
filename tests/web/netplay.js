@@ -410,7 +410,7 @@ scenarios.hidden = async (ctx) => {
   const r = await playRound(ctx, 'hidden', { transport: 'ws', seed: 2, config: LONG_CONFIG, hidden: true, keys: false, nativeTickMs: 4, roundMs: 300000 });
   const ticks = +/over at tick (\d+)/.exec(r.machines[0].log.over)[1];
   console.log('  hidden: ' + ticks + ' ticks in ' + r.seconds.toFixed(1) + ' s = ' + (ticks / r.seconds).toFixed(0) + ' ticks a second (nominal is 30)');
-  check(ticks / r.seconds > 30, 'hidden tabs keep up with (and here beat) the nominal 30 ticks a second', (ticks / r.seconds).toFixed(0));
+  check(ticks / r.seconds > 100, 'hidden tabs are not paced by a clock: they step whatever the host confirms (the native host at 4 ms a tick set the pace)', (ticks / r.seconds).toFixed(0));
 };
 
 // A background tab as Chromium treats one: no animation frames, and timers held to one run a second. Playwright cannot make a tab really

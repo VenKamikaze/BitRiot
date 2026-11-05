@@ -177,7 +177,11 @@ static void applyOptions(const GameOptions& options)
 static bool loopIteration()
 {
   MickSDLRenderer *renderer = MickSDLRenderer::getInstance();
+#ifdef BITRIOT_NETPLAY
   const bool hiddenTab = engine && engine->hidden();   // a background browser tab: step, but draw and present nothing
+#else
+  const bool hiddenTab = false;
+#endif
 
   if(SDL_MUSTLOCK(renderer->getSurfaceBackBufferHandle()))
   {
@@ -281,7 +285,11 @@ static void webLoopIteration()
 // with the engine in its hidden mode (it steps every tick it holds, draws nothing).
 void webHiddenPoll()
 {
+#ifdef BITRIOT_NETPLAY
   if(!webLoopRunning || !engine || !engine->hidden())
+#else
+  if(true)
+#endif
   {
     return;
   }

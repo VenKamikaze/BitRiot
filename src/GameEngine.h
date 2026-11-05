@@ -77,6 +77,10 @@ class GameEngine
     // changing or going away); otherwise the overlay would be composited over the
     // previous frame's text, or left behind.
     void requestRedraw() { m_drawNeeded = true; }
+    // Brief 12 (the web build's full-game determinism check): plays a match record file through THIS engine's simulation with the
+    // game's own code (replayRecord), verifying every checkpoint hash the record carries. Only from a menu with no network game;
+    // otherwise BAD_CONFIG and a message. Leaves GameSettings and the map as the record's round set them: for a test page.
+    ReplayResult replayRecordFile(const std::string& path);
 #ifdef BITRIOT_NETPLAY
     // Network play (brief 07). Opens the network, saves the player's settings and shows the
     // lobby page instead of the main menu; false and `error` if it cannot start. Call it
@@ -91,10 +95,6 @@ class GameEngine
     // hooks and the page's own "join this room" link. False, and `error`, if the words are bad or a game is already on.
     bool startRelayFromText(bool host, const std::string& name, const std::string& relay, const std::string& room, int localPlayers,
                             bool pageIsSecure, std::string* error);
-    // Brief 12 (the web build's full-game determinism check): plays a match record file through THIS engine's simulation with the
-    // game's own code (replayRecord), verifying every checkpoint hash the record carries. Only from a menu with no network game;
-    // otherwise BAD_CONFIG and a message. Leaves GameSettings and the map as the record's round set them: for a test page.
-    ReplayResult replayRecordFile(const std::string& path);
     // Brief 12: the browser tab is hidden (document.hidden). A hidden tab gets no animation frames, so the page drives
     // the frame loop from network events instead (src/web/WebHooks.cpp); in this mode a network game steps every tick it
     // holds, whenever it is asked, instead of waiting for the clock (the others set the pace), and nothing is drawn.

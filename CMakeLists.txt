@@ -288,6 +288,12 @@ if(BITRIOT_NETPLAY)
   target_link_libraries(bitriot_net PUBLIC bitriot_sim vnet::vnet)
   target_include_directories(bitriot_net PUBLIC ${PROJECT_SOURCE_DIR}/src/net)
   target_compile_definitions(bitriot_net PUBLIC BITRIOT_NETPLAY=1)
+  # The relay a native game's relay forms offer before the player types one (brief 12). Empty: 127.0.0.1:7777, a relay on this
+  # machine. A web page derives its default from where it was loaded (or window.BITRIOT_RELAY), so this does not apply there.
+  set(BITRIOT_DEFAULT_RELAY "" CACHE STRING "Default relay address for native relay games, e.g. relay.example.org (empty: 127.0.0.1:7777)")
+  if(NOT BITRIOT_DEFAULT_RELAY STREQUAL "")
+    target_compile_definitions(bitriot_net PRIVATE BITRIOT_DEFAULT_RELAY="${BITRIOT_DEFAULT_RELAY}")
+  endif()
   target_compile_options(bitriot_net PRIVATE -Wall -Wno-comment
     $<$<CONFIG:Debug>:-ggdb -O0> $<$<CONFIG:Release>:-O2>)
   # The headless host/join commands (src/headless/HeadlessNet.cpp) are part of the CLI
