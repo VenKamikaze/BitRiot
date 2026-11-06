@@ -129,7 +129,7 @@
 </div>
 
 <div id="help">
-  <div><b>Keyboard.</b> Player 1: W A S D, left Ctrl (weapon), left Shift (egg). Player 4: arrow keys, right Ctrl, right Shift. Hold the weapon key and press a direction to pick the weapon. (Ctrl+W closes a browser tab; the page asks first, so choose Stay.)</div>
+  <div><b>Keyboard.</b> Player 1: S (up), Z (left), X (down), C (right), left Ctrl (weapon), left Shift (egg). Player 4: arrow keys, right Ctrl, right Shift. Hold the weapon key and press a direction to pick the weapon. (The browser build does not use W A S D: Ctrl+W would close the tab.)</div>
   <div><b>Controllers.</b> Plug in or wake a pad (press any button; browsers hide pads until you do), then press START in a round to join or take over a CPU player.</div>
   <div><b>Sound</b> starts when you click the button above. Rumble is not supported in this build.</div>
 </div>
@@ -282,8 +282,9 @@
   // Keep the keyboard on the game: a click on the canvas focuses it.
   canvas.addEventListener('mousedown', function () { canvas.focus(); });
 
-  // Player 1's keys include W and left Ctrl, and Ctrl+W closes the tab: a page cannot
-  // stop that, but it can make the browser ask first. Only while the game is running.
+  // Ctrl+W closes the tab and a page cannot stop that, which is why player 1 is on
+  // S Z X C here rather than W A S D. In case it is pressed anyway, the browser asks
+  // first while the game is running.
   window.addEventListener('beforeunload', function (e) {
     if (window.bitriotStarted && !window.bitriotQuit) {
       e.preventDefault();
@@ -291,9 +292,13 @@
     }
   });
 
-  // Arrow keys and space must not scroll the page while playing.
+  // While playing, arrow keys and space must not scroll the page, and player 1's
+  // weapon key (left Ctrl) with a direction (S Z X C) must not save the page, undo,
+  // cut or copy. The game still sees every key: this stops only the browser's action.
   window.addEventListener('keydown', function (e) {
-    if (window.bitriotStarted && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].indexOf(e.code) >= 0) {
+    if (!window.bitriotStarted) return;
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].indexOf(e.code) >= 0
+        || (e.ctrlKey && ['s', 'z', 'x', 'c'].indexOf(e.key.toLowerCase()) >= 0)) {
       e.preventDefault();
     }
   }, { passive: false });

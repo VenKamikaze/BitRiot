@@ -158,10 +158,21 @@ void InputHandler::setPointers(vector<shared_ptr<PlayerCharacterEntity>> playerC
 void InputHandler::setAvailableKeys()
 {
   array<KEY, NUM_ACTION_BUTTONS> keySet;
+#ifdef __EMSCRIPTEN__
+  // In a browser, Ctrl+W closes the tab and no page can stop it, so with WASD
+  // and left Ctrl the weapon key plus Up (a bomb) would close the game. The web
+  // build moves set 0 to S (up), Z (left), X (down), C (right) instead; Ctrl+S/
+  // Z/X/C are ordinary shortcuts the page blocks (web/shell.html).
+  keySet[UP_KEY] = KEY_s;
+  keySet[DOWN_KEY] = KEY_x;
+  keySet[LEFT_KEY] = KEY_z;
+  keySet[RIGHT_KEY] = KEY_c;
+#else
   keySet[UP_KEY] = KEY_w;
   keySet[DOWN_KEY] = KEY_s;
   keySet[LEFT_KEY] = KEY_a;
   keySet[RIGHT_KEY] = KEY_d;
+#endif
   keySet[ACTION1_KEY] = KEY_LCTRL;
   keySet[ACTION2_KEY] = KEY_LSHIFT;
   m_availableKeySets.push_back(keySet);
